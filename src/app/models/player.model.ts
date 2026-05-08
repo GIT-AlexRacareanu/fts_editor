@@ -1,0 +1,32 @@
+export interface Player {
+  name: string;
+  pos: number;
+  foot: number;
+  nat: number;
+  estatura: number;
+  peso: number;
+  year: number;
+  skin: number;
+  skin_tone: number;
+  head_type: number;
+  hair_type: number;
+  hair: number;
+  beard_type: number;
+  boots: number;
+  mangas: number;
+  guantes: number;
+  ACC: number;
+  SPD: number;
+  STA: number;
+  STR: number;
+  TAC: number;
+  CON: number;
+  SHO: number;
+  CRO: number;
+  FK: number;
+  PAS: number;
+  HEA: number;
+  GKS: number;
+  GKH: number;
+  GKP: number;
+}

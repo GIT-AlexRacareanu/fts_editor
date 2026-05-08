@@ -1,0 +1,242 @@
+.app-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+
+  @media (min-width: 768px) {
+    font-size: 1.1rem;
+    padding: 0 24px;
+  }
+}
+
+.app-container {
+  max-width: 100%;
+  margin: auto;
+  padding: 8px 8px 0;
+
+  // Tablet
+  @media (min-width: 600px) {
+    max-width: 680px;
+    padding: 12px 16px 0;
+  }
+
+  // Desktop
+  @media (min-width: 960px) {
+    max-width: 900px;
+    padding: 16px 24px 0;
+  }
+
+  // Wide desktop
+  @media (min-width: 1280px) {
+    max-width: 1100px;
+  }
+}
+
+/* ── Section cards ─────────────────────────────────────────── */
+.section-card {
+  margin-bottom: 10px;
+  border-left: 3px solid var(--primary) !important;
+
+  &.card-relative {
+    position: relative;
+  }
+
+  &.gk-card {
+    border-left-color: var(--accent) !important;
+  }
+}
+
+/* ── Open file button ──────────────────────────────────────── */
+.full-width-btn {
+  width: 100%;
+  height: 44px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  gap: 8px;
+}
+
+/* ── Full-width name field ─────────────────────────────────── */
+.full-width-field {
+  width: 100%;
+  display: block;
+}
+
+/* ── Navigation row ───────────────────────────────────────── */
+.nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 2px 4px;
+  margin-bottom: 8px;
+
+  .nav-select {
+    flex: 1;
+
+    ::ng-deep .mat-form-field-wrapper {
+      padding-bottom: 0;
+      margin: 0;
+    }
+
+    ::ng-deep .mat-form-field-outline {
+      display: none;
+    }
+
+    ::ng-deep .mat-form-field-infix {
+      padding: 0.4em 0;
+      border-top: 0;
+    }
+  }
+}
+
+/* ── Search row ───────────────────────────────────────────── */
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 2px 4px 2px 12px;
+  margin-bottom: 8px;
+
+  .search-field {
+    flex: 1;
+
+    ::ng-deep .mat-form-field-wrapper {
+      padding-bottom: 0;
+      margin: 0;
+    }
+
+    ::ng-deep .mat-form-field-outline {
+      display: none;
+    }
+
+    ::ng-deep .mat-form-field-infix {
+      padding: 0.4em 0;
+      border-top: 0;
+    }
+  }
+}
+
+/* ── 3-column stats grid ──────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+
+  // Tablet: 4 columns
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  // Desktop: 6 columns
+  @media (min-width: 960px) {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+  }
+}
+
+.stat-field {
+  ::ng-deep input.mat-input-element {
+    text-align: center;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--success) !important;
+  }
+}
+
+/* ── OVR badge ────────────────────────────────────────────── */
+.ovr-badge {
+  position: absolute;
+  right: 14px;
+  top: 10px;
+  color: #000;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 1.25rem;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.7);
+  z-index: 5;
+  transition: background 0.3s;
+
+  @media (min-width: 960px) {
+    width: 58px;
+    height: 58px;
+    font-size: 1.5rem;
+    right: 18px;
+    top: 14px;
+  }
+}
+
+.accent-title {
+  color: var(--accent) !important;
+}
+
+/* ── Bottom action bar ────────────────────────────────────── */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(8, 12, 20, 0.97);
+  backdrop-filter: blur(12px);
+  padding: 10px 12px;
+  border-top: 1px solid var(--card-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 1000;
+
+  @media (min-width: 960px) {
+    padding: 12px 24px;
+    justify-content: center;
+  }
+
+  .save-btn {
+    flex: 1;
+    height: 46px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+
+    @media (min-width: 960px) {
+      flex: 0 0 340px;
+      height: 50px;
+      font-size: 1rem;
+    }
+  }
+
+  button[mat-icon-button] {
+    color: #90a4ae;
+  }
+}
+
+/* ── Compress modal ───────────────────────────────────────── */
+.modal-overlay {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+
+  .compress-card {
+    width: 80%;
+    max-width: 300px;
+    text-align: center;
+    border-left: 3px solid var(--accent) !important;
+  }
+}
