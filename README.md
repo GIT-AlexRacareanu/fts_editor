@@ -14,6 +14,31 @@ Run `ng generate component component-name` to generate a new component. You can 
 
 Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
 
+## Appwrite Sites
+
+This repo is ready to deploy to Appwrite Sites as a static Angular application.
+
+Use these settings when creating or updating the site in Appwrite:
+
+- Framework: `Other` or `Angular` if available in your Appwrite UI
+- Install command: `npm install`
+- Build command: `npm run build:prod`
+- Output directory: `dist/angular`
+
+If the site should behave as a single-page application, add a rewrite in Appwrite Sites so client-side routes fall back to `index.html`.
+
+Typical manual deploy flow:
+
+1. Push this repo to a Git provider connected to Appwrite, or upload the built `dist/angular` output.
+2. In Appwrite Sites, create a new site.
+3. Set the install/build/output values listed above.
+4. Deploy the latest commit or uploaded artifact.
+
+Appwrite environment values used by the frontend are defined in:
+
+- `src/environments/environment.ts`
+- `src/environments/environment.prod.ts`
+
 ## Running unit tests
 
 Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).

@@ -1,6 +1,8 @@
 import { Component } from '@angular/core';
 import { Player } from './models/player.model';
+import { TeamRecord, TeamSlot } from './models/team-editor.model';
 import { PlayerService } from './services/player.service';
+import { TeamEditorService } from './services/team-editor.service';
 
 @Component({
   selector: 'app-root',
@@ -8,25 +10,29 @@ import { PlayerService } from './services/player.service';
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent {
-  currentPage = 0;
+  selectedEditorTab = 0;
   selectedIndex = 0;
-  pageOptions: { label: string; value: number }[] = [];
   player: Player = this.emptyPlayer();
   ovr = 0;
   ovrColor = '#cd7f32';
   showModal = false;
   modalTimer = 20;
   searchQuery = '';
+  playerHexQuery = '';
+  teamSearchQuery = '';
+  selectedTeamOffset: number | null = null;
+  displayedTeams: TeamRecord[] = [];
+  private readonly teamPlayerNameCache = new Map<number, string | null>();
 
   readonly positions = [
     { value: 0, label: 'GK' }, { value: 1, label: 'LB' }, { value: 2, label: 'RB' },
-    { value: 3, label: 'L-GK CB' }, { value: 4, label: 'R-GK CB' }, { value: 5, label: 'LCB' },
+    { value: 3, label: 'LSW' }, { value: 4, label: 'RSW' }, { value: 5, label: 'LCB' },
     { value: 6, label: 'CB' }, { value: 7, label: 'RCB' }, { value: 8, label: 'CDM' },
     { value: 9, label: 'RDM' }, { value: 10, label: 'LDM' }, { value: 11, label: 'CM' },
-    { value: 12, label: 'LM' }, { value: 13, label: 'RM' }, { value: 14, label: 'LAM' },
-    { value: 15, label: 'RAM' }, { value: 16, label: 'RW' }, { value: 17, label: 'LW' },
-    { value: 18, label: 'CAM' }, { value: 19, label: 'CF' }, { value: 20, label: 'LF' },
-    { value: 21, label: 'RF' }, { value: 22, label: 'ST' }
+    { value: 12, label: 'LCM' }, { value: 13, label: 'RCM' }, { value: 14, label: 'LAM' },
+    { value: 15, label: 'RAM' }, { value: 16, label: 'RM' }, { value: 17, label: 'LM' },
+    { value: 18, label: 'CAM' }, { value: 19, label: 'ST' }, { value: 20, label: 'LW' },
+    { value: 21, label: 'RW' }, { value: 22, label: 'CF' }
   ];
 
   readonly feet = [
@@ -40,7 +46,7 @@ export class AppComponent {
 
   readonly skinTones = [
     { value: 255, label: 'Default' }, { value: 0, label: 'Level 0' }, { value: 1, label: 'Level 1' },
-    { value: 2, label: 'Level 2' }, { value: 3, label: 'Level 3' }, { value: 8, label: 'Level 8 (Ronaldo)' }
+    { value: 2, label: 'Level 2' }, { value: 3, label: 'Level 3' }
   ];
 
   readonly headTypes = Array.from({ length: 8 }, (_, i) => ({ value: i, label: `${i}` }));
@@ -83,33 +89,71 @@ export class AppComponent {
     { value: 2, label: 'Green' }, { value: 3, label: 'Yellow' }, { value: 4, label: 'Black' }
   ];
 
-  constructor(public playerService: PlayerService) {}
+  constructor(
+    public playerService: PlayerService,
+    public teamEditorService: TeamEditorService
+  ) {}
 
   get fileLoaded(): boolean {
     return this.playerService.binaryData !== null;
   }
 
+  get currentPlayerHexId(): string {
+    return this.playerService.formatPlayerId(this.selectedIndex);
+  }
+
+  get teamFileLoaded(): boolean {
+    return this.teamEditorService.hasData;
+  }
+
+  get teamOptions(): { label: string; offset: number }[] {
+    return this.teamEditorService.teamOptions;
+  }
+
   async openFile(): Promise<void> {
     try {
       await this.playerService.loadFile();
-      this.currentPage = 0;
-      this.refreshPage();
+      this.teamPlayerNameCache.clear();
+      if (this.playerService.totalPlayers > 0) {
+        this.loadPlayer(0);
+      }
+      this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
       alert('File loaded successfully!');
     } catch (err: any) {
       alert(err.message || 'File loading failed or was cancelled.');
     }
   }
 
-  refreshPage(): void {
-    this.pageOptions = this.playerService.getPageOptions(this.currentPage);
-    if (this.pageOptions.length > 0) {
-      this.selectedIndex = this.pageOptions[0].value;
-      this.loadPlayer(this.selectedIndex);
+  async openTeamFile(): Promise<void> {
+    try {
+      const fileName = await this.teamEditorService.loadFile();
+      this.selectedTeamOffset = this.teamOptions.length > 0 ? this.teamOptions[0].offset : null;
+      this.displayedTeams = this.selectedTeamOffset === null ? [] : this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(this.selectedTeamOffset)]);
+      alert(`Loaded team DB: ${fileName}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load team database.';
+      alert(message);
+    }
+  }
+
+  async saveTeam(): Promise<void> {
+    if (!this.teamFileLoaded) {
+      alert('No team database loaded!');
+      return;
+    }
+
+    try {
+      await this.teamEditorService.saveToSameFile();
+      alert('Team changes applied and file overwritten successfully!');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
+      alert(message);
     }
   }
 
   loadPlayer(idx: any): void {
     this.selectedIndex = +idx;
+    this.playerHexQuery = this.currentPlayerHexId;
     this.player = this.playerService.readPlayer(+idx);
     this.updateOVR();
   }
@@ -138,16 +182,93 @@ export class AppComponent {
     if (!this.fileLoaded) return;
     const idx = this.playerService.searchPlayer(this.searchQuery);
     if (idx === -1) { alert('Player not found!'); return; }
-    this.currentPage = Math.floor(idx / this.playerService.PAGE_SIZE);
-    this.refreshPage();
     this.loadPlayer(idx);
   }
 
-  changePage(dir: number): void {
-    const next = this.currentPage + dir;
-    if (next < 0) return;
-    this.currentPage = next;
-    this.refreshPage();
+  jumpToPlayerHex(): void {
+    if (!this.fileLoaded) {
+      return;
+    }
+
+    const idx = this.playerService.parsePlayerId(this.playerHexQuery);
+    if (idx === -1) {
+      alert('Player hex ID not found.');
+      return;
+    }
+
+    this.loadPlayer(idx);
+  }
+
+  loadSingleTeam(offset: number | null): void {
+    if (offset === null) {
+      this.displayedTeams = [];
+      return;
+    }
+
+    this.selectedTeamOffset = offset;
+    this.displayedTeams = this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(offset)]);
+  }
+
+  searchTeams(): void {
+    if (!this.teamFileLoaded) {
+      alert('Load a team database first.');
+      return;
+    }
+
+    if (!this.teamSearchQuery.trim()) {
+      alert('Enter a player ID in hex.');
+      return;
+    }
+
+    this.displayedTeams = this.decorateTeamsWithPlayerNames(this.teamEditorService.searchTeams(this.teamSearchQuery));
+
+    if (this.displayedTeams.length === 0) {
+      alert(`No matches for: ${this.teamSearchQuery.trim().toUpperCase()}`);
+    }
+  }
+
+  updateTeamPlayerCount(team: TeamRecord, value: string | number): void {
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updatePlayerCount(team.offset, Number(value)));
+  }
+
+  updateTeamPlayerId(team: TeamRecord, slot: TeamSlot, value: string): void {
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, slot.index, { playerIdHex: value }));
+  }
+
+  updateTeamShirtNumber(team: TeamRecord, slot: TeamSlot, value: string | number): void {
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, slot.index, { shirtNumber: Number(value) }));
+  }
+
+  updateTeamPosition(team: TeamRecord, slot: TeamSlot, value: string | number): void {
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, slot.index, { position: Number(value) }));
+  }
+
+  addTeamSlot(team: TeamRecord): void {
+    const updatedTeam = this.teamEditorService.addSlot(team.offset);
+
+    if (!updatedTeam) {
+      alert('This team already uses all 32 slots.');
+      return;
+    }
+
+    this.replaceDisplayedTeam(team.offset, updatedTeam);
+  }
+
+  deleteTeamSlot(team: TeamRecord, slot: TeamSlot): void {
+    if (slot.isEmpty) {
+      return;
+    }
+
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.deleteSlot(team.offset, slot.index));
+  }
+
+  exportTeamDatabase(): void {
+    if (!this.teamFileLoaded) {
+      alert('No team database loaded!');
+      return;
+    }
+
+    this.teamEditorService.exportFile();
   }
 
   startDownload(): void {
@@ -161,6 +282,41 @@ export class AppComponent {
         this.showModal = false;
       }
     }, 1000);
+  }
+
+  private replaceDisplayedTeam(offset: number, updatedTeam: TeamRecord): void {
+    const decoratedTeam = this.decorateTeamWithPlayerNames(updatedTeam);
+    this.displayedTeams = this.displayedTeams.map((team) => team.offset === offset ? decoratedTeam : team);
+
+    if (this.selectedTeamOffset === offset && !this.displayedTeams.some((team) => team.offset === offset)) {
+      this.displayedTeams = [decoratedTeam];
+    }
+  }
+
+  private decorateTeamsWithPlayerNames(teams: TeamRecord[]): TeamRecord[] {
+    return teams.map((team) => this.decorateTeamWithPlayerNames(team));
+  }
+
+  private decorateTeamWithPlayerNames(team: TeamRecord): TeamRecord {
+    return {
+      ...team,
+      slots: team.slots.map((slot) => ({
+        ...slot,
+        playerName: this.resolveTeamSlotPlayerName(slot)
+      }))
+    };
+  }
+
+  private resolveTeamSlotPlayerName(slot: TeamSlot): string | undefined {
+    if (!this.fileLoaded || slot.isEmpty) {
+      return undefined;
+    }
+
+    if (!this.teamPlayerNameCache.has(slot.playerId)) {
+      this.teamPlayerNameCache.set(slot.playerId, this.playerService.getPlayerNameByIndex(slot.playerId));
+    }
+
+    return this.teamPlayerNameCache.get(slot.playerId) ?? undefined;
   }
 
   private emptyPlayer(): Player {

@@ -36,6 +36,38 @@
   }
 }
 
+.editor-tabs {
+  ::ng-deep .mat-tab-header {
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    background: rgba(15, 22, 35, 0.92);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+
+  ::ng-deep .mat-tab-label {
+    min-width: 0;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #90a4ae;
+    opacity: 1;
+  }
+
+  ::ng-deep .mat-tab-label.mat-tab-label-active {
+    color: var(--accent);
+  }
+
+  ::ng-deep .mat-ink-bar {
+    background-color: var(--accent);
+    height: 3px;
+  }
+}
+
+.editor-tab-content {
+  padding-bottom: 8px;
+}
+
 /* ── Section cards ─────────────────────────────────────────── */
 .section-card {
   margin-bottom: 10px;
@@ -59,24 +91,42 @@
   gap: 8px;
 }
 
-/* ── Full-width name field ─────────────────────────────────── */
-.full-width-field {
-  width: 100%;
-  display: block;
+.hidden-file-input {
+  display: none;
 }
 
-/* ── Navigation row ───────────────────────────────────────── */
-.nav-controls {
+.team-editor-card {
+  border-left-color: var(--accent) !important;
+}
+
+.team-actions {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.team-action-btn {
+  width: 100%;
+  min-height: 44px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.team-search-shell {
   display: flex;
   align-items: center;
   gap: 0;
-  background: var(--card);
+  background: var(--bg);
   border: 1px solid var(--card-border);
   border-radius: 10px;
-  padding: 2px 4px;
-  margin-bottom: 8px;
+  padding: 2px 4px 2px 12px;
+  margin-bottom: 12px;
 
-  .nav-select {
+  .team-search-field {
     flex: 1;
 
     ::ng-deep .mat-form-field-wrapper {
@@ -91,6 +141,235 @@
     ::ng-deep .mat-form-field-infix {
       padding: 0.4em 0;
       border-top: 0;
+    }
+  }
+}
+
+.team-jump-field {
+  margin-bottom: 8px;
+}
+
+.team-empty-state {
+  margin: 12px 0 0;
+  color: #90a4ae;
+}
+
+.team-results {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.team-db-card {
+  background: linear-gradient(180deg, rgba(18, 27, 43, 0.96), rgba(9, 14, 24, 0.96));
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.team-db-body {
+  padding: 0 16px 16px;
+}
+
+.team-db-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+
+  @media (max-width: 599px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.team-db-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-bottom: 1px solid rgba(29, 45, 68, 0.9);
+  background: rgba(255, 255, 255, 0.02);
+
+  @media (max-width: 599px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+::ng-deep .team-db-card .mat-expansion-panel-body {
+  padding: 0;
+}
+
+::ng-deep .team-db-card .mat-expansion-indicator::after {
+  color: var(--accent);
+}
+
+::ng-deep .team-db-card .mat-content,
+::ng-deep .team-db-card .mat-expansion-panel-header-description {
+  align-items: center;
+}
+
+.team-db-title {
+  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.team-db-subtitle {
+  color: #78909c;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.team-player-count {
+  display: grid;
+  gap: 6px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #90a4ae;
+
+  input {
+    width: 96px;
+  }
+}
+
+.team-slot-action-btn {
+  min-height: 40px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.team-slot-grid {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.team-slot {
+  background: rgba(8, 12, 20, 0.9);
+  border: 1px solid rgba(29, 45, 68, 0.95);
+  border-radius: 10px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.team-slot-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #90a4ae;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+
+  strong {
+    color: #f2c66d;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 0.95rem;
+  }
+}
+
+.team-slot-meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.team-slot-controls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 90px) minmax(0, 1fr);
+}
+
+.team-slot label {
+  display: grid;
+  gap: 6px;
+
+  span {
+    color: #90a4ae;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+}
+
+.team-slot input,
+.team-slot select {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: #111a29;
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.team-slot-player-name {
+  min-height: 18px;
+  color: #9fb3c8;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Full-width name field ─────────────────────────────────── */
+.full-width-field {
+  width: 100%;
+  display: block;
+}
+
+/* ── Navigation row ───────────────────────────────────────── */
+.nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+
+  .player-current-id {
+    flex: 1;
+    min-width: 0;
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .player-id-field {
+    width: 92px;
+
+    ::ng-deep .mat-form-field-wrapper {
+      padding-bottom: 0;
+      margin: 0;
+    }
+
+    ::ng-deep .mat-form-field-outline {
+      display: none;
+    }
+
+    ::ng-deep .mat-form-field-infix {
+      padding: 0.4em 0;
+      border-top: 0;
+      width: 56px;
     }
   }
 }

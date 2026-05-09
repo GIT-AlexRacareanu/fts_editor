@@ -12,11 +12,83 @@ export const OFFSET_MAP: Record<string, number> = {
   GKS: 106, GKH: 107, GKP: 108, guantes: 85
 };
 
+const STAT_ORDER = ['STR', 'STA', 'SPD', 'ACC', 'CON', 'PAS', 'CRO', 'SHO', 'HEA', 'TAC', 'FK', 'GKS', 'GKH', 'GKP'] as const;
+type Stat = typeof STAT_ORDER[number];
+
+const GK_WEIGHTS = [1, 1, 3, 2, 2, 1, 0, 0, 0, 1, 1, 10, 10, 10];
+const DEF_WEIGHTS = [5, 2, 6, 2, 5, 4, 1, 1, 9, 9, 0, 0, 0, 0];
+const MID_WEIGHTS = [4, 2, 3, 2, 4, 8, 7, 3, 3, 4, 0, 0, 0, 0];
+const ATT_WEIGHTS = [4, 2, 6, 2, 6, 4, 2, 10, 6, 2, 0, 0, 0, 0];
+
+const GK_BONUS = 6;
+const DEF_BONUS = 6;
+const MID_BONUS = 10;
+const ATT_BONUS = 6;
+
+const RATING_MULTIPLIER = 0x3f866666;
+
+function ieee754ToFloat(bits: number): number {
+  const buf = new ArrayBuffer(4);
+  new DataView(buf).setUint32(0, bits, false);
+  return new DataView(buf).getFloat32(0, false);
+}
+
+const IN_R1 = ieee754ToFloat(RATING_MULTIPLIER);
+
+function getWeightsAndBonus(posCategory: number): { weights: number[]; bonus: number } {
+  switch (posCategory) {
+    case 0:
+      return { weights: GK_WEIGHTS, bonus: GK_BONUS };
+    case 1:
+      return { weights: DEF_WEIGHTS, bonus: DEF_BONUS };
+    case 2:
+      return { weights: MID_WEIGHTS, bonus: MID_BONUS };
+    default:
+      return { weights: ATT_WEIGHTS, bonus: ATT_BONUS };
+  }
+}
+
+function getPositionCategory(position: number): number {
+  if (position === 0) {
+    return 0;
+  }
+
+  if (position >= 1 && position <= 7) {
+    return 1;
+  }
+
+  if ((position >= 8 && position <= 15) || position === 18) {
+    return 2;
+  }
+
+  return 3;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PlayerService {
   binaryData: Uint8Array | null = null;
   fileHandle: any = null;
-  readonly PAGE_SIZE = 30;
+
+  formatPlayerId(index: number): string {
+    return index.toString(16).toUpperCase().padStart(4, '0');
+  }
+
+  parsePlayerId(value: string): number {
+    const parsed = Number.parseInt(value.trim(), 16);
+    if (Number.isNaN(parsed) || parsed < 0 || parsed >= this.totalPlayers) {
+      return -1;
+    }
+
+    return parsed;
+  }
+
+  getPlayerNameByIndex(index: number): string | null {
+    if (!this.binaryData || index < 0 || index >= this.totalPlayers) {
+      return null;
+    }
+
+    return this.readPlayer(index).name || null;
+  }
 
   get totalPlayers(): number {
     if (!this.binaryData) return 0;
@@ -54,15 +126,6 @@ export class PlayerService {
     a.click();
   }
 
-  getPageOptions(page: number): { label: string; value: number }[] {
-    const total = this.totalPlayers;
-    const result: { label: string; value: number }[] = [];
-    for (let i = page * this.PAGE_SIZE; i < Math.min((page + 1) * this.PAGE_SIZE, total); i++) {
-      result.push({ label: `Index ${i}`, value: i });
-    }
-    return result;
-  }
-
   readPlayer(idx: number): Player {
     const view = new DataView(this.binaryData!.buffer);
     const base = idx * 112;
@@ -89,57 +152,40 @@ export class PlayerService {
   }
 
   searchPlayer(query: string): number {
-    const q = query.toLowerCase();
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return -1;
+    }
+
     const total = this.totalPlayers;
     for (let i = 0; i < total; i++) {
       const nameArr = new Uint8Array(this.binaryData!.buffer.slice(i * 112 + 48, i * 112 + 80));
       const name = new TextDecoder('utf-16').decode(nameArr).toLowerCase();
-      if (name.includes(q)) return i;
+      const playerId = this.formatPlayerId(i).toLowerCase();
+      if (name.includes(q) || playerId.includes(q)) return i;
     }
     return -1;
   }
 
   calculateOVR(player: Player): number {
-    const avgSpd = (player.ACC + player.SPD) / 2;
-    const getBlock = (stats: number[]) => {
-      const best = Math.max(...stats);
-      const avg = stats.reduce((a, b) => a + b) / stats.length;
-      return (best * 7 + avg) / 8;
-    };
+    const posCategory = getPositionCategory(player.pos);
+    const { weights, bonus } = getWeightsAndBonus(posCategory);
 
-    let ovr = 0;
-    const pos = player.pos;
+    let weightedSum = 0;
+    let totalWeight = 0;
+    let maxStat = 0;
 
-    if (pos === 0) {
-      const avgGK = (player.GKS + player.GKH + player.GKP) / 3;
-      ovr = ((avgGK * 8) + player.STA + avgSpd) / 10;
-    } else if (pos >= 1 && pos <= 7) {
-      const bSpeed = getBlock([avgSpd, player.STR]);
-      const bTech = getBlock([player.SHO, player.HEA, player.STA]);
-      const bSkill = getBlock([player.PAS, player.CON, player.TAC]);
-      if (pos >= 3 && pos <= 7) {
-        ovr = (Math.min(bSkill, bTech) + bSpeed * 2 + Math.max(bSkill, bTech) * 5) / 8;
-      } else {
-        ovr = (bSkill * 7 + bSpeed) / 8;
-      }
-    } else if (pos >= 8 && pos <= 18) {
-      const bPass = getBlock([player.PAS, player.CON]);
-      const bPhys = getBlock([avgSpd, player.STR, player.TAC]);
-      if (pos >= 8 && pos <= 10) {
-        ovr = (bPhys * 0.75 + bPass * 7.25) / 8;
-      } else {
-        ovr = (bPass * 7 + bPhys) / 8;
-      }
-    } else {
-      const bPhys = getBlock([avgSpd, player.STR, player.CON]);
-      const bTech = getBlock([player.SHO, player.HEA, player.STA]);
-      if (pos >= 16 && pos <= 17) {
-        ovr = (bTech * 7 + bPhys) / 8;
-      } else {
-        ovr = (bPhys + (bTech * 1.5) + (player.PAS / 2)) / 3;
+    for (let i = 0; i < STAT_ORDER.length; i++) {
+      const stat = player[STAT_ORDER[i] as Stat];
+      weightedSum += weights[i] * stat;
+      totalWeight += weights[i];
+      if (stat > maxStat) {
+        maxStat = stat;
       }
     }
 
-    return Math.max(1, Math.min(99, Math.round(ovr)));
+    const raw = Math.floor((bonus * maxStat + weightedSum) * IN_R1 / (bonus + totalWeight));
+
+    return Math.max(0, Math.min(100, raw));
   }
 }
