@@ -59,8 +59,12 @@
                 </mat-select>
               </mat-form-field>
               <mat-form-field appearance="outline">
-                <mat-label>Nationality ID</mat-label>
-                <input matInput type="number" [(ngModel)]="player.nat">
+                <mat-label>Nationality</mat-label>
+                <mat-select [(ngModel)]="player.nat">
+                  <mat-option *ngFor="let nationality of nationalities" [value]="nationality.value">
+                    {{ nationality.label }}
+                  </mat-option>
+                </mat-select>
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Height (cm)</mat-label>
@@ -221,6 +225,91 @@
       </div>
     </mat-tab>
 
+    <mat-tab label="DB Search" *ngIf="fileLoaded">
+      <div class="editor-tab-content">
+        <mat-card class="section-card team-editor-card">
+          <mat-card-header>
+            <mat-card-title>Database Browse</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="team-actions db-search-actions">
+              <button mat-raised-button color="primary" class="team-action-btn" (click)="openFile()">
+                <mat-icon>folder_open</mat-icon>
+                LOAD PLAYERS.DAT
+              </button>
+              <button mat-stroked-button color="accent" class="team-action-btn" (click)="openTeamFile()">
+                <mat-icon>upload_file</mat-icon>
+                LOAD TEAM DB
+              </button>
+              <button mat-stroked-button color="primary" class="team-action-btn" (click)="exportDbBrowseCsv()" [disabled]="filteredDbBrowsePlayers.length === 0">
+                <mat-icon>download</mat-icon>
+                EXPORT CSV
+              </button>
+            </div>
+
+            <div class="db-search-filters">
+              <mat-form-field appearance="outline">
+                <mat-label>Filter by name or hex ID</mat-label>
+                <input matInput [(ngModel)]="dbSearchNameQuery" (ngModelChange)="resetDbBrowsePagination()">
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Nationality</mat-label>
+                <mat-select [(ngModel)]="dbSearchNationalityQuery" (ngModelChange)="resetDbBrowsePagination()">
+                  <mat-option [value]="null">All nationalities</mat-option>
+                  <mat-option *ngFor="let nationality of nationalities" [value]="nationality.value">
+                    {{ nationality.label }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+
+            <div class="db-search-results">
+              <div class="db-search-summary">
+                <span>
+                  {{ filteredDbBrowsePlayers.length }} players
+                  <ng-container *ngIf="filteredDbBrowsePlayers.length > 0">
+                    | {{ dbBrowseRangeStart }}-{{ dbBrowseRangeEnd }}
+                  </ng-container>
+                </span>
+                <span *ngIf="!teamFileLoaded">Load team DB to show clubs.</span>
+              </div>
+
+              <div class="db-search-pagination" *ngIf="filteredDbBrowsePlayers.length > 0">
+                <button mat-stroked-button color="primary" (click)="goToPreviousDbBrowsePage()" [disabled]="dbBrowsePage === 1">
+                  Previous
+                </button>
+                <span>Page {{ dbBrowsePage }} / {{ dbBrowseTotalPages }}</span>
+                <button mat-stroked-button color="primary" (click)="goToNextDbBrowsePage()" [disabled]="dbBrowsePage === dbBrowseTotalPages">
+                  Next
+                </button>
+              </div>
+
+              <div class="db-search-list" *ngIf="filteredDbBrowsePlayers.length > 0; else noDbSearchMatches">
+                <article class="db-search-card" *ngFor="let player of pagedDbBrowsePlayers">
+                  <div class="db-search-card-header">
+                    <div>
+                      <div class="db-search-player-name">{{ player.name || 'Unnamed Player' }}</div>
+                      <div class="db-search-player-meta">ID {{ player.hexId }} | OVR {{ player.ovr }} | {{ player.positionLabel }}</div>
+                    </div>
+                    <button mat-stroked-button color="primary" (click)="openDbBrowsePlayer(player.index)">Open</button>
+                  </div>
+
+                  <div class="db-search-card-details">
+                    <span>Nationality {{ getNationalityLabel(player.nationalityId) }}</span>
+                    <span>Clubs {{ player.clubs.length > 0 ? player.clubs.join(', ') : 'None loaded' }}</span>
+                  </div>
+                </article>
+              </div>
+
+              <ng-template #noDbSearchMatches>
+                <p class="team-empty-state">No players match the current filters.</p>
+              </ng-template>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
     <mat-tab label="Team Edit">
       <div class="editor-tab-content">
         <mat-card class="section-card team-editor-card">
@@ -264,19 +353,15 @@
             <p class="team-empty-state" *ngIf="!teamFileLoaded">Load a team database to search by player ID and edit team slots.</p>
             <p class="team-empty-state" *ngIf="teamFileLoaded && displayedTeams.length === 0">No team is currently selected.</p>
 
-            <mat-accordion class="team-results" *ngIf="displayedTeams.length > 0" multi>
-              <mat-expansion-panel class="team-db-card" *ngFor="let team of displayedTeams">
-                <mat-expansion-panel-header class="team-db-header">
-                  <mat-panel-title>
-                    <div>
-                      <div class="team-db-title">{{ team.teamLabel }}</div>
-                      <div class="team-db-subtitle">Offset {{ team.offset }}</div>
-                    </div>
-                  </mat-panel-title>
-                  <mat-panel-description>
-                    <span>{{ team.playerCount }} used slots</span>
-                  </mat-panel-description>
-                </mat-expansion-panel-header>
+            <div class="team-results" *ngIf="displayedTeams.length > 0">
+              <section class="team-db-card" *ngFor="let team of displayedTeams">
+                <div class="team-db-header">
+                  <div>
+                    <div class="team-db-title">{{ team.teamLabel }}</div>
+                    <div class="team-db-subtitle">Offset {{ team.offset }}</div>
+                  </div>
+                  <span>{{ team.playerCount }} used slots</span>
+                </div>
 
                 <div class="team-db-body">
                   <div class="team-db-toolbar">
@@ -290,6 +375,79 @@
                       ADD PLAYER
                     </button>
                   </div>
+
+                  <section class="team-formation" *ngIf="getFormationSketch(team) as formationSketch">
+                    <div class="team-formation-header">
+                      <div>
+                        <h3>First 11 Sketch</h3>
+                        <p>Auto-detects the formation from the first eleven non-empty slots using hardcoded position presets.</p>
+                      </div>
+                      <div class="team-formation-controls">
+                        <span>Formation {{ formationSketch.formation.label }}</span>
+                        <span>{{ formationSketch.slots.length }}/11 placed</span>
+                      </div>
+                    </div>
+
+                    <div class="team-formation-layout" *ngIf="formationSketch.slots.length > 0; else emptySketch">
+                      <div class="team-pitch">
+                        <div
+                          class="team-pitch-slot"
+                          *ngFor="let slot of formationSketch.slots; let slotIndex = index; trackBy: trackSketchSlot"
+                          [style.top]="slot.top"
+                          [style.left]="slot.left"
+                          (dragover)="allowFormationDrop($event)"
+                          (drop)="dropOnFormationSlot(team, formationSketch, slotIndex)">
+                          <div
+                            class="team-pitch-player"
+                            *ngIf="slot.player as player"
+                            [class.is-dragging]="draggedFormationPlayerSlotIndex === player.slotIndex"
+                            draggable="true"
+                            (dragstart)="startFormationDrag(player)"
+                            (dragend)="clearFormationDrag()">
+                            <div class="team-pitch-shirt-marker">
+                              <span>{{ player.shirtNumber || '--' }}</span>
+                            </div>
+                            <div class="team-pitch-name">{{ player.playerName || player.playerIdHex }}</div>
+                            <div class="team-pitch-pos">{{ player.positionLabel }}</div>
+                          </div>
+
+                          <div class="team-pitch-empty-slot" *ngIf="!slot.player">{{ slot.targetPositionLabel }}</div>
+                        </div>
+                      </div>
+
+                      <aside class="team-reserve-panel">
+                        <div class="team-reserve-title">Other Players</div>
+
+                        <div class="team-reserve-list" *ngIf="formationSketch.reservePlayers.length > 0; else noReservePlayers">
+                          <div
+                            class="team-reserve-player"
+                            *ngFor="let player of formationSketch.reservePlayers; let reserveIndex = index; trackBy: trackSketchPlayer"
+                            [class.is-dragging]="draggedFormationPlayerSlotIndex === player.slotIndex"
+                            draggable="true"
+                            (dragstart)="startFormationDrag(player)"
+                            (dragover)="allowFormationDrop($event)"
+                            (drop)="dropOnReservePlayer(team, formationSketch, reserveIndex)"
+                            (dragend)="clearFormationDrag()">
+                            <div class="team-pitch-shirt-marker team-pitch-shirt-marker--reserve">
+                              <span>{{ player.shirtNumber || '--' }}</span>
+                            </div>
+                            <div class="team-reserve-meta">
+                              <div class="team-reserve-name">{{ player.playerName || player.playerIdHex }}</div>
+                              <div class="team-reserve-pos">{{ player.positionLabel }}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <ng-template #noReservePlayers>
+                          <p class="team-formation-empty">No extra players available.</p>
+                        </ng-template>
+                      </aside>
+                    </div>
+
+                    <ng-template #emptySketch>
+                      <p class="team-formation-empty">No players available for the first eleven sketch.</p>
+                    </ng-template>
+                  </section>
 
                   <div class="team-slot-grid">
                     <article class="team-slot" *ngFor="let slot of team.slots">
@@ -334,8 +492,8 @@
                     </article>
                   </div>
                 </div>
-              </mat-expansion-panel>
-            </mat-accordion>
+              </section>
+            </div>
           </mat-card-content>
         </mat-card>
       </div>

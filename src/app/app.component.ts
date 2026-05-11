@@ -1,8 +1,45 @@
 import { Component } from '@angular/core';
+import { FORMATION_PRESETS, FormationPreset } from './data/formations';
+import { NATIONALITY_NAMES_BY_ID, NATIONALITY_OPTIONS } from './data/nationalities';
 import { Player } from './models/player.model';
 import { TeamRecord, TeamSlot } from './models/team-editor.model';
 import { PlayerService } from './services/player.service';
 import { TeamEditorService } from './services/team-editor.service';
+
+interface FormationSketchPlayer {
+  slotIndex: number;
+  playerIdHex: string;
+  playerName?: string;
+  shirtNumber: number;
+  position: number;
+  positionLabel: string;
+}
+
+interface FormationSketchSlot {
+  slotKey: string;
+  top: string;
+  left: string;
+  targetPosition: number;
+  targetPositionLabel: string;
+  player?: FormationSketchPlayer;
+}
+
+interface FormationSketch {
+  formation: FormationPreset;
+  slots: FormationSketchSlot[];
+  reservePlayers: FormationSketchPlayer[];
+}
+
+interface DbBrowsePlayer {
+  index: number;
+  hexId: string;
+  name: string;
+  ovr: number;
+  position: number;
+  positionLabel: string;
+  nationalityId: number;
+  clubs: string[];
+}
 
 @Component({
   selector: 'app-root',
@@ -20,9 +57,15 @@ export class AppComponent {
   searchQuery = '';
   playerHexQuery = '';
   teamSearchQuery = '';
+  dbSearchNameQuery = '';
+  dbSearchNationalityQuery: number | null = null;
+  dbBrowsePage = 1;
   selectedTeamOffset: number | null = null;
   displayedTeams: TeamRecord[] = [];
+  draggedFormationPlayerSlotIndex: number | null = null;
+  dbBrowsePlayers: DbBrowsePlayer[] = [];
   private readonly teamPlayerNameCache = new Map<number, string | null>();
+  private readonly dbBrowsePageSize = 25;
 
   readonly positions = [
     { value: 0, label: 'GK' }, { value: 1, label: 'LB' }, { value: 2, label: 'RB' },
@@ -34,6 +77,10 @@ export class AppComponent {
     { value: 18, label: 'CAM' }, { value: 19, label: 'ST' }, { value: 20, label: 'LW' },
     { value: 21, label: 'RW' }, { value: 22, label: 'CF' }
   ];
+
+  readonly formations = FORMATION_PRESETS;
+
+  private readonly formationLaneLefts = ['14%', '31%', '50%', '69%', '86%'];
 
   readonly feet = [
     { value: 0, label: 'Right' }, { value: 1, label: 'Left' }, { value: 255, label: 'Default/Both' }
@@ -89,6 +136,8 @@ export class AppComponent {
     { value: 2, label: 'Green' }, { value: 3, label: 'Yellow' }, { value: 4, label: 'Black' }
   ];
 
+  readonly nationalities = NATIONALITY_OPTIONS;
+
   constructor(
     public playerService: PlayerService,
     public teamEditorService: TeamEditorService
@@ -110,10 +159,48 @@ export class AppComponent {
     return this.teamEditorService.teamOptions;
   }
 
+  get filteredDbBrowsePlayers(): DbBrowsePlayer[] {
+    const normalizedNameQuery = this.dbSearchNameQuery.trim().toLowerCase();
+    const nationalityQuery = this.dbSearchNationalityQuery;
+
+    return this.dbBrowsePlayers.filter((player) => {
+      const matchesName = !normalizedNameQuery
+        || player.name.toLowerCase().includes(normalizedNameQuery)
+        || player.hexId.toLowerCase().includes(normalizedNameQuery);
+
+      const matchesNationality = nationalityQuery === null
+        || player.nationalityId === nationalityQuery;
+
+      return matchesName && matchesNationality;
+    });
+  }
+
+  get pagedDbBrowsePlayers(): DbBrowsePlayer[] {
+    const startIndex = (this.dbBrowsePage - 1) * this.dbBrowsePageSize;
+    return this.filteredDbBrowsePlayers.slice(startIndex, startIndex + this.dbBrowsePageSize);
+  }
+
+  get dbBrowseTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredDbBrowsePlayers.length / this.dbBrowsePageSize));
+  }
+
+  get dbBrowseRangeStart(): number {
+    if (this.filteredDbBrowsePlayers.length === 0) {
+      return 0;
+    }
+
+    return (this.dbBrowsePage - 1) * this.dbBrowsePageSize + 1;
+  }
+
+  get dbBrowseRangeEnd(): number {
+    return Math.min(this.dbBrowsePage * this.dbBrowsePageSize, this.filteredDbBrowsePlayers.length);
+  }
+
   async openFile(): Promise<void> {
     try {
       await this.playerService.loadFile();
       this.teamPlayerNameCache.clear();
+      this.refreshDbBrowsePlayers();
       if (this.playerService.totalPlayers > 0) {
         this.loadPlayer(0);
       }
@@ -127,6 +214,7 @@ export class AppComponent {
   async openTeamFile(): Promise<void> {
     try {
       const fileName = await this.teamEditorService.loadFile();
+      this.refreshDbBrowsePlayers();
       this.selectedTeamOffset = this.teamOptions.length > 0 ? this.teamOptions[0].offset : null;
       this.displayedTeams = this.selectedTeamOffset === null ? [] : this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(this.selectedTeamOffset)]);
       alert(`Loaded team DB: ${fileName}`);
@@ -156,6 +244,65 @@ export class AppComponent {
     this.playerHexQuery = this.currentPlayerHexId;
     this.player = this.playerService.readPlayer(+idx);
     this.updateOVR();
+  }
+
+  openDbBrowsePlayer(index: number): void {
+    this.selectedEditorTab = 0;
+
+    setTimeout(() => {
+      this.loadPlayer(index);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  exportDbBrowseCsv(): void {
+    if (this.filteredDbBrowsePlayers.length === 0) {
+      alert('No DB Search results to export.');
+      return;
+    }
+
+    const header = ['hexId', 'name', 'ovr', 'position', 'nationalityId', 'nationality', 'clubs'];
+    const rows = this.filteredDbBrowsePlayers.map((player) => [
+      player.hexId,
+      player.name || 'Unnamed Player',
+      player.ovr.toString(),
+      player.positionLabel,
+      player.nationalityId.toString(),
+      this.getNationalityLabel(player.nationalityId),
+      player.clubs.join('; ')
+    ]);
+
+    const csvContent = [header, ...rows]
+      .map((row) => row.map((value) => this.escapeCsvValue(value)).join(','))
+      .join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'db-search-export.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  resetDbBrowsePagination(): void {
+    this.dbBrowsePage = 1;
+  }
+
+  goToPreviousDbBrowsePage(): void {
+    if (this.dbBrowsePage > 1) {
+      this.dbBrowsePage -= 1;
+    }
+  }
+
+  goToNextDbBrowsePage(): void {
+    if (this.dbBrowsePage < this.dbBrowseTotalPages) {
+      this.dbBrowsePage += 1;
+    }
+  }
+
+  private escapeCsvValue(value: string): string {
+    const normalizedValue = value.replace(/"/g, '""');
+    return `"${normalizedValue}"`;
   }
 
   updateOVR(): void {
@@ -284,13 +431,123 @@ export class AppComponent {
     }, 1000);
   }
 
+  getFormationSketch(team: TeamRecord): FormationSketch {
+    const usedPlayers = team.slots.filter((slot) => !slot.isEmpty);
+    const starters = team.slots
+      .filter((slot) => !slot.isEmpty)
+      .slice(0, 11);
+
+    if (starters.length === 0) {
+      return {
+        formation: this.formations[0],
+        slots: [],
+        reservePlayers: []
+      };
+    }
+
+    return {
+      ...this.detectBestFormation(starters),
+      reservePlayers: usedPlayers.slice(11).map((player) => this.toSketchPlayer(player))
+    };
+  }
+
+  trackSketchPlayer(_: number, player: FormationSketchPlayer): number {
+    return player.slotIndex;
+  }
+
+  trackSketchSlot(_: number, slot: FormationSketchSlot): string {
+    return slot.slotKey;
+  }
+
+  startFormationDrag(player: FormationSketchPlayer): void {
+    this.draggedFormationPlayerSlotIndex = player.slotIndex;
+  }
+
+  allowFormationDrop(event: DragEvent): void {
+    event.preventDefault();
+  }
+
+  clearFormationDrag(): void {
+    this.draggedFormationPlayerSlotIndex = null;
+  }
+
+  dropOnFormationSlot(team: TeamRecord, formationSketch: FormationSketch, targetStarterIndex: number): void {
+    this.moveDraggedPlayer(team, formationSketch, targetStarterIndex);
+  }
+
+  dropOnReservePlayer(team: TeamRecord, formationSketch: FormationSketch, reserveIndex: number): void {
+    this.moveDraggedPlayer(team, formationSketch, formationSketch.slots.length + reserveIndex);
+  }
+
+  private moveDraggedPlayer(team: TeamRecord, formationSketch: FormationSketch, targetOrderIndex: number): void {
+    if (this.draggedFormationPlayerSlotIndex === null) {
+      this.clearFormationDrag();
+      return;
+    }
+
+    const orderedUsedPlayers = [
+      ...formationSketch.slots.map((slot) => slot.player).filter((player): player is FormationSketchPlayer => Boolean(player)),
+      ...formationSketch.reservePlayers
+    ];
+
+    const previousIndex = orderedUsedPlayers.findIndex((player) => player.slotIndex === this.draggedFormationPlayerSlotIndex);
+
+    if (previousIndex === -1 || targetOrderIndex < 0 || targetOrderIndex >= orderedUsedPlayers.length) {
+      this.clearFormationDrag();
+      return;
+    }
+
+    const reorderedPlayers = [...orderedUsedPlayers];
+    const [movedPlayer] = reorderedPlayers.splice(previousIndex, 1);
+    reorderedPlayers.splice(targetOrderIndex, 0, movedPlayer);
+
+    const updatedTeam = this.teamEditorService.reorderUsedPlayers(
+      team.offset,
+      reorderedPlayers.map((player) => player.slotIndex),
+      formationSketch.slots.map((slot) => slot.targetPosition)
+    );
+
+    this.replaceDisplayedTeam(team.offset, updatedTeam);
+    this.clearFormationDrag();
+  }
+
   private replaceDisplayedTeam(offset: number, updatedTeam: TeamRecord): void {
     const decoratedTeam = this.decorateTeamWithPlayerNames(updatedTeam);
     this.displayedTeams = this.displayedTeams.map((team) => team.offset === offset ? decoratedTeam : team);
+    this.refreshDbBrowsePlayers();
 
     if (this.selectedTeamOffset === offset && !this.displayedTeams.some((team) => team.offset === offset)) {
       this.displayedTeams = [decoratedTeam];
     }
+  }
+
+  private refreshDbBrowsePlayers(): void {
+    if (!this.fileLoaded) {
+      this.dbBrowsePlayers = [];
+      this.resetDbBrowsePagination();
+      return;
+    }
+
+    const clubMap = this.teamFileLoaded ? this.teamEditorService.getPlayerClubMap() : new Map<number, string[]>();
+    const players: DbBrowsePlayer[] = [];
+
+    for (let index = 0; index < this.playerService.totalPlayers; index++) {
+      const player = this.playerService.readPlayer(index);
+
+      players.push({
+        index,
+        hexId: this.playerService.formatPlayerId(index),
+        name: player.name,
+        ovr: this.playerService.calculateOVR(player),
+        position: player.pos,
+        positionLabel: this.getPositionLabel(player.pos),
+        nationalityId: player.nat,
+        clubs: clubMap.get(index) ?? []
+      });
+    }
+
+    this.dbBrowsePlayers = players;
+    this.resetDbBrowsePagination();
   }
 
   private decorateTeamsWithPlayerNames(teams: TeamRecord[]): TeamRecord[] {
@@ -317,6 +574,168 @@ export class AppComponent {
     }
 
     return this.teamPlayerNameCache.get(slot.playerId) ?? undefined;
+  }
+
+  private detectBestFormation(players: TeamSlot[]): FormationSketch {
+    const matches = this.formations.map((formation) => this.matchFormation(players, formation));
+    const bestMatch = matches.sort((left, right) => left.score - right.score)[0];
+
+    return {
+      formation: bestMatch.formation,
+      slots: bestMatch.slots,
+      reservePlayers: []
+    };
+  }
+
+  private matchFormation(players: TeamSlot[], formation: FormationPreset): FormationSketch & { score: number } {
+    const pitchLineTops = this.getPitchLineTops(formation.lines.length + 1);
+    const remainingPlayers = [...players];
+    const sketchSlots: FormationSketchSlot[] = [];
+    let score = 0;
+
+    const goalkeeper = this.pickBestPlayerForSlot(remainingPlayers, [0]);
+
+    if (goalkeeper) {
+      score += goalkeeper.rank;
+      this.removeChosenPlayers(remainingPlayers, [goalkeeper.player]);
+    }
+
+    sketchSlots.push({
+      slotKey: 'gk',
+      top: pitchLineTops[0] ?? '86%',
+      left: this.formationLaneLefts[2] ?? '50%',
+      targetPosition: 0,
+      targetPositionLabel: this.getPositionLabel(0),
+      player: goalkeeper ? this.toSketchPlayer(goalkeeper.player) : undefined
+    });
+
+    formation.lines.forEach((line, lineIndex) => {
+      line.slots.forEach((slot, slotIndex) => {
+        const match = this.pickBestPlayerForSlot(remainingPlayers, slot.positions);
+        const formationSlot: FormationSketchSlot = {
+          slotKey: `${lineIndex}-${slotIndex}`,
+          top: pitchLineTops[lineIndex + 1] ?? '50%',
+          left: this.formationLaneLefts[slot.lane] ?? '50%',
+          targetPosition: slot.positions[0],
+          targetPositionLabel: this.getPositionLabel(slot.positions[0])
+        };
+
+        if (!match) {
+          score += 500;
+          sketchSlots.push(formationSlot);
+          return;
+        }
+
+        score += match.rank;
+        formationSlot.player = this.toSketchPlayer(match.player);
+        sketchSlots.push(formationSlot);
+        this.removeChosenPlayers(remainingPlayers, [match.player]);
+      });
+    });
+
+    score += remainingPlayers.reduce((total, player) => total + 25 + (this.starterPositionOrder[player.position] ?? 25), 0);
+
+    return {
+      formation,
+      slots: sketchSlots.slice(0, 11),
+      reservePlayers: [],
+      score
+    };
+  }
+
+  private getPitchLineTops(totalRows: number): string[] {
+    const bottom = 88;
+    const top = 12;
+
+    if (totalRows <= 1) {
+      return [`${bottom}%`];
+    }
+
+    const step = (bottom - top) / (totalRows - 1);
+
+    return Array.from({ length: totalRows }, (_, index) => `${bottom - step * index}%`);
+  }
+
+  private pickBestPlayerForSlot(players: TeamSlot[], preferredPositions: number[]): { player: TeamSlot; rank: number } | undefined {
+    return [...players]
+      .map((player) => ({ player, rank: this.getSlotRank(player, preferredPositions) }))
+      .sort((left, right) => {
+        if (left.rank !== right.rank) {
+          return left.rank - right.rank;
+        }
+
+        if (left.player.shirtNumber !== right.player.shirtNumber) {
+          return left.player.shirtNumber - right.player.shirtNumber;
+        }
+
+        return left.player.index - right.player.index;
+      })[0];
+  }
+
+  private getSlotRank(player: TeamSlot, preferredPositions: number[]): number {
+    const preferredRank = preferredPositions.indexOf(player.position);
+
+    if (preferredRank !== -1) {
+      return preferredRank;
+    }
+
+    return preferredPositions.length + 20 + (this.starterPositionOrder[player.position] ?? 20);
+  }
+
+  private removeChosenPlayers(players: TeamSlot[], chosenPlayers: TeamSlot[]): void {
+    const chosenSlotIndexes = new Set(chosenPlayers.map((player) => player.index));
+
+    for (let index = players.length - 1; index >= 0; index--) {
+      if (chosenSlotIndexes.has(players[index].index)) {
+        players.splice(index, 1);
+      }
+    }
+  }
+
+  private toSketchPlayer(player: TeamSlot): FormationSketchPlayer {
+    return {
+      slotIndex: player.index,
+      playerIdHex: player.playerIdHex,
+      playerName: player.playerName,
+      shirtNumber: player.shirtNumber,
+      position: player.position,
+      positionLabel: this.getPositionLabel(player.position)
+    };
+  }
+
+  private readonly starterPositionOrder: Record<number, number> = {
+    0: 0,
+    1: 1,
+    3: 2,
+    5: 3,
+    6: 4,
+    7: 5,
+    4: 6,
+    2: 7,
+    10: 8,
+    8: 9,
+    9: 10,
+    12: 11,
+    11: 12,
+    13: 13,
+    17: 14,
+    16: 15,
+    14: 16,
+    18: 17,
+    15: 18,
+    20: 19,
+    22: 20,
+    19: 21,
+    21: 22
+  };
+
+  private getPositionLabel(positionValue: number): string {
+    return this.positions.find((position) => position.value === positionValue)?.label ?? `POS ${positionValue}`;
+  }
+
+  getNationalityLabel(nationalityId: number): string {
+    const nationalityName = NATIONALITY_NAMES_BY_ID[nationalityId];
+    return nationalityName ? `${nationalityName} (${nationalityId})` : `Unknown (${nationalityId})`;
   }
 
   private emptyPlayer(): Player {

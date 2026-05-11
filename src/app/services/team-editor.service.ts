@@ -117,6 +117,34 @@ export class TeamEditorService {
       .map(({ offset }) => this.getTeam(offset));
   }
 
+  getPlayerClubMap(): Map<number, string[]> {
+    const playerClubMap = new Map<number, Set<string>>();
+
+    if (!this.binaryData) {
+      return new Map<number, string[]>();
+    }
+
+    this.teamOptions.forEach(({ offset }) => {
+      const team = this.getTeam(offset);
+
+      team.slots.forEach((slot) => {
+        if (slot.isEmpty) {
+          return;
+        }
+
+        if (!playerClubMap.has(slot.playerId)) {
+          playerClubMap.set(slot.playerId, new Set<string>());
+        }
+
+        playerClubMap.get(slot.playerId)?.add(team.teamLabel);
+      });
+    });
+
+    return new Map<number, string[]>(
+      Array.from(playerClubMap.entries()).map(([playerId, clubs]) => [playerId, Array.from(clubs)])
+    );
+  }
+
   updatePlayerCount(offset: number, playerCount: number): TeamRecord {
     const view = this.getView();
     view.setUint32(offset + 4, this.clamp(playerCount, 0, 0xffffffff), true);
@@ -178,6 +206,38 @@ export class TeamEditorService {
       shirtNumber: 0,
       position: 0
     }, Math.max(team.playerCount - 1, 0));
+  }
+
+  reorderUsedPlayers(offset: number, orderedSlotIndexes: number[], starterPositions: number[]): TeamRecord {
+    const team = this.getTeam(offset);
+    const usedIndexes = team.slots
+      .filter((slot) => !slot.isEmpty)
+      .map((slot) => slot.index);
+
+    if (usedIndexes.length !== orderedSlotIndexes.length) {
+      return team;
+    }
+
+    const orderedSlots = orderedSlotIndexes
+      .map((slotIndex) => team.slots[slotIndex])
+      .filter((slot): slot is TeamSlot => Boolean(slot));
+
+    if (orderedSlots.length !== usedIndexes.length) {
+      return team;
+    }
+
+    const view = this.getView();
+
+    usedIndexes.forEach((targetSlotIndex, orderIndex) => {
+      const sourceSlot = orderedSlots[orderIndex];
+      const attrPtr = offset + ATTRIBUTES_OFFSET + targetSlotIndex * 4;
+      const idPtr = offset + PLAYER_ID_OFFSET + targetSlotIndex * 4;
+      view.setUint8(attrPtr, sourceSlot.shirtNumber);
+      view.setUint8(attrPtr + 1, starterPositions[orderIndex] ?? sourceSlot.position);
+      view.setUint16(idPtr, sourceSlot.playerId, true);
+    });
+
+    return this.getTeam(offset);
   }
 
   private scanTeams(): void {
