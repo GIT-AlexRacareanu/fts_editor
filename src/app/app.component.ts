@@ -1,8 +1,9 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FORMATION_PRESETS, FormationPreset } from './data/formations';
 import { NATIONALITY_NAMES_BY_ID, NATIONALITY_OPTIONS } from './data/nationalities';
 import { Player } from './models/player.model';
 import { TeamRecord, TeamSlot } from './models/team-editor.model';
+import { ImportedPlayerRecord, PlayerImportService } from './services/player-import.service';
 import { PlayerService } from './services/player.service';
 import { TeamEditorService } from './services/team-editor.service';
 
@@ -45,7 +46,9 @@ interface DbBrowsePlayer {
   selector: 'app-root',
   templateUrl: './app.component.html'
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
+  private readonly importAssetUrl = 'assets/import/fc-player-import.csv';
+
   selectedEditorTab = 0;
   selectedIndex = 0;
   player: Player = this.emptyPlayer();
@@ -59,12 +62,18 @@ export class AppComponent {
   dbSearchNameQuery = '';
   dbSearchNationalityQuery: number | null = null;
   dbBrowsePage = 1;
+  importSearchQuery = '';
+  importSourceFileName = '';
+  showImportPicker = false;
   selectedTeamOffset: number | null = null;
   displayedTeams: TeamRecord[] = [];
   draggedFormationPlayerSlotIndex: number | null = null;
   dbBrowsePlayers: DbBrowsePlayer[] = [];
+  importedPlayers: ImportedPlayerRecord[] = [];
+  selectedImportedPlayer: ImportedPlayerRecord | null = null;
   private readonly teamPlayerNameCache = new Map<number, string | null>();
   private readonly dbBrowsePageSize = 25;
+  private readonly importSearchPageSize = 50;
 
   readonly positions = [
     { value: 0, label: 'GK' }, { value: 1, label: 'LB' }, { value: 2, label: 'RB' },
@@ -139,8 +148,13 @@ export class AppComponent {
 
   constructor(
     public playerService: PlayerService,
+    public playerImportService: PlayerImportService,
     public teamEditorService: TeamEditorService
   ) {}
+
+  ngOnInit(): void {
+    void this.loadImportSource(false, false);
+  }
 
   get fileLoaded(): boolean {
     return this.playerService.binaryData !== null;
@@ -152,6 +166,10 @@ export class AppComponent {
 
   get teamFileLoaded(): boolean {
     return this.teamEditorService.hasData;
+  }
+
+  get importSourceLoaded(): boolean {
+    return this.importedPlayers.length > 0;
   }
 
   get teamOptions(): { label: string; offset: number }[] {
@@ -193,6 +211,29 @@ export class AppComponent {
 
   get dbBrowseRangeEnd(): number {
     return Math.min(this.dbBrowsePage * this.dbBrowsePageSize, this.filteredDbBrowsePlayers.length);
+  }
+
+  get filteredImportedPlayers(): ImportedPlayerRecord[] {
+    return this.playerImportService
+      .searchPlayers(this.importedPlayers, this.importSearchQuery)
+      .slice(0, this.importSearchPageSize);
+  }
+
+  async openImportPicker(): Promise<void> {
+    if (!this.fileLoaded) {
+      alert('Load PLAYERS.DAT first.');
+      return;
+    }
+
+    if (!this.importSourceLoaded) {
+      await this.loadImportSource(false, true);
+    }
+
+    if (!this.importSourceLoaded) {
+      return;
+    }
+
+    this.showImportPicker = !this.showImportPicker;
   }
 
   async openFile(): Promise<void> {
@@ -322,6 +363,71 @@ export class AppComponent {
     } catch (err: any) {
       alert(err.message || 'Save failed. Make sure you gave the browser permission to save changes.');
     }
+  }
+
+  async loadImportSource(showPicker = false, notify = false): Promise<void> {
+    try {
+      const response = await fetch(this.importAssetUrl, { cache: 'no-store' });
+
+      if (!response.ok) {
+        throw new Error(`Import CSV not found at ${this.importAssetUrl}.`);
+      }
+
+      const csvText = await response.text();
+      const importedPlayers = this.playerImportService.parseCsv(csvText);
+
+      if (importedPlayers.length === 0) {
+        alert('No importable players were found in the saved import CSV.');
+        return;
+      }
+
+      this.importedPlayers = importedPlayers;
+      this.importSourceFileName = this.importAssetUrl;
+      this.importSearchQuery = '';
+      this.selectedImportedPlayer = null;
+      this.showImportPicker = showPicker;
+
+      if (notify) {
+        alert(`Loaded ${importedPlayers.length} source players from ${this.importAssetUrl}.`);
+      }
+    } catch (err: unknown) {
+      const fallbackMessage = `Failed to load ${this.importAssetUrl}. Add your CSV there and try again.`;
+      const message = err instanceof Error ? err.message : fallbackMessage;
+
+      if (notify) {
+        alert(message || fallbackMessage);
+      }
+    }
+  }
+
+  clearImportedPlayers(): void {
+    this.importedPlayers = [];
+    this.importSourceFileName = '';
+    this.importSearchQuery = '';
+    this.selectedImportedPlayer = null;
+    this.showImportPicker = false;
+  }
+
+  importPlayer(record: ImportedPlayerRecord): void {
+    if (!this.fileLoaded) {
+      alert('Load PLAYERS.DAT first.');
+      return;
+    }
+
+    this.player = this.playerImportService.mapImportedPlayer(record, this.player);
+    this.updateOVR();
+    this.selectedImportedPlayer = null;
+    this.importSearchQuery = '';
+    this.showImportPicker = false;
+    alert(`Imported ${record.shortName} into FTS player ${this.currentPlayerHexId}.`);
+  }
+
+  importSelectedPlayer(): void {
+    if (!this.selectedImportedPlayer) {
+      return;
+    }
+
+    this.importPlayer(this.selectedImportedPlayer);
   }
 
   searchPlayer(): void {
@@ -545,7 +651,13 @@ export class AppComponent {
       });
     }
 
-    this.dbBrowsePlayers = players;
+    this.dbBrowsePlayers = players.sort((left, right) => {
+      if (right.ovr !== left.ovr) {
+        return right.ovr - left.ovr;
+      }
+
+      return left.index - right.index;
+    });
     this.resetDbBrowsePagination();
   }
 

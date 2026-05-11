@@ -36,6 +36,33 @@
           </button>
         </div>
 
+        <div class="import-toolbar">
+          <button mat-stroked-button color="accent" class="import-trigger-btn" (click)="openImportPicker()">
+            <mat-icon>upload_file</mat-icon>
+            IMPORT
+          </button>
+        </div>
+
+        <div class="import-picker-strip" *ngIf="showImportPicker">
+          <div class="import-picker-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Search name</mat-label>
+              <input matInput [(ngModel)]="importSearchQuery">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Select player</mat-label>
+              <mat-select [(ngModel)]="selectedImportedPlayer" (selectionChange)="importSelectedPlayer()">
+                <mat-option *ngFor="let sourcePlayer of filteredImportedPlayers" [value]="sourcePlayer">
+                  {{ sourcePlayer.shortName }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <p class="team-empty-state" *ngIf="filteredImportedPlayers.length === 0">No imported names match the current search.</p>
+        </div>
+
         <mat-card class="section-card">
           <mat-card-header>
             <mat-card-title>General Information</mat-card-title>
