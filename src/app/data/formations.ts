@@ -41,228 +41,193 @@ export interface FormationPreset {
 
 const P = POSITION_IDS;
 
-const leftBack = [P.LB, P.LM, P.LSW, P.LDM];
-const rightBack = [P.RB, P.RM, P.RSW, P.RDM];
-const leftCenterBack = [P.LCB, P.CB, P.LSW, P.CDM];
-const centerBack = [P.CB, P.LCB, P.RCB, P.CDM];
-const rightCenterBack = [P.RCB, P.CB, P.RSW, P.CDM];
-const sweeper = [P.CB, P.LCB, P.RCB, P.CDM, P.CM];
-
-const leftHolding = [P.LDM, P.CDM, P.LCM, P.CM, P.LM];
-const centerHolding = [P.CDM, P.LDM, P.RDM, P.CM, P.LCM, P.RCM];
-const rightHolding = [P.RDM, P.CDM, P.RCM, P.CM, P.RM];
-
-const leftMid = [P.LM, P.LCM, P.CM, P.LAM, P.LW];
-const leftCentralMid = [P.LCM, P.CM, P.LDM, P.CDM, P.LM];
-const centerMid = [P.CM, P.LCM, P.RCM, P.CDM, P.LDM, P.RDM];
-const rightCentralMid = [P.RCM, P.CM, P.RDM, P.CDM, P.RM];
-const rightMid = [P.RM, P.RCM, P.CM, P.RAM, P.RW];
-
-const leftAttackingMid = [P.LAM, P.LW, P.LM, P.CAM, P.CF];
-const centerAttackingMid = [P.CAM, P.CF, P.CM, P.ST, P.LAM, P.RAM];
-const rightAttackingMid = [P.RAM, P.RW, P.RM, P.CAM, P.CF];
-
-const leftWing = [P.LW, P.LAM, P.LM, P.CF, P.ST];
-const leftStriker = [P.ST, P.CF, P.LW, P.LAM, P.CAM];
-const centerForward = [P.CF, P.ST, P.CAM, P.LAM, P.RAM];
-const striker = [P.ST, P.CF, P.CAM, P.LAM, P.RAM];
-const rightStriker = [P.ST, P.CF, P.RW, P.RAM, P.CAM];
-const rightWing = [P.RW, P.RAM, P.RM, P.CF, P.ST];
+function slot(lane: number, position: number): FormationSlotDefinition {
+  return { lane, positions: [position] };
+}
 
 export const FORMATION_PRESETS: FormationPreset[] = [
   {
     value: '4-3-3',
     label: '4 3 3',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftCentralMid }, { lane: 2, positions: centerMid }, { lane: 3, positions: rightCentralMid }] },
-      { slots: [{ lane: 0, positions: leftWing }, { lane: 2, positions: striker }, { lane: 4, positions: rightWing }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(1, P.LCM), slot(2, P.CM), slot(3, P.RCM)] },
+      { slots: [slot(0, P.LW), slot(2, P.ST), slot(4, P.RW)] }
     ]
   },
   {
     value: '4-2-4',
     label: '4 2 4',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftHolding }, { lane: 3, positions: rightHolding }] },
-      { slots: [{ lane: 0, positions: leftWing }, { lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }, { lane: 4, positions: rightWing }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(1, P.LCM), slot(3, P.RCM)] },
+      { slots: [slot(0, P.LW), slot(1, P.ST), slot(3, P.ST), slot(4, P.RW)] }
     ]
   },
   {
     value: '5-4-1',
     label: '5 4 1',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 2, positions: centerBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 0, positions: leftMid }, { lane: 1, positions: leftCentralMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
     value: '5-3-2',
     label: '5 3 2',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 2, positions: centerBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftCentralMid }, { lane: 2, positions: centerMid }, { lane: 3, positions: rightCentralMid }] },
-      { slots: [{ lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(1, P.LCM), slot(2, P.CM), slot(3, P.RCM)] },
+      { slots: [slot(0, P.LW), slot(4, P.RW)] }
     ]
   },
   {
     value: '3-5-2',
     label: '3 5 2',
     lines: [
-      { slots: [{ lane: 1, positions: leftCenterBack }, { lane: 2, positions: centerBack }, { lane: 3, positions: rightCenterBack }] },
-      { slots: [{ lane: 0, positions: leftMid }, { lane: 1, positions: leftCentralMid }, { lane: 2, positions: centerMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }] }
+      { slots: [slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(2, P.CM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(0, P.LW), slot(4, P.RW)] }
     ]
   },
   {
     value: '3-4-3',
     label: '3 4 3',
     lines: [
-      { slots: [{ lane: 1, positions: leftCenterBack }, { lane: 2, positions: centerBack }, { lane: 3, positions: rightCenterBack }] },
-      { slots: [{ lane: 0, positions: leftMid }, { lane: 1, positions: leftCentralMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 0, positions: leftWing }, { lane: 2, positions: striker }, { lane: 4, positions: rightWing }] }
+      { slots: [slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(0, P.LW), slot(2, P.ST), slot(4, P.RW)] }
     ]
   },
   {
     value: '4-5-1',
     label: '4 5 1',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 0, positions: leftMid }, { lane: 1, positions: leftCentralMid }, { lane: 2, positions: centerMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(2, P.CM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
-    value: '4-2-3-1-a',
+    value: '4-2-3-1(a)',
     label: '4 2 3 1 (a)',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftHolding }, { lane: 3, positions: rightHolding }] },
-      { slots: [{ lane: 0, positions: leftAttackingMid }, { lane: 4, positions: rightAttackingMid }] },
-      { slots: [{ lane: 2, positions: centerAttackingMid }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(0, P.LAM), slot(1, P.LCM), slot(2, P.CAM), slot(3, P.RCM), slot(4, P.RAM)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
-    value: '4-2-3-1-b',
+    value: '4-2-3-1(b)',
     label: '4 2 3 1 (b)',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftHolding }, { lane: 3, positions: rightHolding }] },
-      { slots: [{ lane: 0, positions: leftAttackingMid }, { lane: 4, positions: rightAttackingMid }] },
-      { slots: [{ lane: 2, positions: centerAttackingMid }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(2, P.CF)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
     value: '4-3-1-2',
     label: '4 3 1 2',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftCentralMid }, { lane: 2, positions: centerMid }, { lane: 3, positions: rightCentralMid }] },
-      { slots: [{ lane: 2, positions: centerAttackingMid }] },
-      { slots: [{ lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(1, P.LCM), slot(2, P.CM), slot(3, P.RCM)] },
+      { slots: [slot(0, P.LW), slot(2, P.CF), slot(4, P.RW)] }
     ]
   },
   {
-    value: '4-4-1-1-a',
+    value: '4-4-1-1(a)',
     label: '4 4 1 1 (a)',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 0, positions: leftMid }, { lane: 1, positions: leftCentralMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 2, positions: centerForward }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(2, P.CAM)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
-    value: '4-4-1-1-b',
+    value: '4-4-1-1(b)',
     label: '4 4 1 1 (b)',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftCentralMid }, { lane: 2, positions: centerMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 2, positions: centerAttackingMid }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(2, P.CF)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
     value: '3-4-1-2',
     label: '3 4 1 2',
     lines: [
-      { slots: [{ lane: 1, positions: leftCenterBack }, { lane: 2, positions: centerBack }, { lane: 3, positions: rightCenterBack }] },
-      { slots: [{ lane: 0, positions: leftMid }, { lane: 1, positions: leftCentralMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 2, positions: centerAttackingMid }] },
-      { slots: [{ lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }] }
+      { slots: [slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(2, P.CAM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(0, P.LW), slot(4, P.RW)] }
     ]
   },
   {
     value: '4-1-2-1-2',
     label: '4 1 2 1 2',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 2, positions: centerHolding }] },
-      { slots: [{ lane: 1, positions: leftCentralMid }, { lane: 3, positions: rightCentralMid }] },
-      { slots: [{ lane: 2, positions: centerAttackingMid }] },
-      { slots: [{ lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }] }
+      { slots: [slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB)] },
+      { slots: [slot(1, P.LCM), slot(2, P.CAM), slot(3, P.CDM), slot(4, P.RCM)] },
+      { slots: [slot(1, P.LW), slot(3, P.RW)] }
     ]
   },
   {
     value: '1-4-3-2',
     label: '1 4 3 2',
     lines: [
-      { slots: [{ lane: 2, positions: sweeper }] },
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftCentralMid }, { lane: 2, positions: centerMid }, { lane: 3, positions: rightCentralMid }] },
-      { slots: [{ lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(1, P.LCM), slot(2, P.CM), slot(3, P.RCM)] },
+      { slots: [slot(1, P.LW), slot(3, P.RW)] }
     ]
   },
   {
     value: '3-4-2-1',
     label: '3 4 2 1',
     lines: [
-      { slots: [{ lane: 1, positions: leftCenterBack }, { lane: 2, positions: centerBack }, { lane: 3, positions: rightCenterBack }] },
-      { slots: [{ lane: 0, positions: leftMid }, { lane: 1, positions: leftCentralMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 1, positions: leftAttackingMid }, { lane: 3, positions: rightAttackingMid }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(1, P.LAM), slot(3, P.RAM)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
     value: '4-3-2-1',
     label: '4 3 2 1',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftCentralMid }, { lane: 2, positions: centerMid }, { lane: 3, positions: rightCentralMid }] },
-      { slots: [{ lane: 1, positions: leftAttackingMid }, { lane: 3, positions: rightAttackingMid }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LAM), slot(2, P.CDM), slot(3, P.RAM), slot(4, P.RM)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
     value: '5-2-1-2',
     label: '5 2 1 2',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 2, positions: centerBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftHolding }, { lane: 3, positions: rightHolding }] },
-      { slots: [{ lane: 2, positions: centerAttackingMid }] },
-      { slots: [{ lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(1, P.LDM), slot(2, P.CAM), slot(3, P.RDM)] },
+      { slots: [slot(1, P.LW), slot(3, P.RW)] }
     ]
   },
   {
     value: '5-2-2-1',
     label: '5 2 2 1',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 2, positions: centerBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 1, positions: leftHolding }, { lane: 3, positions: rightHolding }] },
-      { slots: [{ lane: 1, positions: leftAttackingMid }, { lane: 3, positions: rightAttackingMid }] },
-      { slots: [{ lane: 2, positions: striker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(1, P.LAM), slot(2, P.CDM), slot(3, P.CDM), slot(4, P.RAM)] },
+      { slots: [slot(2, P.ST)] }
     ]
   },
   {
     value: '4-4-2',
     label: '4 4 2',
     lines: [
-      { slots: [{ lane: 0, positions: leftBack }, { lane: 1, positions: leftCenterBack }, { lane: 3, positions: rightCenterBack }, { lane: 4, positions: rightBack }] },
-      { slots: [{ lane: 0, positions: leftMid }, { lane: 1, positions: leftCentralMid }, { lane: 3, positions: rightCentralMid }, { lane: 4, positions: rightMid }] },
-      { slots: [{ lane: 1, positions: leftStriker }, { lane: 3, positions: rightStriker }] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(1, P.ST), slot(3, P.ST)] }
     ]
   }
 ];

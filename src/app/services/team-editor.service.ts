@@ -11,6 +11,7 @@ const SLOT_COUNT = 32;
 const ATTRIBUTES_OFFSET = 8;
 const PLAYER_ID_OFFSET = 136;
 const EMPTY_PLAYER_ID = 0;
+const UNUSED_PLAYER_ID = 0xffff;
 
 @Injectable({ providedIn: 'root' })
 export class TeamEditorService {
@@ -191,11 +192,34 @@ export class TeamEditorService {
       return null;
     }
 
+    const nextPlayerCount = insertSlot.index < team.playerCount
+      ? team.playerCount
+      : Math.min(team.playerCount + 1, SLOT_COUNT);
+
     return this.updateSlot(offset, insertSlot.index, {
       playerIdHex: this.formatPlayerId(EMPTY_PLAYER_ID),
       shirtNumber: 0,
       position: 0
-    }, Math.min(team.playerCount + 1, SLOT_COUNT));
+    }, nextPlayerCount);
+  }
+
+  addPlayer(offset: number, playerId: number, position: number): TeamRecord | null {
+    const team = this.getTeam(offset);
+    const insertSlot = this.findInsertSlot(team);
+
+    if (!insertSlot) {
+      return null;
+    }
+
+    const nextPlayerCount = insertSlot.index < team.playerCount
+      ? team.playerCount
+      : Math.min(team.playerCount + 1, SLOT_COUNT);
+
+    return this.updateSlot(offset, insertSlot.index, {
+      playerIdHex: this.formatPlayerId(playerId),
+      shirtNumber: 0,
+      position
+    }, nextPlayerCount);
   }
 
   deleteSlot(offset: number, slotIndex: number): TeamRecord {
@@ -282,6 +306,14 @@ export class TeamEditorService {
   }
 
   private findInsertSlot(team: TeamRecord): TeamSlot | undefined {
+    const countedEmptySlot = team.slots
+      .slice(0, Math.min(team.playerCount, SLOT_COUNT))
+      .find((slot) => slot.isEmpty);
+
+    if (countedEmptySlot) {
+      return countedEmptySlot;
+    }
+
     const preferredSlot = team.playerCount < SLOT_COUNT ? team.slots[team.playerCount] : undefined;
     if (preferredSlot?.isEmpty) {
       return preferredSlot;
@@ -291,7 +323,7 @@ export class TeamEditorService {
   }
 
   private isEmptySlot(playerId: number): boolean {
-    return playerId === EMPTY_PLAYER_ID;
+    return playerId === EMPTY_PLAYER_ID || playerId === UNUSED_PLAYER_ID;
   }
 
   private formatTeamLabel(teamId: number): string {

@@ -65,6 +65,11 @@ export class AppComponent implements OnInit {
   importSearchQuery = '';
   importSourceFileName = '';
   showImportPicker = false;
+  teamAddSearchQuery = '';
+  selectedTeamAddPlayerIndex: number | null = null;
+  teamAddPickerOffset: number | null = null;
+  selectedTeamEditorOffset: number | null = null;
+  selectedTeamEditorSlotIndex: number | null = null;
   selectedTeamOffset: number | null = null;
   displayedTeams: TeamRecord[] = [];
   draggedFormationPlayerSlotIndex: number | null = null;
@@ -216,6 +221,16 @@ export class AppComponent implements OnInit {
   get filteredImportedPlayers(): ImportedPlayerRecord[] {
     return this.playerImportService
       .searchPlayers(this.importedPlayers, this.importSearchQuery)
+      .slice(0, this.importSearchPageSize);
+  }
+
+  get filteredTeamAddPlayers(): DbBrowsePlayer[] {
+    const normalizedQuery = this.teamAddSearchQuery.trim().toLowerCase();
+
+    return this.dbBrowsePlayers
+      .filter((player) => !normalizedQuery
+        || player.name.toLowerCase().includes(normalizedQuery)
+        || player.hexId.toLowerCase().includes(normalizedQuery))
       .slice(0, this.importSearchPageSize);
   }
 
@@ -495,8 +510,40 @@ export class AppComponent implements OnInit {
     this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, slot.index, { position: Number(value) }));
   }
 
-  addTeamSlot(team: TeamRecord): void {
-    const updatedTeam = this.teamEditorService.addSlot(team.offset);
+  toggleTeamAddPicker(team: TeamRecord): void {
+    if (!this.teamFileLoaded) {
+      alert('Load a team database first.');
+      return;
+    }
+
+    if (!this.fileLoaded) {
+      alert('Load PLAYERS.DAT first.');
+      return;
+    }
+
+    if (this.teamAddPickerOffset === team.offset) {
+      this.closeTeamAddPicker();
+      return;
+    }
+
+    this.teamAddPickerOffset = team.offset;
+    this.teamAddSearchQuery = '';
+    this.selectedTeamAddPlayerIndex = null;
+  }
+
+  addSelectedPlayerToTeam(team: TeamRecord): void {
+    if (this.teamAddPickerOffset !== team.offset || this.selectedTeamAddPlayerIndex === null) {
+      return;
+    }
+
+    const selectedPlayer = this.dbBrowsePlayers.find((player) => player.index === this.selectedTeamAddPlayerIndex);
+
+    if (!selectedPlayer) {
+      alert('Choose a valid player to add.');
+      return;
+    }
+
+    const updatedTeam = this.teamEditorService.addPlayer(team.offset, selectedPlayer.index, selectedPlayer.position);
 
     if (!updatedTeam) {
       alert('This team already uses all 32 slots.');
@@ -504,6 +551,7 @@ export class AppComponent implements OnInit {
     }
 
     this.replaceDisplayedTeam(team.offset, updatedTeam);
+    this.closeTeamAddPicker();
   }
 
   deleteTeamSlot(team: TeamRecord, slot: TeamSlot): void {
@@ -521,6 +569,12 @@ export class AppComponent implements OnInit {
     }
 
     this.teamEditorService.exportFile();
+  }
+
+  closeTeamAddPicker(): void {
+    this.teamAddPickerOffset = null;
+    this.teamAddSearchQuery = '';
+    this.selectedTeamAddPlayerIndex = null;
   }
 
   startDownload(): void {
@@ -554,6 +608,68 @@ export class AppComponent implements OnInit {
       ...this.detectBestFormation(starters),
       reservePlayers: usedPlayers.slice(11).map((player) => this.toSketchPlayer(player))
     };
+  }
+
+  selectTeamPlayer(team: TeamRecord, slotIndex: number): void {
+    this.selectedTeamEditorOffset = team.offset;
+    this.selectedTeamEditorSlotIndex = slotIndex;
+  }
+
+  clearSelectedTeamPlayer(): void {
+    this.selectedTeamEditorOffset = null;
+    this.selectedTeamEditorSlotIndex = null;
+  }
+
+  isSelectedTeamPlayer(team: TeamRecord, slotIndex: number): boolean {
+    return this.selectedTeamEditorOffset === team.offset && this.selectedTeamEditorSlotIndex === slotIndex;
+  }
+
+  getSelectedTeamSlot(team: TeamRecord): TeamSlot | null {
+    if (this.selectedTeamEditorOffset !== team.offset || this.selectedTeamEditorSlotIndex === null) {
+      return null;
+    }
+
+    return team.slots.find((slot) => slot.index === this.selectedTeamEditorSlotIndex) ?? null;
+  }
+
+  updateSelectedTeamPlayerId(team: TeamRecord, value: string): void {
+    const slot = this.getSelectedTeamSlot(team);
+
+    if (!slot) {
+      return;
+    }
+
+    this.updateTeamPlayerId(team, slot, value);
+  }
+
+  updateSelectedTeamShirtNumber(team: TeamRecord, value: string | number): void {
+    const slot = this.getSelectedTeamSlot(team);
+
+    if (!slot) {
+      return;
+    }
+
+    this.updateTeamShirtNumber(team, slot, value);
+  }
+
+  updateSelectedTeamPosition(team: TeamRecord, value: string | number): void {
+    const slot = this.getSelectedTeamSlot(team);
+
+    if (!slot) {
+      return;
+    }
+
+    this.updateTeamPosition(team, slot, value);
+  }
+
+  deleteSelectedTeamPlayer(team: TeamRecord): void {
+    const slot = this.getSelectedTeamSlot(team);
+
+    if (!slot) {
+      return;
+    }
+
+    this.deleteTeamSlot(team, slot);
   }
 
   trackSketchPlayer(_: number, player: FormationSketchPlayer): number {
@@ -613,6 +729,11 @@ export class AppComponent implements OnInit {
     );
 
     this.replaceDisplayedTeam(team.offset, updatedTeam);
+
+    if (this.selectedTeamEditorOffset === team.offset) {
+      this.clearSelectedTeamPlayer();
+    }
+
     this.clearFormationDrag();
   }
 
@@ -623,6 +744,14 @@ export class AppComponent implements OnInit {
 
     if (this.selectedTeamOffset === offset && !this.displayedTeams.some((team) => team.offset === offset)) {
       this.displayedTeams = [decoratedTeam];
+    }
+
+    if (this.selectedTeamEditorOffset === offset && this.selectedTeamEditorSlotIndex !== null) {
+      const selectedSlot = decoratedTeam.slots.find((slot) => slot.index === this.selectedTeamEditorSlotIndex);
+
+      if (!selectedSlot || selectedSlot.isEmpty) {
+        this.clearSelectedTeamPlayer();
+      }
     }
   }
 

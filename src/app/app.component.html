@@ -397,10 +397,30 @@
                       <input type="number" [ngModel]="team.playerCount" (ngModelChange)="updateTeamPlayerCount(team, $event)">
                     </label>
 
-                    <button mat-stroked-button color="accent" class="team-slot-action-btn" (click)="addTeamSlot(team)">
+                    <button mat-stroked-button color="accent" class="team-slot-action-btn" (click)="toggleTeamAddPicker(team)">
                       <mat-icon>add</mat-icon>
                       ADD PLAYER
                     </button>
+                  </div>
+
+                  <div class="import-picker-strip" *ngIf="teamAddPickerOffset === team.offset">
+                    <div class="import-picker-grid">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Search player</mat-label>
+                        <input matInput [(ngModel)]="teamAddSearchQuery">
+                      </mat-form-field>
+
+                      <mat-form-field appearance="outline">
+                        <mat-label>Select player</mat-label>
+                        <mat-select [(ngModel)]="selectedTeamAddPlayerIndex" (selectionChange)="addSelectedPlayerToTeam(team)">
+                          <mat-option *ngFor="let player of filteredTeamAddPlayers" [value]="player.index">
+                            {{ player.name || 'Unnamed Player' }} ({{ player.hexId }}) - {{ player.positionLabel }}
+                          </mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                    </div>
+
+                    <p class="team-empty-state" *ngIf="filteredTeamAddPlayers.length === 0">No player matches the current search.</p>
                   </div>
 
                   <section class="team-formation" *ngIf="getFormationSketch(team) as formationSketch">
@@ -428,7 +448,9 @@
                             class="team-pitch-player"
                             *ngIf="slot.player as player"
                             [class.is-dragging]="draggedFormationPlayerSlotIndex === player.slotIndex"
+                            [class.is-selected]="isSelectedTeamPlayer(team, player.slotIndex)"
                             draggable="true"
+                            (click)="selectTeamPlayer(team, player.slotIndex)"
                             (dragstart)="startFormationDrag(player)"
                             (dragend)="clearFormationDrag()">
                             <div class="team-pitch-shirt-marker">
@@ -450,7 +472,9 @@
                             class="team-reserve-player"
                             *ngFor="let player of formationSketch.reservePlayers; let reserveIndex = index; trackBy: trackSketchPlayer"
                             [class.is-dragging]="draggedFormationPlayerSlotIndex === player.slotIndex"
+                            [class.is-selected]="isSelectedTeamPlayer(team, player.slotIndex)"
                             draggable="true"
+                            (click)="selectTeamPlayer(team, player.slotIndex)"
                             (dragstart)="startFormationDrag(player)"
                             (dragover)="allowFormationDrop($event)"
                             (drop)="dropOnReservePlayer(team, formationSketch, reserveIndex)"
@@ -469,55 +493,69 @@
                           <p class="team-formation-empty">No extra players available.</p>
                         </ng-template>
                       </aside>
+
+                      <aside class="team-player-editor" *ngIf="getSelectedTeamSlot(team) as selectedSlot; else selectPlayerHint">
+                        <div class="team-player-editor-header">
+                          <div>
+                            <div class="team-player-editor-title">Selected Player</div>
+                            <div class="team-player-editor-name">{{ selectedSlot.playerName || selectedSlot.playerIdHex }}</div>
+                          </div>
+
+                          <button mat-icon-button type="button" (click)="clearSelectedTeamPlayer()">
+                            <mat-icon>close</mat-icon>
+                          </button>
+                        </div>
+
+                        <div class="team-player-editor-id">Slot {{ selectedSlot.index + 1 }} | ID {{ selectedSlot.playerIdHex }}</div>
+
+                        <label class="team-player-editor-field">
+                          <span>Player ID</span>
+                          <input
+                            #selectedPlayerIdInput
+                            type="text"
+                            maxlength="4"
+                            [value]="selectedSlot.playerIdHex"
+                            (blur)="updateSelectedTeamPlayerId(team, selectedPlayerIdInput.value)"
+                            (keyup.enter)="updateSelectedTeamPlayerId(team, selectedPlayerIdInput.value)">
+                        </label>
+
+                        <div class="team-player-editor-grid">
+                          <label class="team-player-editor-field">
+                            <span>Shirt</span>
+                            <input
+                              #selectedShirtNumberInput
+                              type="number"
+                              [value]="selectedSlot.shirtNumber"
+                              (blur)="updateSelectedTeamShirtNumber(team, selectedShirtNumberInput.value)"
+                              (keyup.enter)="updateSelectedTeamShirtNumber(team, selectedShirtNumberInput.value)">
+                          </label>
+
+                          <label class="team-player-editor-field">
+                            <span>Position</span>
+                            <select [ngModel]="selectedSlot.position" (ngModelChange)="updateSelectedTeamPosition(team, $event)">
+                              <option *ngFor="let position of positions" [ngValue]="position.value">{{ position.label }}</option>
+                            </select>
+                          </label>
+                        </div>
+
+                        <button mat-stroked-button color="warn" class="team-player-editor-delete" (click)="deleteSelectedTeamPlayer(team)">
+                          <mat-icon>delete</mat-icon>
+                          REMOVE PLAYER
+                        </button>
+                      </aside>
+
+                      <ng-template #selectPlayerHint>
+                        <aside class="team-player-editor team-player-editor--empty">
+                          <div class="team-player-editor-title">Player Editor</div>
+                          <p class="team-formation-empty">Select a player on the pitch or reserve list to edit ID, shirt, position, or remove them.</p>
+                        </aside>
+                      </ng-template>
                     </div>
 
                     <ng-template #emptySketch>
                       <p class="team-formation-empty">No players available for the first eleven sketch.</p>
                     </ng-template>
                   </section>
-
-                  <div class="team-slot-grid">
-                    <article class="team-slot" *ngFor="let slot of team.slots">
-                      <div class="team-slot-meta">
-                        <span>Slot {{ slot.index + 1 }}</span>
-                        <div class="team-slot-player-name" *ngIf="slot.playerName">{{ slot.playerName }}</div>
-                        <div class="team-slot-meta-actions">
-                          <strong>{{ slot.isEmpty ? 'EMPTY' : slot.playerIdHex }}</strong>
-                          <button mat-icon-button color="warn" (click)="deleteTeamSlot(team, slot)" [disabled]="slot.isEmpty">
-                            <mat-icon>delete</mat-icon>
-                          </button>
-                        </div>
-                      </div>
-
-                      <label>
-                        <span>Player ID</span>
-                        <input
-                          #playerIdInput
-                          type="text"
-                          maxlength="4"
-                          [value]="slot.playerIdHex"
-                          (blur)="updateTeamPlayerId(team, slot, playerIdInput.value)"
-                          (keyup.enter)="updateTeamPlayerId(team, slot, playerIdInput.value)">
-                      </label>
-
-                      <div class="team-slot-controls">
-                        <label>
-                          <span>Shirt</span>
-                          <input
-                            type="number"
-                            [ngModel]="slot.shirtNumber"
-                            (ngModelChange)="updateTeamShirtNumber(team, slot, $event)">
-                        </label>
-
-                        <label>
-                          <span>Position</span>
-                          <select [ngModel]="slot.position" (ngModelChange)="updateTeamPosition(team, slot, $event)">
-                            <option *ngFor="let position of positions" [ngValue]="position.value">{{ position.label }}</option>
-                          </select>
-                        </label>
-                      </div>
-                    </article>
-                  </div>
                 </div>
               </section>
             </div>
