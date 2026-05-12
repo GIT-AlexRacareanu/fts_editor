@@ -478,9 +478,8 @@
 
 .team-pitch-player {
   text-align: center;
-  cursor: grab;
+  cursor: pointer;
   user-select: none;
-  touch-action: none;
 
   &.is-selected {
     filter: drop-shadow(0 0 0.75rem rgba(255, 244, 148, 0.5));
@@ -510,11 +509,6 @@
   width: 34px;
   height: 30px;
   margin: 0;
-}
-
-.team-pitch-player.is-dragging {
-  opacity: 0.55;
-  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.32));
 }
 
 .team-pitch-name {

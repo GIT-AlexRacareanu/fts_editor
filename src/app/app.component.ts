@@ -72,7 +72,6 @@ export class AppComponent implements OnInit {
   selectedTeamEditorSlotIndex: number | null = null;
   selectedTeamOffset: number | null = null;
   displayedTeams: TeamRecord[] = [];
-  draggedFormationPlayerSlotIndex: number | null = null;
   dbBrowsePlayers: DbBrowsePlayer[] = [];
   importedPlayers: ImportedPlayerRecord[] = [];
   selectedImportedPlayer: ImportedPlayerRecord | null = null;
@@ -610,7 +609,17 @@ export class AppComponent implements OnInit {
     };
   }
 
-  selectTeamPlayer(team: TeamRecord, slotIndex: number): void {
+  selectTeamPlayer(team: TeamRecord, formationSketch: FormationSketch, slotIndex: number): void {
+    if (this.selectedTeamEditorOffset === team.offset && this.selectedTeamEditorSlotIndex === slotIndex) {
+      this.clearSelectedTeamPlayer();
+      return;
+    }
+
+    if (this.selectedTeamEditorOffset === team.offset && this.selectedTeamEditorSlotIndex !== null) {
+      this.swapFormationPlayers(team, formationSketch, this.selectedTeamEditorSlotIndex, slotIndex);
+      return;
+    }
+
     this.selectedTeamEditorOffset = team.offset;
     this.selectedTeamEditorSlotIndex = slotIndex;
   }
@@ -680,51 +689,34 @@ export class AppComponent implements OnInit {
     return slot.slotKey;
   }
 
-  startFormationDrag(player: FormationSketchPlayer): void {
-    this.draggedFormationPlayerSlotIndex = player.slotIndex;
-  }
-
-  allowFormationDrop(event: DragEvent): void {
-    event.preventDefault();
-  }
-
-  clearFormationDrag(): void {
-    this.draggedFormationPlayerSlotIndex = null;
-  }
-
-  dropOnFormationSlot(team: TeamRecord, formationSketch: FormationSketch, targetStarterIndex: number): void {
-    this.moveDraggedPlayer(team, formationSketch, targetStarterIndex);
-  }
-
-  dropOnReservePlayer(team: TeamRecord, formationSketch: FormationSketch, reserveIndex: number): void {
-    this.moveDraggedPlayer(team, formationSketch, formationSketch.slots.length + reserveIndex);
-  }
-
-  private moveDraggedPlayer(team: TeamRecord, formationSketch: FormationSketch, targetOrderIndex: number): void {
-    if (this.draggedFormationPlayerSlotIndex === null) {
-      this.clearFormationDrag();
-      return;
-    }
-
+  private swapFormationPlayers(
+    team: TeamRecord,
+    formationSketch: FormationSketch,
+    sourceSlotIndex: number,
+    targetSlotIndex: number
+  ): void {
     const orderedUsedPlayers = [
       ...formationSketch.slots.map((slot) => slot.player).filter((player): player is FormationSketchPlayer => Boolean(player)),
       ...formationSketch.reservePlayers
     ];
 
-    const previousIndex = orderedUsedPlayers.findIndex((player) => player.slotIndex === this.draggedFormationPlayerSlotIndex);
+    const sourceOrderIndex = orderedUsedPlayers.findIndex((player) => player.slotIndex === sourceSlotIndex);
+    const targetOrderIndex = orderedUsedPlayers.findIndex((player) => player.slotIndex === targetSlotIndex);
 
-    if (previousIndex === -1 || targetOrderIndex < 0 || targetOrderIndex >= orderedUsedPlayers.length) {
-      this.clearFormationDrag();
+    if (sourceOrderIndex === -1 || targetOrderIndex === -1 || sourceOrderIndex === targetOrderIndex) {
+      this.clearSelectedTeamPlayer();
       return;
     }
 
-    const reorderedPlayers = [...orderedUsedPlayers];
-    const [movedPlayer] = reorderedPlayers.splice(previousIndex, 1);
-    reorderedPlayers.splice(targetOrderIndex, 0, movedPlayer);
+    const swappedPlayers = [...orderedUsedPlayers];
+    [swappedPlayers[sourceOrderIndex], swappedPlayers[targetOrderIndex]] = [
+      swappedPlayers[targetOrderIndex],
+      swappedPlayers[sourceOrderIndex]
+    ];
 
     const updatedTeam = this.teamEditorService.reorderUsedPlayers(
       team.offset,
-      reorderedPlayers.map((player) => player.slotIndex),
+      swappedPlayers.map((player) => player.slotIndex),
       formationSketch.slots.map((slot) => slot.targetPosition)
     );
 
@@ -733,8 +725,6 @@ export class AppComponent implements OnInit {
     if (this.selectedTeamEditorOffset === team.offset) {
       this.clearSelectedTeamPlayer();
     }
-
-    this.clearFormationDrag();
   }
 
   private replaceDisplayedTeam(offset: number, updatedTeam: TeamRecord): void {

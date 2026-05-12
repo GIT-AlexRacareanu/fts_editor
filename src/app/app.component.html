@@ -441,18 +441,12 @@
                           class="team-pitch-slot"
                           *ngFor="let slot of formationSketch.slots; let slotIndex = index; trackBy: trackSketchSlot"
                           [style.top]="slot.top"
-                          [style.left]="slot.left"
-                          (dragover)="allowFormationDrop($event)"
-                          (drop)="dropOnFormationSlot(team, formationSketch, slotIndex)">
+                          [style.left]="slot.left">
                           <div
                             class="team-pitch-player"
                             *ngIf="slot.player as player"
-                            [class.is-dragging]="draggedFormationPlayerSlotIndex === player.slotIndex"
                             [class.is-selected]="isSelectedTeamPlayer(team, player.slotIndex)"
-                            draggable="true"
-                            (click)="selectTeamPlayer(team, player.slotIndex)"
-                            (dragstart)="startFormationDrag(player)"
-                            (dragend)="clearFormationDrag()">
+                            (click)="selectTeamPlayer(team, formationSketch, player.slotIndex)">
                             <div class="team-pitch-shirt-marker">
                               <span>{{ player.shirtNumber || '--' }}</span>
                             </div>
@@ -470,15 +464,9 @@
                         <div class="team-reserve-list" *ngIf="formationSketch.reservePlayers.length > 0; else noReservePlayers">
                           <div
                             class="team-reserve-player"
-                            *ngFor="let player of formationSketch.reservePlayers; let reserveIndex = index; trackBy: trackSketchPlayer"
-                            [class.is-dragging]="draggedFormationPlayerSlotIndex === player.slotIndex"
+                            *ngFor="let player of formationSketch.reservePlayers; trackBy: trackSketchPlayer"
                             [class.is-selected]="isSelectedTeamPlayer(team, player.slotIndex)"
-                            draggable="true"
-                            (click)="selectTeamPlayer(team, player.slotIndex)"
-                            (dragstart)="startFormationDrag(player)"
-                            (dragover)="allowFormationDrop($event)"
-                            (drop)="dropOnReservePlayer(team, formationSketch, reserveIndex)"
-                            (dragend)="clearFormationDrag()">
+                            (click)="selectTeamPlayer(team, formationSketch, player.slotIndex)">
                             <div class="team-pitch-shirt-marker team-pitch-shirt-marker--reserve">
                               <span>{{ player.shirtNumber || '--' }}</span>
                             </div>
