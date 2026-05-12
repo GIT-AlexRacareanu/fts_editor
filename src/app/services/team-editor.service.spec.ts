@@ -69,6 +69,22 @@ describe('TeamEditorService', () => {
     expect(updatedTeam?.slots[1].position).toBe(13);
     expect(updatedTeam?.slots[1].isEmpty).toBeFalse();
   });
+
+  it('clears FFFF padding when adding a player into an unused placeholder slot', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 3,
+      playerIds: [0x0010, 0xffff, 0x0020]
+    });
+
+    const updatedTeam = service.addPlayer(offset, 0x0033, 13);
+    const view = new DataView(service.binaryData!.buffer);
+    const reusedSlotOffset = offset + PLAYER_ID_OFFSET + 4;
+
+    expect(updatedTeam).not.toBeNull();
+    expect(updatedTeam?.slots[1].playerId).toBe(0x0033);
+    expect(view.getUint16(reusedSlotOffset, true)).toBe(0x0033);
+    expect(view.getUint16(reusedSlotOffset + 2, true)).toBe(0x0000);
+  });
 });
 
 function seedTeamBinary(

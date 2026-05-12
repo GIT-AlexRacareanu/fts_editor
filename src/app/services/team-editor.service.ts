@@ -165,7 +165,9 @@ export class TeamEditorService {
     if (changes.playerIdHex !== undefined) {
       const parsed = Number.parseInt(changes.playerIdHex.trim(), 16);
       if (!Number.isNaN(parsed)) {
-        view.setUint16(idPtr, this.clamp(parsed, 0, 0xffff), true);
+        const nextPlayerId = this.clamp(parsed, 0, 0xffff);
+        view.setUint16(idPtr, nextPlayerId, true);
+        view.setUint16(idPtr + 2, nextPlayerId === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0, true);
       }
     }
 
