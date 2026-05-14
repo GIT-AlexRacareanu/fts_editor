@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 
 import { TEAM_NAMES_BY_ID } from '../data/team-names';
 import { TeamOption, TeamRecord, TeamSlot } from '../models/team-editor.model';
+import { FileHandleStorageService } from './file-handle-storage.service';
 
 declare const pako: any;
 
@@ -15,35 +16,65 @@ const UNUSED_PLAYER_ID = 0xffff;
 
 @Injectable({ providedIn: 'root' })
 export class TeamEditorService {
+  private readonly storageKey = 'team-db';
+
   binaryData: Uint8Array | null = null;
   fileHandle: any = null;
   teamOptions: TeamOption[] = [];
   private wasCompressed = false;
 
+  constructor(private readonly fileHandleStorage: FileHandleStorageService) {}
+
   get hasData(): boolean {
     return this.binaryData !== null;
   }
 
-  async loadFile(): Promise<string> {
+  async loadFile(fileHandle?: any): Promise<string> {
     if (!(window as any).showOpenFilePicker) {
       throw new Error('Your browser does not support File System Access API. Use Chrome.');
     }
 
-    const handles = await (window as any).showOpenFilePicker({
-      multiple: false,
-      types: [{ description: 'Team DB Files', accept: { 'application/octet-stream': ['.dat', '.bin'] } }]
-    });
+    let nextHandle = fileHandle;
 
-    this.fileHandle = handles[0];
-    const file = await this.fileHandle.getFile();
+    if (!nextHandle) {
+      const handles = await (window as any).showOpenFilePicker({
+        multiple: false,
+        types: [{ description: 'Team DB Files', accept: { 'application/octet-stream': ['.dat', '.bin'] } }]
+      });
+
+      nextHandle = handles[0];
+    }
+
+    const file = await nextHandle.getFile();
     const buffer = await file.arrayBuffer();
     const input = new Uint8Array(buffer);
 
+    this.fileHandle = nextHandle;
     this.wasCompressed = this.isCompressed(input);
     this.binaryData = this.wasCompressed ? new Uint8Array(pako.inflate(input)) : input;
     this.scanTeams();
 
+    await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
+
     return file.name;
+  }
+
+  async tryRestoreLastFile(): Promise<string | null> {
+    const storedHandle = await this.fileHandleStorage.getFileHandle<any>(this.storageKey);
+
+    if (!storedHandle || !(await this.hasReadPermission(storedHandle))) {
+      return null;
+    }
+
+    try {
+      return await this.loadFile(storedHandle);
+    } catch {
+      this.binaryData = null;
+      this.fileHandle = null;
+      this.teamOptions = [];
+      await this.fileHandleStorage.deleteFileHandle(this.storageKey);
+      return null;
+    }
   }
 
   async saveToSameFile(): Promise<void> {
@@ -351,6 +382,14 @@ export class TeamEditorService {
 
   private clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
+  }
+
+  private async hasReadPermission(fileHandle: any): Promise<boolean> {
+    if (!fileHandle || typeof fileHandle.queryPermission !== 'function') {
+      return false;
+    }
+
+    return (await fileHandle.queryPermission({ mode: 'read' })) === 'granted';
   }
 
   private getSerializedData(): ArrayBuffer {

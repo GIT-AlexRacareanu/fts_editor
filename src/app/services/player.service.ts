@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Player } from '../models/player.model';
+import { FileHandleStorageService } from './file-handle-storage.service';
 
 declare const pako: any;
 
@@ -66,8 +67,12 @@ function getPositionCategory(position: number): number {
 
 @Injectable({ providedIn: 'root' })
 export class PlayerService {
+  private readonly storageKey = 'players-dat';
+
   binaryData: Uint8Array | null = null;
   fileHandle: any = null;
+
+  constructor(private readonly fileHandleStorage: FileHandleStorageService) {}
 
   formatPlayerId(index: number): string {
     return index.toString(16).toUpperCase().padStart(4, '0');
@@ -95,18 +100,46 @@ export class PlayerService {
     return new DataView(this.binaryData.buffer).getUint16(8, true);
   }
 
-  async loadFile(): Promise<void> {
+  async loadFile(fileHandle?: any): Promise<string> {
     if (!(window as any).showOpenFilePicker) {
       throw new Error('Your browser does not support File System Access API. Use Chrome.');
     }
-    const handles = await (window as any).showOpenFilePicker({
-      multiple: false,
-      types: [{ description: 'DAT Files', accept: { 'application/octet-stream': ['.dat'] } }]
-    });
-    this.fileHandle = handles[0];
-    const file = await this.fileHandle.getFile();
+
+    let nextHandle = fileHandle;
+
+    if (!nextHandle) {
+      const handles = await (window as any).showOpenFilePicker({
+        multiple: false,
+        types: [{ description: 'DAT Files', accept: { 'application/octet-stream': ['.dat'] } }]
+      });
+      nextHandle = handles[0];
+    }
+
+    const file = await nextHandle.getFile();
     const buffer = await file.arrayBuffer();
+    this.fileHandle = nextHandle;
     this.binaryData = new Uint8Array(pako.inflate(new Uint8Array(buffer)));
+
+    await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
+
+    return file.name;
+  }
+
+  async tryRestoreLastFile(): Promise<string | null> {
+    const storedHandle = await this.fileHandleStorage.getFileHandle<any>(this.storageKey);
+
+    if (!storedHandle || !(await this.hasReadPermission(storedHandle))) {
+      return null;
+    }
+
+    try {
+      return await this.loadFile(storedHandle);
+    } catch {
+      this.binaryData = null;
+      this.fileHandle = null;
+      await this.fileHandleStorage.deleteFileHandle(this.storageKey);
+      return null;
+    }
   }
 
   async saveToSameFile(player: Player, idx: number): Promise<void> {
@@ -187,5 +220,13 @@ export class PlayerService {
     const raw = Math.floor((bonus * maxStat + weightedSum) * IN_R1 / (bonus + totalWeight));
 
     return Math.max(0, Math.min(100, raw));
+  }
+
+  private async hasReadPermission(fileHandle: any): Promise<boolean> {
+    if (!fileHandle || typeof fileHandle.queryPermission !== 'function') {
+      return false;
+    }
+
+    return (await fileHandle.queryPermission({ mode: 'read' })) === 'granted';
   }
 }

@@ -157,7 +157,7 @@ export class AppComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    void this.loadImportSource(false, false);
+    void this.initializeApp();
   }
 
   get fileLoaded(): boolean {
@@ -253,12 +253,7 @@ export class AppComponent implements OnInit {
   async openFile(): Promise<void> {
     try {
       await this.playerService.loadFile();
-      this.teamPlayerNameCache.clear();
-      this.refreshDbBrowsePlayers();
-      if (this.playerService.totalPlayers > 0) {
-        this.loadPlayer(0);
-      }
-      this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+      this.applyPlayerFileLoaded();
       alert('File loaded successfully!');
     } catch (err: any) {
       alert(err.message || 'File loading failed or was cancelled.');
@@ -268,9 +263,7 @@ export class AppComponent implements OnInit {
   async openTeamFile(): Promise<void> {
     try {
       const fileName = await this.teamEditorService.loadFile();
-      this.refreshDbBrowsePlayers();
-      this.selectedTeamOffset = this.teamOptions.length > 0 ? this.teamOptions[0].offset : null;
-      this.displayedTeams = this.selectedTeamOffset === null ? [] : this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(this.selectedTeamOffset)]);
+      this.applyTeamFileLoaded();
       alert(`Loaded team DB: ${fileName}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load team database.';
@@ -359,6 +352,44 @@ export class AppComponent implements OnInit {
     return `"${normalizedValue}"`;
   }
 
+  private async initializeApp(): Promise<void> {
+    await this.loadImportSource(false, false);
+    await this.restoreRememberedFiles();
+  }
+
+  private async restoreRememberedFiles(): Promise<void> {
+    const restoredPlayerFileName = await this.playerService.tryRestoreLastFile();
+
+    if (restoredPlayerFileName) {
+      this.applyPlayerFileLoaded();
+    }
+
+    const restoredTeamFileName = await this.teamEditorService.tryRestoreLastFile();
+
+    if (restoredTeamFileName) {
+      this.applyTeamFileLoaded();
+    }
+  }
+
+  private applyPlayerFileLoaded(): void {
+    this.teamPlayerNameCache.clear();
+    this.refreshDbBrowsePlayers();
+
+    if (this.playerService.totalPlayers > 0) {
+      this.loadPlayer(0);
+    }
+
+    this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+  }
+
+  private applyTeamFileLoaded(): void {
+    this.refreshDbBrowsePlayers();
+    this.selectedTeamOffset = this.teamOptions.length > 0 ? this.teamOptions[0].offset : null;
+    this.displayedTeams = this.selectedTeamOffset === null
+      ? []
+      : this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(this.selectedTeamOffset)]);
+  }
+
   updateOVR(): void {
     if (!this.fileLoaded) return;
     const val = this.playerService.calculateOVR(this.player);
@@ -373,6 +404,7 @@ export class AppComponent implements OnInit {
     if (!this.fileLoaded) { alert('No file loaded!'); return; }
     try {
       await this.playerService.saveToSameFile(this.player, this.selectedIndex);
+      this.refreshPlayerLinkedViews(this.selectedIndex);
       alert('Changes applied and file overwritten successfully!');
     } catch (err: any) {
       alert(err.message || 'Save failed. Make sure you gave the browser permission to save changes.');
@@ -743,6 +775,16 @@ export class AppComponent implements OnInit {
         this.clearSelectedTeamPlayer();
       }
     }
+  }
+
+  private refreshPlayerLinkedViews(playerIndex: number): void {
+    this.teamPlayerNameCache.delete(playerIndex);
+
+    if (this.displayedTeams.length > 0) {
+      this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+    }
+
+    this.refreshDbBrowsePlayers();
   }
 
   private refreshDbBrowsePlayers(): void {
