@@ -238,18 +238,11 @@ export class AppComponent implements OnInit {
     if (!this.teamsDatLoaded || this.selectedTeamsDatIndex === null) {
       return null;
     }
-
     return this.teamsDatService.records[this.selectedTeamsDatIndex] ?? null;
   }
 
   get teamsDatOptions(): { value: number; label: string }[] {
-    return this.teamsDatService.records.map((record) => {
-      const stadiumLabel = record.stadiumName ? ` | ${record.stadiumName}` : '';
-      return {
-        value: record.index,
-        label: `${record.teamLabel}${stadiumLabel}`
-      };
-    });
+    return this.teamsDatService.teamOptions;
   }
 
   get teamOptions(): { label: string; offset: number }[] {

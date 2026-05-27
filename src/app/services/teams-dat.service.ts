@@ -4,8 +4,6 @@ import { TEAM_NAMES_BY_ID } from '../data/team-names';
 import { TeamsDatRecord } from '../models/teams-dat.model';
 import { FileHandleStorageService } from './file-handle-storage.service';
 
-declare const pako: any;
-
 const FILE_HEADER_SIZE = 12;
 const TEAM_BLOCK_SIZE = 4356;
 const FORMATION_OFFSET = 0xB8;
@@ -18,7 +16,9 @@ export class TeamsDatService {
   fileHeaderBytes: Uint8Array | null = null;
   teamDataBytes: Uint8Array | null = null;
   records: TeamsDatRecord[] = [];
-  private wasCompressed = false;
+  teamOptions: { value: number; label: string }[] = [];
+  private formationIdByTeamId = new Map<number, number>();
+  private wasZlib = false;
 
   constructor(private readonly fileHandleStorage: FileHandleStorageService) {}
 
@@ -47,21 +47,63 @@ export class TeamsDatService {
     }
 
     const file = await nextHandle.getFile();
+    console.log('[TeamsDat] file picked:', file.name, 'size:', file.size, 'bytes');
+
     const buffer = await file.arrayBuffer();
-    const input = new Uint8Array(buffer);
+    const raw = new Uint8Array(buffer);
+    console.log('[TeamsDat] raw buffer length:', raw.byteLength,
+      '| first 4 bytes:', raw[0], raw[1], raw[2], raw[3]);
 
-    this.fileHandle = nextHandle;
-    this.wasCompressed = this.isCompressed(input);
+    // 0x78 = zlib magic byte — file is compressed, inflate it first
+    const isZlib = raw.length >= 2 && raw[0] === 0x78;
+    let payload: Uint8Array;
 
-    const inflated = this.wasCompressed ? new Uint8Array(pako.inflate(input)) : input;
-
-    if (inflated.byteLength < FILE_HEADER_SIZE) {
-      throw new Error('Invalid teams.dat format. File is smaller than header size.');
+    if (isZlib) {
+      console.log('[TeamsDat] zlib header detected, inflating...');
+      payload = new Uint8Array((window as any).pako.inflate(raw));
+      console.log('[TeamsDat] inflated size:', payload.byteLength);
+    } else {
+      console.log('[TeamsDat] no zlib header, reading raw');
+      payload = raw;
     }
 
-    this.fileHeaderBytes = inflated.slice(0, FILE_HEADER_SIZE);
-    this.teamDataBytes = inflated.slice(FILE_HEADER_SIZE);
-    this.records = this.scanRecords();
+    if (payload.byteLength < FILE_HEADER_SIZE + TEAM_BLOCK_SIZE) {
+      throw new Error(`Invalid teams.dat: file is too small (${payload.byteLength} bytes).`);
+    }
+
+    const nextTeamDataBytes = payload.slice(FILE_HEADER_SIZE);
+    const expectedTeams = Math.floor(nextTeamDataBytes.byteLength / TEAM_BLOCK_SIZE);
+    console.log('[TeamsDat] team data bytes:', nextTeamDataBytes.byteLength,
+      '| expected team count:', expectedTeams);
+
+    if (expectedTeams > 2000) {
+      throw new Error(
+        `Unreasonable team count (${expectedTeams}) — wrong block size or wrong file.` +
+        ` Payload size=${payload.byteLength}, TEAM_BLOCK_SIZE=${TEAM_BLOCK_SIZE}.`
+      );
+    }
+
+    const nextHeaderBytes = payload.slice(0, FILE_HEADER_SIZE);
+    console.log('[TeamsDat] scanning', expectedTeams, 'records...');
+    const nextRecords = this.scanRecords(nextTeamDataBytes);
+    console.log('[TeamsDat] scan done, records:', nextRecords.length);
+
+    if (nextRecords.length === 0) {
+      throw new Error('Invalid teams.dat: no team blocks found.');
+    }
+
+    // Commit only after the file is fully validated and parsed.
+    this.fileHandle = nextHandle;
+    this.wasZlib = isZlib;
+    this.fileHeaderBytes = nextHeaderBytes;
+    this.teamDataBytes = nextTeamDataBytes;
+    this.records = nextRecords;
+    this.teamOptions = nextRecords.map(r => ({
+      value: r.index,
+      label: r.teamLabel + (r.stadiumName ? ` | ${r.stadiumName}` : '')
+    }));
+    this.formationIdByTeamId = this.buildFormationIdMap(nextRecords);
+    console.log('[TeamsDat] load complete —', nextRecords.length, 'teams.');
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
 
@@ -82,6 +124,7 @@ export class TeamsDatService {
       this.fileHeaderBytes = null;
       this.teamDataBytes = null;
       this.records = [];
+      this.formationIdByTeamId.clear();
       await this.fileHandleStorage.deleteFileHandle(this.storageKey);
       return null;
     }
@@ -123,8 +166,7 @@ export class TeamsDatService {
   }
 
   getFormationIdByTeamId(teamId: number): number | null {
-    const record = this.records.find((item) => item.teamId === teamId);
-    return record ? record.formationId : null;
+    return this.formationIdByTeamId.get(teamId) ?? null;
   }
 
   updateRecord(index: number, changes: Partial<Pick<TeamsDatRecord,
@@ -186,38 +228,42 @@ export class TeamsDatService {
     return updatedRecord;
   }
 
-  private scanRecords(): TeamsDatRecord[] {
-    const bytes = this.getTeamDataOrThrow();
+  private scanRecords(bytes: Uint8Array): TeamsDatRecord[] {
+    const view = this.getView(bytes);
     const totalTeams = Math.floor(bytes.byteLength / TEAM_BLOCK_SIZE);
 
-    return Array.from({ length: totalTeams }, (_, index) => this.parseRecord(index));
+    return Array.from({ length: totalTeams }, (_, index) => this.parseRecord(index, view, bytes));
   }
 
-  private parseRecord(index: number): TeamsDatRecord {
-    const view = this.getView();
-    const bytes = this.getTeamDataOrThrow();
+  private parseRecord(index: number, view?: DataView, bytes?: Uint8Array): TeamsDatRecord {
+    const safeBytes = bytes ?? this.getTeamDataOrThrow();
+    const safeView = view ?? this.getView(safeBytes);
     const blockStart = this.getBlockStart(index);
 
-    const teamId = view.getUint32(blockStart + 0x00, true);
+    if (blockStart + TEAM_BLOCK_SIZE > safeBytes.byteLength) {
+      throw new Error(`Invalid teams.dat format. Team block ${index} is out of bounds.`);
+    }
+
+    const teamId = safeView.getUint32(blockStart + 0x00, true);
 
     return {
       index,
       blockStart,
       teamId,
       teamLabel: this.formatTeamLabel(teamId),
-      leagueId: view.getUint32(blockStart + 0x04, true),
-      rivalId: view.getUint32(blockStart + 0x08, true),
-      attackOvr: view.getUint32(blockStart + 0x0C, true),
-      midfieldOvr: view.getUint32(blockStart + 0x10, true),
-      defenseOvr: view.getUint32(blockStart + 0x14, true),
-      formationId: view.getUint32(blockStart + FORMATION_OFFSET, true),
-      captainRole: view.getUint32(blockStart + 0xCC, true),
-      leftCornerRole: view.getUint32(blockStart + 0xD0, true),
-      rightCornerRole: view.getUint32(blockStart + 0xD4, true),
-      penaltyRole: view.getUint32(blockStart + 0xD8, true),
-      freeKickRole: view.getUint32(blockStart + 0xDC, true),
-      region: this.extractUtf16String(bytes, blockStart + 0xF8, 4),
-      stadiumName: this.extractUtf16String(bytes, blockStart + 0x128, 60)
+      leagueId: safeView.getUint32(blockStart + 0x04, true),
+      rivalId: safeView.getUint32(blockStart + 0x08, true),
+      attackOvr: safeView.getUint32(blockStart + 0x0C, true),
+      midfieldOvr: safeView.getUint32(blockStart + 0x10, true),
+      defenseOvr: safeView.getUint32(blockStart + 0x14, true),
+      formationId: safeView.getUint32(blockStart + FORMATION_OFFSET, true),
+      captainRole: safeView.getUint32(blockStart + 0xCC, true),
+      leftCornerRole: safeView.getUint32(blockStart + 0xD0, true),
+      rightCornerRole: safeView.getUint32(blockStart + 0xD4, true),
+      penaltyRole: safeView.getUint32(blockStart + 0xD8, true),
+      freeKickRole: safeView.getUint32(blockStart + 0xDC, true),
+      region: this.extractUtf16String(safeBytes, blockStart + 0xF8, 4),
+      stadiumName: this.extractUtf16String(safeBytes, blockStart + 0x128, 60)
     };
   }
 
@@ -225,8 +271,9 @@ export class TeamsDatService {
     return index * TEAM_BLOCK_SIZE;
   }
 
-  private getView(): DataView {
-    return new DataView(this.getTeamDataOrThrow().buffer);
+  private getView(bytes?: Uint8Array): DataView {
+    const safeBytes = bytes ?? this.getTeamDataOrThrow();
+    return new DataView(safeBytes.buffer, safeBytes.byteOffset, safeBytes.byteLength);
   }
 
   private getTeamDataOrThrow(): Uint8Array {
@@ -263,8 +310,16 @@ export class TeamsDatService {
     return teamName ? `${teamName} (ID ${teamId})` : `Team ${teamId}`;
   }
 
-  private isCompressed(data: Uint8Array): boolean {
-    return data.length > 1 && data[0] === 0x78;
+  private buildFormationIdMap(records: TeamsDatRecord[]): Map<number, number> {
+    const map = new Map<number, number>();
+
+    records.forEach((record) => {
+      if (!map.has(record.teamId)) {
+        map.set(record.teamId, record.formationId);
+      }
+    });
+
+    return map;
   }
 
   private clamp(value: number, min: number, max: number): number {
@@ -288,10 +343,10 @@ export class TeamsDatService {
     merged.set(this.fileHeaderBytes, 0);
     merged.set(this.teamDataBytes, this.fileHeaderBytes.byteLength);
 
-    const payload = this.wasCompressed ? pako.deflate(merged) : merged;
-    const bytes = new Uint8Array(payload.byteLength);
-    bytes.set(payload);
+    if (this.wasZlib) {
+      return ((window as any).pako.deflate(merged) as Uint8Array).buffer;
+    }
 
-    return bytes.buffer;
+    return merged.buffer;
   }
 }
