@@ -633,6 +633,28 @@ export class AppComponent implements OnInit {
 
   // ─── File loading ─────────────────────────────────────────────
 
+  private async getDirectoryFileHandle(dirHandle: any, expectedNames: string[]): Promise<any> {
+    for (const expectedName of expectedNames) {
+      try {
+        return await dirHandle.getFileHandle(expectedName);
+      } catch {
+        // Try the next casing variant.
+      }
+    }
+
+    const normalizedExpectedNames = new Set(expectedNames.map((name) => name.toLowerCase()));
+
+    if (typeof dirHandle.entries === 'function') {
+      for await (const [entryName, entryHandle] of dirHandle.entries()) {
+        if (entryHandle?.kind === 'file' && normalizedExpectedNames.has(entryName.toLowerCase())) {
+          return entryHandle;
+        }
+      }
+    }
+
+    throw new Error(`File not found: ${expectedNames[0]}`);
+  }
+
   async openFolder(): Promise<void> {
     if (!(window as any).showDirectoryPicker) {
       alert('Your browser does not support the Directory Picker API. Use Chrome.');
@@ -652,7 +674,7 @@ export class AppComponent implements OnInit {
     const errors: string[] = [];
 
     try {
-      const handle = await dirHandle.getFileHandle('PLAYERS.DAT');
+      const handle = await this.getDirectoryFileHandle(dirHandle, ['PLAYERS.DAT', 'players.dat']);
       await this.playerService.loadFile(handle);
       this.applyPlayerFileLoaded();
     } catch (err: any) {
@@ -660,7 +682,7 @@ export class AppComponent implements OnInit {
     }
 
     try {
-      const handle = await dirHandle.getFileHandle('TEAMPLAYERLINKS_0.dat');
+      const handle = await this.getDirectoryFileHandle(dirHandle, ['TEAMPLAYERLINKS_0.dat', 'TEAMPLAYERLINKS_0.DAT', 'teamplayerlinks_0.dat']);
       await this.teamEditorService.loadFile(handle);
       this.applyTeamFileLoaded();
     } catch (err: any) {
@@ -668,7 +690,7 @@ export class AppComponent implements OnInit {
     }
 
     try {
-      const handle = await dirHandle.getFileHandle('TEAMS.DAT');
+      const handle = await this.getDirectoryFileHandle(dirHandle, ['TEAMS.DAT', 'teams.dat']);
       await this.teamsDatService.loadFile(handle);
       this.applyTeamsDatLoaded();
     } catch (err: any) {
