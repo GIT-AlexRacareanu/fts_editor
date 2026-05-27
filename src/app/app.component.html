@@ -266,7 +266,11 @@
               </button>
               <button mat-stroked-button color="accent" class="team-action-btn" (click)="openTeamFile()">
                 <mat-icon>upload_file</mat-icon>
-                LOAD TEAM DB
+                LOAD TEAMPLAYERLINKS.DAT
+              </button>
+              <button mat-stroked-button color="accent" class="team-action-btn" (click)="openTeamsDatFile()">
+                <mat-icon>groups</mat-icon>
+                LOAD TEAMS.DAT
               </button>
               <button mat-stroked-button color="primary" class="team-action-btn" (click)="exportDbBrowseCsv()" [disabled]="filteredDbBrowsePlayers.length === 0">
                 <mat-icon>download</mat-icon>
@@ -337,6 +341,123 @@
       </div>
     </mat-tab>
 
+    <mat-tab label="Teams.dat Edit">
+      <div class="editor-tab-content">
+        <mat-card class="section-card team-editor-card">
+          <mat-card-header>
+            <mat-card-title>Core Tactical Teams Editor</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="team-actions">
+              <button mat-raised-button color="primary" class="team-action-btn" (click)="openTeamsDatFile()">
+                <mat-icon>upload_file</mat-icon>
+                LOAD TEAMS.DAT
+              </button>
+              <button mat-raised-button color="accent" class="team-action-btn" (click)="saveTeamsDat()" [disabled]="!teamsDatLoaded">
+                <mat-icon>save</mat-icon>
+                SAVE TO FILE
+              </button>
+              <button mat-stroked-button color="accent" class="team-action-btn" (click)="exportTeamsDat()" [disabled]="!teamsDatLoaded">
+                <mat-icon>download</mat-icon>
+                EXPORT TEAMS.DAT
+              </button>
+            </div>
+
+            <p class="team-empty-state" *ngIf="teamsDatLoaded">Loaded {{ teamsDatService.teamCount }} teams from teams.dat.</p>
+
+            <mat-form-field appearance="outline" class="full-width-field team-jump-field">
+              <mat-label>Jump to team</mat-label>
+              <mat-select [(ngModel)]="selectedTeamsDatIndex" (ngModelChange)="loadTeamsDatRecord($event)" [disabled]="!teamsDatLoaded">
+                <mat-option [value]="null">-- Jump to Team --</mat-option>
+                <mat-option *ngFor="let option of teamsDatOptions" [value]="option.value">{{ option.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <p class="team-empty-state" *ngIf="!teamsDatLoaded">Load teams.dat to edit formation IDs, set-piece roles, IDs, ratings, and region.</p>
+
+            <section class="teams-dat-form" *ngIf="selectedTeamsDatRecord as record">
+              <div class="team-db-header">
+                <div>
+                  <div class="team-db-title">{{ record.teamLabel }}</div>
+                  <div class="team-db-subtitle">Block 0x{{ record.blockStart.toString(16).toUpperCase() }} | Index {{ record.index + 1 }}</div>
+                </div>
+                <span>{{ record.stadiumName || 'No stadium label' }}</span>
+              </div>
+
+              <div class="teams-dat-grid">
+                <mat-form-field appearance="outline">
+                  <mat-label>Team ID (0x00)</mat-label>
+                  <input matInput type="number" [ngModel]="record.teamId" (ngModelChange)="updateTeamsDatNumberField(record, 'teamId', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>League ID (0x04)</mat-label>
+                  <input matInput type="number" [ngModel]="record.leagueId" (ngModelChange)="updateTeamsDatNumberField(record, 'leagueId', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Rival ID (0x08)</mat-label>
+                  <input matInput type="number" [ngModel]="record.rivalId" (ngModelChange)="updateTeamsDatNumberField(record, 'rivalId', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>ATT (0x0C)</mat-label>
+                  <input matInput type="number" [ngModel]="record.attackOvr" (ngModelChange)="updateTeamsDatNumberField(record, 'attackOvr', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>MID (0x10)</mat-label>
+                  <input matInput type="number" [ngModel]="record.midfieldOvr" (ngModelChange)="updateTeamsDatNumberField(record, 'midfieldOvr', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>DEF (0x14)</mat-label>
+                  <input matInput type="number" [ngModel]="record.defenseOvr" (ngModelChange)="updateTeamsDatNumberField(record, 'defenseOvr', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Region (0xF8)</mat-label>
+                  <input matInput maxlength="2" [ngModel]="record.region" (ngModelChange)="updateTeamsDatRegion(record, $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" class="teams-dat-wide-field">
+                  <mat-label>Formation (0xB8)</mat-label>
+                  <mat-select [ngModel]="record.formationId" (ngModelChange)="updateTeamsDatFormation(record, $event)">
+                    <mat-option *ngFor="let formation of formationIdOptions" [value]="formation.id">{{ formation.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Captain (0xCC)</mat-label>
+                  <input matInput type="number" [ngModel]="record.captainRole" (ngModelChange)="updateTeamsDatNumberField(record, 'captainRole', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Left Corner (0xD0)</mat-label>
+                  <input matInput type="number" [ngModel]="record.leftCornerRole" (ngModelChange)="updateTeamsDatNumberField(record, 'leftCornerRole', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Right Corner (0xD4)</mat-label>
+                  <input matInput type="number" [ngModel]="record.rightCornerRole" (ngModelChange)="updateTeamsDatNumberField(record, 'rightCornerRole', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Penalty (0xD8)</mat-label>
+                  <input matInput type="number" [ngModel]="record.penaltyRole" (ngModelChange)="updateTeamsDatNumberField(record, 'penaltyRole', $event)">
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Free Kick (0xDC)</mat-label>
+                  <input matInput type="number" [ngModel]="record.freeKickRole" (ngModelChange)="updateTeamsDatNumberField(record, 'freeKickRole', $event)">
+                </mat-form-field>
+              </div>
+            </section>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
     <mat-tab label="Team Edit">
       <div class="editor-tab-content">
         <mat-card class="section-card team-editor-card">
@@ -347,7 +468,7 @@
             <div class="team-actions">
               <button mat-raised-button color="primary" class="team-action-btn" (click)="openTeamFile()">
                 <mat-icon>upload_file</mat-icon>
-                LOAD TEAM DB
+                LOAD TEAMPLAYERLINKS.DAT
               </button>
               <button mat-raised-button color="accent" class="team-action-btn" (click)="saveTeam()" [disabled]="!teamFileLoaded">
                 <mat-icon>save</mat-icon>
@@ -427,10 +548,11 @@
                     <div class="team-formation-header">
                       <div>
                         <h3>First 11 Sketch</h3>
-                        <p>Auto-detects the formation from the first eleven non-empty slots using hardcoded position presets.</p>
+                        <p>Uses teams.dat formation when available; otherwise shows the first 11 players in slot order on the pitch.</p>
                       </div>
                       <div class="team-formation-controls">
                         <span>Formation {{ formationSketch.formation.label }}</span>
+                        <span>Source {{ formationSketch.sourceLabel }}</span>
                         <span>{{ formationSketch.slots.length }}/11 placed</span>
                       </div>
                     </div>

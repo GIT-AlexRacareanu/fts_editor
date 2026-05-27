@@ -3,9 +3,36 @@ import { FORMATION_PRESETS, FormationPreset } from './data/formations';
 import { NATIONALITY_NAMES_BY_ID, NATIONALITY_OPTIONS } from './data/nationalities';
 import { Player } from './models/player.model';
 import { TeamRecord, TeamSlot } from './models/team-editor.model';
+import { TeamsDatRecord } from './models/teams-dat.model';
 import { ImportedPlayerRecord, PlayerImportService } from './services/player-import.service';
 import { PlayerService } from './services/player.service';
 import { TeamEditorService } from './services/team-editor.service';
+import { TeamsDatService } from './services/teams-dat.service';
+
+const FORMATION_VALUE_BY_ID: Record<number, string> = {
+  0: '4-4-2',
+  1: '4-3-3',
+  2: '4-2-4',
+  3: '5-4-1',
+  4: '5-3-2',
+  5: '3-5-2',
+  6: '3-4-3',
+  7: '4-5-1',
+  8: '4-2-3-1(a)',
+  9: '4-2-3-1(b)',
+  10: '4-3-1-2',
+  11: '4-4-1-1(a)',
+  12: '4-4-1-1(b)',
+  13: '3-4-1-2',
+  14: '4-1-2-1-2',
+  15: '1-4-3-2',
+  16: '3-4-2-1',
+  17: '4-3-2-1',
+  18: '5-2-1-2',
+  19: '5-2-2-1'
+};
+
+const FORMATION_BY_VALUE = new Map(FORMATION_PRESETS.map((formation) => [formation.value, formation]));
 
 interface FormationSketchPlayer {
   slotIndex: number;
@@ -29,6 +56,7 @@ interface FormationSketch {
   formation: FormationPreset;
   slots: FormationSketchSlot[];
   reservePlayers: FormationSketchPlayer[];
+  sourceLabel: string;
 }
 
 interface DbBrowsePlayer {
@@ -71,6 +99,7 @@ export class AppComponent implements OnInit {
   selectedTeamEditorOffset: number | null = null;
   selectedTeamEditorSlotIndex: number | null = null;
   selectedTeamOffset: number | null = null;
+  selectedTeamsDatIndex: number | null = null;
   displayedTeams: TeamRecord[] = [];
   dbBrowsePlayers: DbBrowsePlayer[] = [];
   importedPlayers: ImportedPlayerRecord[] = [];
@@ -91,8 +120,32 @@ export class AppComponent implements OnInit {
   ];
 
   readonly formations = FORMATION_PRESETS;
+  readonly formationIdOptions = Object.entries(FORMATION_VALUE_BY_ID)
+    .map(([id, value]) => {
+      const parsedId = Number(id);
+      const formation = FORMATION_BY_VALUE.get(value);
+
+      return {
+        id: parsedId,
+        label: formation ? `${formation.label} (ID ${parsedId})` : `${value} (ID ${parsedId})`
+      };
+    })
+    .sort((left, right) => left.id - right.id);
 
   private readonly formationLaneLefts = ['14%', '31%', '50%', '69%', '86%'];
+  private readonly fallbackPitchSlots: Array<{ top: string; left: string }> = [
+    { top: '86%', left: '50%' },
+    { top: '72%', left: '14%' },
+    { top: '72%', left: '31%' },
+    { top: '72%', left: '50%' },
+    { top: '72%', left: '69%' },
+    { top: '72%', left: '86%' },
+    { top: '56%', left: '20%' },
+    { top: '56%', left: '38%' },
+    { top: '56%', left: '62%' },
+    { top: '56%', left: '80%' },
+    { top: '40%', left: '50%' }
+  ];
 
   readonly feet = [
     { value: 0, label: 'Right' }, { value: 1, label: 'Left' }, { value: 255, label: 'Default/Both' }
@@ -153,7 +206,8 @@ export class AppComponent implements OnInit {
   constructor(
     public playerService: PlayerService,
     public playerImportService: PlayerImportService,
-    public teamEditorService: TeamEditorService
+    public teamEditorService: TeamEditorService,
+    public teamsDatService: TeamsDatService
   ) {}
 
   ngOnInit(): void {
@@ -174,6 +228,28 @@ export class AppComponent implements OnInit {
 
   get importSourceLoaded(): boolean {
     return this.importedPlayers.length > 0;
+  }
+
+  get teamsDatLoaded(): boolean {
+    return this.teamsDatService.hasData;
+  }
+
+  get selectedTeamsDatRecord(): TeamsDatRecord | null {
+    if (!this.teamsDatLoaded || this.selectedTeamsDatIndex === null) {
+      return null;
+    }
+
+    return this.teamsDatService.records[this.selectedTeamsDatIndex] ?? null;
+  }
+
+  get teamsDatOptions(): { value: number; label: string }[] {
+    return this.teamsDatService.records.map((record) => {
+      const stadiumLabel = record.stadiumName ? ` | ${record.stadiumName}` : '';
+      return {
+        value: record.index,
+        label: `${record.teamLabel}${stadiumLabel}`
+      };
+    });
   }
 
   get teamOptions(): { label: string; offset: number }[] {
@@ -269,6 +345,41 @@ export class AppComponent implements OnInit {
       const message = err instanceof Error ? err.message : 'Failed to load team database.';
       alert(message);
     }
+  }
+
+  async openTeamsDatFile(): Promise<void> {
+    try {
+      const fileName = await this.teamsDatService.loadFile();
+      this.applyTeamsDatLoaded();
+      alert(`Loaded teams.dat: ${fileName}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load teams.dat.';
+      alert(message);
+    }
+  }
+
+  async saveTeamsDat(): Promise<void> {
+    if (!this.teamsDatLoaded) {
+      alert('No teams.dat loaded!');
+      return;
+    }
+
+    try {
+      await this.teamsDatService.saveToSameFile();
+      alert('teams.dat changes applied and file overwritten successfully!');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
+      alert(message);
+    }
+  }
+
+  exportTeamsDat(): void {
+    if (!this.teamsDatLoaded) {
+      alert('No teams.dat loaded!');
+      return;
+    }
+
+    this.teamsDatService.exportFile('teams.dat');
   }
 
   async saveTeam(): Promise<void> {
@@ -369,6 +480,12 @@ export class AppComponent implements OnInit {
     if (restoredTeamFileName) {
       this.applyTeamFileLoaded();
     }
+
+    const restoredTeamsDatFileName = await this.teamsDatService.tryRestoreLastFile();
+
+    if (restoredTeamsDatFileName) {
+      this.applyTeamsDatLoaded();
+    }
   }
 
   private applyPlayerFileLoaded(): void {
@@ -388,6 +505,10 @@ export class AppComponent implements OnInit {
     this.displayedTeams = this.selectedTeamOffset === null
       ? []
       : this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(this.selectedTeamOffset)]);
+  }
+
+  private applyTeamsDatLoaded(): void {
+    this.selectedTeamsDatIndex = this.teamsDatService.teamCount > 0 ? 0 : null;
   }
 
   updateOVR(): void {
@@ -627,18 +748,58 @@ export class AppComponent implements OnInit {
       .filter((slot) => !slot.isEmpty)
       .slice(0, 11);
 
+    const resolvedFormation = this.resolveFormationForTeam(team);
+
     if (starters.length === 0) {
       return {
-        formation: this.formations[0],
+        formation: resolvedFormation.formation ?? this.formations[0],
         slots: [],
-        reservePlayers: []
+        reservePlayers: [],
+        sourceLabel: resolvedFormation.sourceLabel
       };
     }
 
+    const sketch = resolvedFormation.formation
+      ? this.buildFormationSketch(starters, resolvedFormation.formation)
+      : this.buildFirstElevenSketch(starters);
+
     return {
-      ...this.detectBestFormation(starters),
-      reservePlayers: usedPlayers.slice(11).map((player) => this.toSketchPlayer(player))
+      ...sketch,
+      reservePlayers: usedPlayers.slice(11).map((player) => this.toSketchPlayer(player)),
+      sourceLabel: resolvedFormation.sourceLabel
     };
+  }
+
+  loadTeamsDatRecord(index: number | null): void {
+    if (index === null) {
+      this.selectedTeamsDatIndex = null;
+      return;
+    }
+
+    this.selectedTeamsDatIndex = index;
+  }
+
+  updateTeamsDatNumberField(
+    record: TeamsDatRecord,
+    field: 'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr'
+    | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole',
+    value: string | number
+  ): void {
+    const changes: Partial<Pick<TeamsDatRecord,
+      'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr'
+      | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole'
+    >> = {};
+
+    changes[field] = Number(value);
+    this.teamsDatService.updateRecord(record.index, changes);
+  }
+
+  updateTeamsDatFormation(record: TeamsDatRecord, value: string | number): void {
+    this.teamsDatService.updateRecord(record.index, { formationId: Number(value) });
+  }
+
+  updateTeamsDatRegion(record: TeamsDatRecord, value: string): void {
+    this.teamsDatService.updateRecord(record.index, { region: value });
   }
 
   selectTeamPlayer(team: TeamRecord, formationSketch: FormationSketch, slotIndex: number): void {
@@ -848,18 +1009,87 @@ export class AppComponent implements OnInit {
     return this.teamPlayerNameCache.get(slot.playerId) ?? undefined;
   }
 
-  private detectBestFormation(players: TeamSlot[]): FormationSketch {
-    const matches = this.formations.map((formation) => this.matchFormation(players, formation));
-    const bestMatch = matches.sort((left, right) => left.score - right.score)[0];
-
+  private buildFormationSketch(players: TeamSlot[], formation: FormationPreset): FormationSketch {
+    const matched = this.matchFormation(players, formation);
     return {
-      formation: bestMatch.formation,
-      slots: bestMatch.slots,
-      reservePlayers: []
+      formation: matched.formation,
+      slots: matched.slots,
+      reservePlayers: [],
+      sourceLabel: 'teams.dat'
     };
   }
 
-  private matchFormation(players: TeamSlot[], formation: FormationPreset): FormationSketch & { score: number } {
+  private buildFirstElevenSketch(players: TeamSlot[]): FormationSketch {
+    const slots: FormationSketchSlot[] = this.fallbackPitchSlots.map((pitchSlot, index) => {
+      const player = players[index];
+
+      if (!player) {
+        return {
+          slotKey: `fallback-${index}`,
+          top: pitchSlot.top,
+          left: pitchSlot.left,
+          targetPosition: 0,
+          targetPositionLabel: '--'
+        };
+      }
+
+      return {
+        slotKey: `fallback-${index}`,
+        top: pitchSlot.top,
+        left: pitchSlot.left,
+        targetPosition: player.position,
+        targetPositionLabel: this.getPositionLabel(player.position),
+        player: this.toSketchPlayer(player)
+      };
+    });
+
+    return {
+      formation: this.formations[0],
+      slots,
+      reservePlayers: [],
+      sourceLabel: 'First 11 players (teams.dat not loaded)'
+    };
+  }
+
+  private resolveFormationForTeam(team: TeamRecord): {
+    formation: FormationPreset | undefined;
+    sourceLabel: string;
+  } {
+    if (this.teamsDatLoaded) {
+      const formationId = this.teamsDatService.getFormationIdByTeamId(team.teamId);
+
+      if (formationId !== null) {
+        const formation = this.getFormationFromId(formationId);
+
+        if (formation) {
+          return {
+            formation,
+            sourceLabel: `teams.dat formation ID ${formationId}`
+          };
+        }
+      }
+    }
+
+    return {
+      formation: undefined,
+      sourceLabel: 'First 11 players (teams.dat not loaded)'
+    };
+  }
+
+  private getFormationFromId(formationId: number): FormationPreset | undefined {
+    const formationValue = FORMATION_VALUE_BY_ID[formationId];
+    if (!formationValue) {
+      return undefined;
+    }
+
+    return FORMATION_BY_VALUE.get(formationValue);
+  }
+
+  private matchFormation(players: TeamSlot[], formation: FormationPreset): {
+    formation: FormationPreset;
+    slots: FormationSketchSlot[];
+    score: number;
+  } {
     const pitchLineTops = this.getPitchLineTops(formation.lines.length + 1);
     const remainingPlayers = [...players];
     const sketchSlots: FormationSketchSlot[] = [];
@@ -910,7 +1140,6 @@ export class AppComponent implements OnInit {
     return {
       formation,
       slots: sketchSlots.slice(0, 11),
-      reservePlayers: [],
       score
     };
   }
