@@ -41,6 +41,7 @@ interface FormationSketchPlayer {
   shirtNumber: number;
   position: number;
   positionLabel: string;
+  ovr: number;
 }
 
 interface FormationSketchSlot {
@@ -70,6 +71,11 @@ interface DbBrowsePlayer {
   clubs: string[];
 }
 
+interface PopupTeamContext {
+  teamOffset: number;
+  slotIndex: number;
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html'
@@ -77,33 +83,47 @@ interface DbBrowsePlayer {
 export class AppComponent implements OnInit {
   private readonly importAssetUrl = 'assets/import/fc-player-import.csv';
 
-  selectedEditorTab = 0;
-  selectedIndex = 0;
-  player: Player = this.emptyPlayer();
-  ovr = 0;
-  ovrColor = '#cd7f32';
-  showModal = false;
-  modalTimer = 20;
-  searchQuery = '';
-  playerHexQuery = '';
-  teamSearchQuery = '';
-  dbSearchNameQuery = '';
-  dbSearchNationalityQuery: number | null = null;
-  dbBrowsePage = 1;
-  importSearchQuery = '';
+  // ─── App flow ────────────────────────────────────────────────
+  showInitPage = true;
+  activeMainTab = 0;
+
+  // ─── Player Edit Popup ───────────────────────────────────────
+  showPlayerEditPopup = false;
+  popupPlayerIndex = 0;
+  popupPlayer: Player = this.emptyPlayer();
+  popupOvr = 0;
+  popupOvrColor = '#cd7f32';
+  popupSearchQuery = '';
+  popupPlayerHexQuery = '';
+  popupTeamContext: PopupTeamContext | null = null;
+
+  // ─── Import ──────────────────────────────────────────────────
+  importedPlayers: ImportedPlayerRecord[] = [];
   importSourceFileName = '';
   showImportPicker = false;
-  teamAddSearchQuery = '';
-  selectedTeamAddPlayerIndex: number | null = null;
-  teamAddPickerOffset: number | null = null;
-  selectedTeamEditorOffset: number | null = null;
-  selectedTeamEditorSlotIndex: number | null = null;
+  importSearchQuery = '';
+  selectedImportedPlayer: ImportedPlayerRecord | null = null;
+
+  // ─── DB Browser ──────────────────────────────────────────────
+  dbSearchNameQuery = '';
+  dbSearchNationalityQuery: number | null = null;
+  dbSearchTeamQuery: string | null = null;
+  dbBrowsePage = 1;
+  dbBrowsePlayers: DbBrowsePlayer[] = [];
+
+  // ─── Team Editor ─────────────────────────────────────────────
+  teamSearchQuery = '';
   selectedTeamOffset: number | null = null;
   selectedTeamsDatIndex: number | null = null;
   displayedTeams: TeamRecord[] = [];
-  dbBrowsePlayers: DbBrowsePlayer[] = [];
-  importedPlayers: ImportedPlayerRecord[] = [];
-  selectedImportedPlayer: ImportedPlayerRecord | null = null;
+  teamAddPickerOffset: number | null = null;
+  teamAddSearchQuery = '';
+  selectedTeamAddPlayerIndex: number | null = null;
+  selectedTeamEditorOffset: number | null = null;
+  selectedTeamEditorSlotIndex: number | null = null;
+  swapModeActive = false;
+
+  // ─── Shared ──────────────────────────────────────────────────
   private readonly teamPlayerNameCache = new Map<number, string | null>();
   private readonly dbBrowsePageSize = 25;
   private readonly importSearchPageSize = 50;
@@ -201,6 +221,34 @@ export class AppComponent implements OnInit {
     { value: 2, label: 'Green' }, { value: 3, label: 'Yellow' }, { value: 4, label: 'Black' }
   ];
 
+  readonly leagueOptions = [
+    { value: 0, label: 'england 1' },
+    { value: 1, label: 'england 2' },
+    { value: 2, label: 'france 1' },
+    { value: 3, label: 'italy 1' },
+    { value: 4, label: 'germany 1' },
+    { value: 5, label: 'spain 1' },
+    { value: 6, label: 'jap 1' },
+    { value: 7, label: 'scottish 1' },
+    { value: 8, label: 'usa 1' },
+    { value: 9, label: 'european nations' },
+    { value: 11, label: 'south american nations' },
+    { value: 12, label: 'north american nations' },
+    { value: 13, label: 'african nations' },
+    { value: 14, label: 'rest of europe' },
+    { value: 15, label: 'rest of asia' },
+    { value: 16, label: 'rest of america' },
+    { value: 17, label: 'classic teams' },
+    { value: 19, label: 'france 2' },
+    { value: 20, label: 'italy 2' },
+    { value: 21, label: 'germany 2' },
+    { value: 22, label: 'spain 2' },
+    { value: 23, label: 'scottish 2' },
+    { value: 24, label: 'netherlands' },
+    { value: 25, label: 'netherlands 2' },
+    { value: 26, label: 'jap 2' }
+  ];
+
   readonly nationalities = NATIONALITY_OPTIONS;
 
   constructor(
@@ -214,12 +262,30 @@ export class AppComponent implements OnInit {
     void this.initializeApp();
   }
 
-  get fileLoaded(): boolean {
-    return this.playerService.binaryData !== null;
+  // ─── App flow ─────────────────────────────────────────────────
+
+  get allFilesLoaded(): boolean {
+    return this.fileLoaded && this.teamFileLoaded && this.teamsDatLoaded;
   }
 
-  get currentPlayerHexId(): string {
-    return this.playerService.formatPlayerId(this.selectedIndex);
+  enterMainApp(): void {
+    this.showInitPage = false;
+  }
+
+  goToInitPage(): void {
+    this.showInitPage = true;
+  }
+
+  private checkAutoTransition(): void {
+    if (this.allFilesLoaded) {
+      this.showInitPage = false;
+    }
+  }
+
+  // ─── File state getters ───────────────────────────────────────
+
+  get fileLoaded(): boolean {
+    return this.playerService.binaryData !== null;
   }
 
   get teamFileLoaded(): boolean {
@@ -238,6 +304,7 @@ export class AppComponent implements OnInit {
     if (!this.teamsDatLoaded || this.selectedTeamsDatIndex === null) {
       return null;
     }
+
     return this.teamsDatService.records[this.selectedTeamsDatIndex] ?? null;
   }
 
@@ -245,69 +312,196 @@ export class AppComponent implements OnInit {
     return this.teamsDatService.teamOptions;
   }
 
+  // Stable list: rebuilt only when teams.dat data changes
+  rivalOptions: { value: number; label: string }[] = [];
+
+  private rebuildRivalOptions(): void {
+    this.rivalOptions = this.teamsDatService.records.map((r) => ({ value: r.teamId, label: r.teamLabel }));
+  }
+
   get teamOptions(): { label: string; offset: number }[] {
     return this.teamEditorService.teamOptions;
   }
 
-  get filteredDbBrowsePlayers(): DbBrowsePlayer[] {
-    const normalizedNameQuery = this.dbSearchNameQuery.trim().toLowerCase();
-    const nationalityQuery = this.dbSearchNationalityQuery;
+  // ─── Player Edit Popup ────────────────────────────────────────
 
-    return this.dbBrowsePlayers.filter((player) => {
-      const matchesName = !normalizedNameQuery
-        || player.name.toLowerCase().includes(normalizedNameQuery)
-        || player.hexId.toLowerCase().includes(normalizedNameQuery);
-
-      const matchesNationality = nationalityQuery === null
-        || player.nationalityId === nationalityQuery;
-
-      return matchesName && matchesNationality;
-    });
+  get currentPopupHexId(): string {
+    return this.playerService.formatPlayerId(this.popupPlayerIndex);
   }
 
-  get pagedDbBrowsePlayers(): DbBrowsePlayer[] {
-    const startIndex = (this.dbBrowsePage - 1) * this.dbBrowsePageSize;
-    return this.filteredDbBrowsePlayers.slice(startIndex, startIndex + this.dbBrowsePageSize);
-  }
-
-  get dbBrowseTotalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredDbBrowsePlayers.length / this.dbBrowsePageSize));
-  }
-
-  get dbBrowseRangeStart(): number {
-    if (this.filteredDbBrowsePlayers.length === 0) {
-      return 0;
+  get popupTeamSlot(): TeamSlot | null {
+    if (!this.popupTeamContext) {
+      return null;
     }
 
-    return (this.dbBrowsePage - 1) * this.dbBrowsePageSize + 1;
+    const team = this.displayedTeams.find((t) => t.offset === this.popupTeamContext!.teamOffset);
+
+    if (!team) {
+      return null;
+    }
+
+    return team.slots.find((s) => s.index === this.popupTeamContext!.slotIndex) ?? null;
   }
 
-  get dbBrowseRangeEnd(): number {
-    return Math.min(this.dbBrowsePage * this.dbBrowsePageSize, this.filteredDbBrowsePlayers.length);
+  openPlayerEditPopup(index: number, teamContext: PopupTeamContext | null = null): void {
+    this.popupPlayerIndex = index;
+    this.popupPlayer = this.playerService.readPlayer(index);
+    this.popupPlayerHexQuery = this.currentPopupHexId;
+    this.popupSearchQuery = '';
+    this.popupTeamContext = teamContext;
+    this.showImportPicker = false;
+    this.selectedImportedPlayer = null;
+    this.importSearchQuery = '';
+    this.updatePopupOVR();
+    this.showPlayerEditPopup = true;
   }
 
-  get filteredImportedPlayers(): ImportedPlayerRecord[] {
-    return this.playerImportService
-      .searchPlayers(this.importedPlayers, this.importSearchQuery)
-      .slice(0, this.importSearchPageSize);
+  closePlayerEditPopup(): void {
+    this.showPlayerEditPopup = false;
+    this.popupTeamContext = null;
   }
 
-  get filteredTeamAddPlayers(): DbBrowsePlayer[] {
-    const normalizedQuery = this.teamAddSearchQuery.trim().toLowerCase();
+  updatePopupOVR(): void {
+    const val = this.playerService.calculateOVR(this.popupPlayer);
+    this.popupOvr = val;
 
-    return this.dbBrowsePlayers
-      .filter((player) => !normalizedQuery
-        || player.name.toLowerCase().includes(normalizedQuery)
-        || player.hexId.toLowerCase().includes(normalizedQuery))
-      .slice(0, this.importSearchPageSize);
+    if (val >= 90) {
+      this.popupOvrColor = '#00e5ff';
+    } else if (val >= 80) {
+      this.popupOvrColor = '#ffd700';
+    } else if (val >= 70) {
+      this.popupOvrColor = '#c0c0c0';
+    } else {
+      this.popupOvrColor = '#cd7f32';
+    }
   }
 
-  async openImportPicker(): Promise<void> {
+  applyPopupChanges(): void {
     if (!this.fileLoaded) {
-      alert('Load PLAYERS.DAT first.');
       return;
     }
 
+    this.playerService.writePlayer(this.popupPlayerIndex, this.popupPlayer);
+    this.refreshPlayerLinkedViews(this.popupPlayerIndex);
+  }
+
+  searchPopupPlayer(): void {
+    if (!this.fileLoaded) {
+      return;
+    }
+
+    const idx = this.playerService.searchPlayer(this.popupSearchQuery);
+
+    if (idx === -1) {
+      alert('Player not found!');
+      return;
+    }
+
+    this.openPlayerEditPopup(idx);
+  }
+
+  jumpPopupPlayerHex(): void {
+    if (!this.fileLoaded) {
+      return;
+    }
+
+    const idx = this.playerService.parsePlayerId(this.popupPlayerHexQuery);
+
+    if (idx === -1) {
+      alert('Player hex ID not found.');
+      return;
+    }
+
+    this.openPlayerEditPopup(idx);
+  }
+
+  // ─── Team slot editing from popup ────────────────────────────
+
+  updatePopupTeamPlayerId(value: string): void {
+    const ctx = this.popupTeamContext;
+
+    if (!ctx) {
+      return;
+    }
+
+    const team = this.displayedTeams.find((t) => t.offset === ctx.teamOffset);
+
+    if (!team) {
+      return;
+    }
+
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, ctx.slotIndex, { playerIdHex: value }));
+
+    // Reload popup stats for the newly assigned player
+    const updatedTeam = this.displayedTeams.find((t) => t.offset === ctx.teamOffset);
+    const updatedSlot = updatedTeam?.slots.find((s) => s.index === ctx.slotIndex);
+
+    if (updatedSlot && !updatedSlot.isEmpty) {
+      this.popupPlayerIndex = updatedSlot.playerId;
+      this.popupPlayer = this.playerService.readPlayer(updatedSlot.playerId);
+      this.popupPlayerHexQuery = this.playerService.formatPlayerId(updatedSlot.playerId);
+      this.updatePopupOVR();
+    }
+  }
+
+  updatePopupTeamShirt(value: string | number): void {
+    const ctx = this.popupTeamContext;
+
+    if (!ctx) {
+      return;
+    }
+
+    const team = this.displayedTeams.find((t) => t.offset === ctx.teamOffset);
+
+    if (!team) {
+      return;
+    }
+
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, ctx.slotIndex, { shirtNumber: Number(value) }));
+  }
+
+  updatePopupTeamPosition(value: string | number): void {
+    const ctx = this.popupTeamContext;
+
+    if (!ctx) {
+      return;
+    }
+
+    const team = this.displayedTeams.find((t) => t.offset === ctx.teamOffset);
+
+    if (!team) {
+      return;
+    }
+
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, ctx.slotIndex, { position: Number(value) }));
+  }
+
+  deletePopupTeamPlayer(): void {
+    const ctx = this.popupTeamContext;
+
+    if (!ctx) {
+      return;
+    }
+
+    const team = this.displayedTeams.find((t) => t.offset === ctx.teamOffset);
+
+    if (!team) {
+      return;
+    }
+
+    const slot = team.slots.find((s) => s.index === ctx.slotIndex);
+
+    if (!slot || slot.isEmpty) {
+      return;
+    }
+
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.deleteSlot(team.offset, slot.index));
+    this.closePlayerEditPopup();
+  }
+
+  // ─── Import ───────────────────────────────────────────────────
+
+  async openImportPicker(): Promise<void> {
     if (!this.importSourceLoaded) {
       await this.loadImportSource(false, true);
     }
@@ -319,210 +513,24 @@ export class AppComponent implements OnInit {
     this.showImportPicker = !this.showImportPicker;
   }
 
-  async openFile(): Promise<void> {
-    try {
-      await this.playerService.loadFile();
-      this.applyPlayerFileLoaded();
-      alert('File loaded successfully!');
-    } catch (err: any) {
-      alert(err.message || 'File loading failed or was cancelled.');
-    }
-  }
-
-  async openTeamFile(): Promise<void> {
-    try {
-      const fileName = await this.teamEditorService.loadFile();
-      this.applyTeamFileLoaded();
-      alert(`Loaded team DB: ${fileName}`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load team database.';
-      alert(message);
-    }
-  }
-
-  async openTeamsDatFile(): Promise<void> {
-    try {
-      const fileName = await this.teamsDatService.loadFile();
-      this.applyTeamsDatLoaded();
-      alert(`Loaded teams.dat: ${fileName}`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load teams.dat.';
-      alert(message);
-    }
-  }
-
-  async saveTeamsDat(): Promise<void> {
-    if (!this.teamsDatLoaded) {
-      alert('No teams.dat loaded!');
+  importSelectedPlayer(): void {
+    if (!this.selectedImportedPlayer) {
       return;
     }
 
-    try {
-      await this.teamsDatService.saveToSameFile();
-      alert('teams.dat changes applied and file overwritten successfully!');
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
-      alert(message);
-    }
+    const record = this.selectedImportedPlayer;
+    this.popupPlayer = this.playerImportService.mapImportedPlayer(record, this.popupPlayer);
+    this.updatePopupOVR();
+    this.selectedImportedPlayer = null;
+    this.importSearchQuery = '';
+    this.showImportPicker = false;
+    alert(`Imported ${record.shortName} into player ${this.currentPopupHexId}.`);
   }
 
-  exportTeamsDat(): void {
-    if (!this.teamsDatLoaded) {
-      alert('No teams.dat loaded!');
-      return;
-    }
-
-    this.teamsDatService.exportFile('teams.dat');
-  }
-
-  async saveTeam(): Promise<void> {
-    if (!this.teamFileLoaded) {
-      alert('No team database loaded!');
-      return;
-    }
-
-    try {
-      await this.teamEditorService.saveToSameFile();
-      alert('Team changes applied and file overwritten successfully!');
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
-      alert(message);
-    }
-  }
-
-  loadPlayer(idx: any): void {
-    this.selectedIndex = +idx;
-    this.playerHexQuery = this.currentPlayerHexId;
-    this.player = this.playerService.readPlayer(+idx);
-    this.updateOVR();
-  }
-
-  openDbBrowsePlayer(index: number): void {
-    this.selectedEditorTab = 0;
-
-    setTimeout(() => {
-      this.loadPlayer(index);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-  }
-
-  exportDbBrowseCsv(): void {
-    if (this.filteredDbBrowsePlayers.length === 0) {
-      alert('No DB Search results to export.');
-      return;
-    }
-
-    const header = ['hexId', 'name', 'ovr', 'position', 'nationalityId', 'nationality', 'clubs'];
-    const rows = this.filteredDbBrowsePlayers.map((player) => [
-      player.hexId,
-      player.name || 'Unnamed Player',
-      player.ovr.toString(),
-      player.positionLabel,
-      player.nationalityId.toString(),
-      this.getNationalityLabel(player.nationalityId),
-      player.clubs.join('; ')
-    ]);
-
-    const csvContent = [header, ...rows]
-      .map((row) => row.map((value) => this.escapeCsvValue(value)).join(','))
-      .join('\r\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'db-search-export.csv';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
-
-  resetDbBrowsePagination(): void {
-    this.dbBrowsePage = 1;
-  }
-
-  goToPreviousDbBrowsePage(): void {
-    if (this.dbBrowsePage > 1) {
-      this.dbBrowsePage -= 1;
-    }
-  }
-
-  goToNextDbBrowsePage(): void {
-    if (this.dbBrowsePage < this.dbBrowseTotalPages) {
-      this.dbBrowsePage += 1;
-    }
-  }
-
-  private escapeCsvValue(value: string): string {
-    const normalizedValue = value.replace(/"/g, '""');
-    return `"${normalizedValue}"`;
-  }
-
-  private async initializeApp(): Promise<void> {
-    await this.loadImportSource(false, false);
-    await this.restoreRememberedFiles();
-  }
-
-  private async restoreRememberedFiles(): Promise<void> {
-    const restoredPlayerFileName = await this.playerService.tryRestoreLastFile();
-
-    if (restoredPlayerFileName) {
-      this.applyPlayerFileLoaded();
-    }
-
-    const restoredTeamFileName = await this.teamEditorService.tryRestoreLastFile();
-
-    if (restoredTeamFileName) {
-      this.applyTeamFileLoaded();
-    }
-
-    const restoredTeamsDatFileName = await this.teamsDatService.tryRestoreLastFile();
-
-    if (restoredTeamsDatFileName) {
-      this.applyTeamsDatLoaded();
-    }
-  }
-
-  private applyPlayerFileLoaded(): void {
-    this.teamPlayerNameCache.clear();
-    this.refreshDbBrowsePlayers();
-
-    if (this.playerService.totalPlayers > 0) {
-      this.loadPlayer(0);
-    }
-
-    this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
-  }
-
-  private applyTeamFileLoaded(): void {
-    this.refreshDbBrowsePlayers();
-    this.selectedTeamOffset = this.teamOptions.length > 0 ? this.teamOptions[0].offset : null;
-    this.displayedTeams = this.selectedTeamOffset === null
-      ? []
-      : this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(this.selectedTeamOffset)]);
-  }
-
-  private applyTeamsDatLoaded(): void {
-    this.selectedTeamsDatIndex = this.teamsDatService.teamCount > 0 ? 0 : null;
-  }
-
-  updateOVR(): void {
-    if (!this.fileLoaded) return;
-    const val = this.playerService.calculateOVR(this.player);
-    this.ovr = val;
-    if (val >= 90) this.ovrColor = '#00e5ff';
-    else if (val >= 80) this.ovrColor = '#ffd700';
-    else if (val >= 70) this.ovrColor = '#c0c0c0';
-    else this.ovrColor = '#cd7f32';
-  }
-
-  async save(): Promise<void> {
-    if (!this.fileLoaded) { alert('No file loaded!'); return; }
-    try {
-      await this.playerService.saveToSameFile(this.player, this.selectedIndex);
-      this.refreshPlayerLinkedViews(this.selectedIndex);
-      alert('Changes applied and file overwritten successfully!');
-    } catch (err: any) {
-      alert(err.message || 'Save failed. Make sure you gave the browser permission to save changes.');
-    }
+  get filteredImportedPlayers(): ImportedPlayerRecord[] {
+    return this.playerImportService
+      .searchPlayers(this.importedPlayers, this.importSearchQuery)
+      .slice(0, this.importSearchPageSize);
   }
 
   async loadImportSource(showPicker = false, notify = false): Promise<void> {
@@ -560,65 +568,168 @@ export class AppComponent implements OnInit {
     }
   }
 
-  clearImportedPlayers(): void {
-    this.importedPlayers = [];
-    this.importSourceFileName = '';
-    this.importSearchQuery = '';
-    this.selectedImportedPlayer = null;
-    this.showImportPicker = false;
+  // ─── DB Browser ───────────────────────────────────────────────
+
+  get filteredDbBrowsePlayers(): DbBrowsePlayer[] {
+    const normalizedNameQuery = this.dbSearchNameQuery.trim().toLowerCase();
+    const nationalityQuery = this.dbSearchNationalityQuery;
+    const teamQuery = this.dbSearchTeamQuery;
+
+    return this.dbBrowsePlayers.filter((player) => {
+      const matchesName = !normalizedNameQuery
+        || player.name.toLowerCase().includes(normalizedNameQuery)
+        || player.hexId.toLowerCase().includes(normalizedNameQuery);
+
+      const matchesNationality = nationalityQuery === null
+        || player.nationalityId === nationalityQuery;
+
+      const matchesTeam = teamQuery === null
+        || player.clubs.includes(teamQuery);
+
+      return matchesName && matchesNationality && matchesTeam;
+    });
   }
 
-  importPlayer(record: ImportedPlayerRecord): void {
-    if (!this.fileLoaded) {
-      alert('Load PLAYERS.DAT first.');
+  get pagedDbBrowsePlayers(): DbBrowsePlayer[] {
+    const startIndex = (this.dbBrowsePage - 1) * this.dbBrowsePageSize;
+    return this.filteredDbBrowsePlayers.slice(startIndex, startIndex + this.dbBrowsePageSize);
+  }
+
+  get dbBrowseTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredDbBrowsePlayers.length / this.dbBrowsePageSize));
+  }
+
+  get dbBrowseRangeStart(): number {
+    if (this.filteredDbBrowsePlayers.length === 0) {
+      return 0;
+    }
+
+    return (this.dbBrowsePage - 1) * this.dbBrowsePageSize + 1;
+  }
+
+  get dbBrowseRangeEnd(): number {
+    return Math.min(this.dbBrowsePage * this.dbBrowsePageSize, this.filteredDbBrowsePlayers.length);
+  }
+
+  openDbBrowsePlayer(index: number): void {
+    this.openPlayerEditPopup(index);
+  }
+
+  resetDbBrowsePagination(): void {
+    this.dbBrowsePage = 1;
+  }
+
+  goToPreviousDbBrowsePage(): void {
+    if (this.dbBrowsePage > 1) {
+      this.dbBrowsePage -= 1;
+    }
+  }
+
+  goToNextDbBrowsePage(): void {
+    if (this.dbBrowsePage < this.dbBrowseTotalPages) {
+      this.dbBrowsePage += 1;
+    }
+  }
+
+  // ─── File loading ─────────────────────────────────────────────
+
+  async openFolder(): Promise<void> {
+    if (!(window as any).showDirectoryPicker) {
+      alert('Your browser does not support the Directory Picker API. Use Chrome.');
       return;
     }
 
-    this.player = this.playerImportService.mapImportedPlayer(record, this.player);
-    this.updateOVR();
-    this.selectedImportedPlayer = null;
-    this.importSearchQuery = '';
-    this.showImportPicker = false;
-    alert(`Imported ${record.shortName} into FTS player ${this.currentPlayerHexId}.`);
-  }
-
-  importSelectedPlayer(): void {
-    if (!this.selectedImportedPlayer) {
+    let dirHandle: any;
+    try {
+      dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        alert(err.message || 'Folder selection failed.');
+      }
       return;
     }
 
-    this.importPlayer(this.selectedImportedPlayer);
+    const errors: string[] = [];
+
+    try {
+      const handle = await dirHandle.getFileHandle('PLAYERS.DAT');
+      await this.playerService.loadFile(handle);
+      this.applyPlayerFileLoaded();
+    } catch (err: any) {
+      errors.push(`PLAYERS.DAT: ${err.message || 'not found'}`);
+    }
+
+    try {
+      const handle = await dirHandle.getFileHandle('TEAMPLAYERLINKS_0.dat');
+      await this.teamEditorService.loadFile(handle);
+      this.applyTeamFileLoaded();
+    } catch (err: any) {
+      errors.push(`TEAMPLAYERLINKS_0.dat: ${err.message || 'not found'}`);
+    }
+
+    try {
+      const handle = await dirHandle.getFileHandle('TEAMS.DAT');
+      await this.teamsDatService.loadFile(handle);
+      this.applyTeamsDatLoaded();
+    } catch (err: any) {
+      errors.push(`TEAMS.DAT: ${err.message || 'not found'}`);
+    }
+
+    if (errors.length > 0) {
+      alert(errors.join('\n'));
+    }
+
+    this.checkAutoTransition();
   }
 
-  searchPlayer(): void {
-    if (!this.fileLoaded) return;
-    const idx = this.playerService.searchPlayer(this.searchQuery);
-    if (idx === -1) { alert('Player not found!'); return; }
-    this.loadPlayer(idx);
-  }
+  // ─── Save ─────────────────────────────────────────────────────
 
-  jumpToPlayerHex(): void {
-    if (!this.fileLoaded) {
+  async saveAllFiles(): Promise<void> {
+    if (!this.allFilesLoaded) {
+      alert('Load all files first.');
       return;
     }
 
-    const idx = this.playerService.parsePlayerId(this.playerHexQuery);
-    if (idx === -1) {
-      alert('Player hex ID not found.');
-      return;
+    try {
+      await this.playerService.saveCurrentToSameFile();
+      await this.teamEditorService.saveToSameFile();
+      await this.teamsDatService.saveToSameFile();
+      alert('Files overwritten successfully.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
+      alert(message);
     }
+  }
 
-    this.loadPlayer(idx);
+  // ─── Team Editor ──────────────────────────────────────────────
+
+  get filteredTeamAddPlayers(): DbBrowsePlayer[] {
+    const normalizedQuery = this.teamAddSearchQuery.trim().toLowerCase();
+
+    return this.dbBrowsePlayers
+      .filter((player) => !normalizedQuery
+        || player.name.toLowerCase().includes(normalizedQuery)
+        || player.hexId.toLowerCase().includes(normalizedQuery))
+      .slice(0, this.importSearchPageSize);
   }
 
   loadSingleTeam(offset: number | null): void {
     if (offset === null) {
       this.displayedTeams = [];
+      this.rebuildRoleSelectOptions();
       return;
     }
 
     this.selectedTeamOffset = offset;
     this.displayedTeams = this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(offset)]);
+    this.rebuildRoleSelectOptions();
+
+    // Sync teams.dat tactics section to the newly selected team
+    if (this.teamsDatLoaded && this.displayedTeams.length > 0) {
+      const team = this.displayedTeams[0];
+      const idx = this.teamsDatService.records.findIndex((r) => r.teamId === team.teamId);
+      this.selectedTeamsDatIndex = idx !== -1 ? idx : null;
+    }
   }
 
   searchTeams(): void {
@@ -643,29 +754,7 @@ export class AppComponent implements OnInit {
     this.replaceDisplayedTeam(team.offset, this.teamEditorService.updatePlayerCount(team.offset, Number(value)));
   }
 
-  updateTeamPlayerId(team: TeamRecord, slot: TeamSlot, value: string): void {
-    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, slot.index, { playerIdHex: value }));
-  }
-
-  updateTeamShirtNumber(team: TeamRecord, slot: TeamSlot, value: string | number): void {
-    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, slot.index, { shirtNumber: Number(value) }));
-  }
-
-  updateTeamPosition(team: TeamRecord, slot: TeamSlot, value: string | number): void {
-    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, slot.index, { position: Number(value) }));
-  }
-
   toggleTeamAddPicker(team: TeamRecord): void {
-    if (!this.teamFileLoaded) {
-      alert('Load a team database first.');
-      return;
-    }
-
-    if (!this.fileLoaded) {
-      alert('Load PLAYERS.DAT first.');
-      return;
-    }
-
     if (this.teamAddPickerOffset === team.offset) {
       this.closeTeamAddPicker();
       return;
@@ -699,40 +788,20 @@ export class AppComponent implements OnInit {
     this.closeTeamAddPicker();
   }
 
-  deleteTeamSlot(team: TeamRecord, slot: TeamSlot): void {
-    if (slot.isEmpty) {
-      return;
-    }
-
-    this.replaceDisplayedTeam(team.offset, this.teamEditorService.deleteSlot(team.offset, slot.index));
-  }
-
-  exportTeamDatabase(): void {
-    if (!this.teamFileLoaded) {
-      alert('No team database loaded!');
-      return;
-    }
-
-    this.teamEditorService.exportFile();
-  }
-
   closeTeamAddPicker(): void {
     this.teamAddPickerOffset = null;
     this.teamAddSearchQuery = '';
     this.selectedTeamAddPlayerIndex = null;
   }
 
-  startDownload(): void {
-    this.showModal = true;
-    this.modalTimer = 20;
-    const interval = setInterval(() => {
-      this.modalTimer--;
-      if (this.modalTimer <= 0) {
-        clearInterval(interval);
-        this.playerService.downloadFile();
-        this.showModal = false;
-      }
-    }, 1000);
+  openTeamPlayerEditPopup(team: TeamRecord, slotIndex: number): void {
+    const slot = team.slots.find((s) => s.index === slotIndex);
+
+    if (!slot || slot.isEmpty) {
+      return;
+    }
+
+    this.openPlayerEditPopup(slot.playerId, { teamOffset: team.offset, slotIndex });
   }
 
   getFormationSketch(team: TeamRecord): FormationSketch {
@@ -774,17 +843,19 @@ export class AppComponent implements OnInit {
 
   updateTeamsDatNumberField(
     record: TeamsDatRecord,
-    field: 'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr'
-    | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole',
+    field: 'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr',
     value: string | number
   ): void {
     const changes: Partial<Pick<TeamsDatRecord,
       'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr'
-      | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole'
     >> = {};
 
     changes[field] = Number(value);
     this.teamsDatService.updateRecord(record.index, changes);
+
+    if (field === 'teamId') {
+      this.rebuildRivalOptions();
+    }
   }
 
   updateTeamsDatFormation(record: TeamsDatRecord, value: string | number): void {
@@ -795,84 +866,125 @@ export class AppComponent implements OnInit {
     this.teamsDatService.updateRecord(record.index, { region: value });
   }
 
-  selectTeamPlayer(team: TeamRecord, formationSketch: FormationSketch, slotIndex: number): void {
-    if (this.selectedTeamEditorOffset === team.offset && this.selectedTeamEditorSlotIndex === slotIndex) {
-      this.clearSelectedTeamPlayer();
+  updateTeamsDatStadiumName(record: TeamsDatRecord, value: string): void {
+    this.teamsDatService.updateRecord(record.index, { stadiumName: value });
+  }
+
+  updateTeamsDatRoleField(
+    record: TeamsDatRecord,
+    field: 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole',
+    value: string | number
+  ): void {
+    const rawValue = typeof value === 'number' ? value.toString(16) : value;
+    const parsedValue = Number.parseInt(rawValue.trim(), 16);
+
+    if (Number.isNaN(parsedValue)) {
       return;
     }
 
-    if (this.selectedTeamEditorOffset === team.offset && this.selectedTeamEditorSlotIndex !== null) {
-      this.swapFormationPlayers(team, formationSketch, this.selectedTeamEditorSlotIndex, slotIndex);
+    const changes: Partial<Pick<TeamsDatRecord,
+      'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole'
+    >> = {};
+
+    changes[field] = parsedValue;
+    this.teamsDatService.updateRecord(record.index, changes);
+  }
+
+  formatHexRoleValue(value: number): string {
+    return value.toString(16).toUpperCase().padStart(4, '0');
+  }
+
+  // ─── Tactics section helpers ────────────────────────────────
+
+  // Stable list: rebuilt when displayedTeams changes; safe for use in *ngFor
+  roleSelectOptions: { value: string; label: string }[] = [];
+
+  private rebuildRoleSelectOptions(): void {
+    const team = this.displayedTeams[0] ?? null;
+    if (!team) {
+      this.roleSelectOptions = [];
+      return;
+    }
+
+    this.roleSelectOptions = team.slots
+      .filter((s) => !s.isEmpty)
+      .map((s) => ({
+        value: s.playerIdHex,
+        label: `${s.playerIdHex}  ${s.playerName || s.playerIdHex}`
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }
+
+  getFormationString(formationId: number): string {
+    return FORMATION_VALUE_BY_ID[formationId] ?? `Unknown (ID ${formationId})`;
+  }
+
+  getRivalName(rivalId: number): string {
+    const rival = this.teamsDatService.records.find((r) => r.teamId === rivalId);
+    return rival ? rival.teamLabel : `Team ${rivalId}`;
+  }
+
+  // ─── Pitch player selection / swap ───────────────────────────
+
+  selectTeamPlayerForAction(team: TeamRecord, formationSketch: FormationSketch, slotIndex: number): void {
+    if (this.swapModeActive && this.selectedTeamEditorOffset === team.offset && this.selectedTeamEditorSlotIndex !== null) {
+      if (this.selectedTeamEditorSlotIndex !== slotIndex) {
+        this.swapFormationPlayers(team, formationSketch, this.selectedTeamEditorSlotIndex, slotIndex);
+      } else {
+        this.clearTeamPlayerSelection();
+      }
+      return;
+    }
+
+    if (this.selectedTeamEditorOffset === team.offset && this.selectedTeamEditorSlotIndex === slotIndex && !this.swapModeActive) {
+      this.clearTeamPlayerSelection();
       return;
     }
 
     this.selectedTeamEditorOffset = team.offset;
     this.selectedTeamEditorSlotIndex = slotIndex;
+    this.swapModeActive = false;
   }
 
-  clearSelectedTeamPlayer(): void {
-    this.selectedTeamEditorOffset = null;
-    this.selectedTeamEditorSlotIndex = null;
-  }
-
-  isSelectedTeamPlayer(team: TeamRecord, slotIndex: number): boolean {
+  isTeamPlayerSelected(team: TeamRecord, slotIndex: number): boolean {
     return this.selectedTeamEditorOffset === team.offset && this.selectedTeamEditorSlotIndex === slotIndex;
   }
 
-  getSelectedTeamSlot(team: TeamRecord): TeamSlot | null {
+  getSelectedFormationPlayer(team: TeamRecord, formationSketch: FormationSketch): FormationSketchPlayer | null {
     if (this.selectedTeamEditorOffset !== team.offset || this.selectedTeamEditorSlotIndex === null) {
       return null;
     }
 
-    return team.slots.find((slot) => slot.index === this.selectedTeamEditorSlotIndex) ?? null;
+    const allPlayers = [
+      ...formationSketch.slots.map((s) => s.player).filter((p): p is FormationSketchPlayer => Boolean(p)),
+      ...formationSketch.reservePlayers
+    ];
+
+    return allPlayers.find((p) => p.slotIndex === this.selectedTeamEditorSlotIndex) ?? null;
   }
 
-  updateSelectedTeamPlayerId(team: TeamRecord, value: string): void {
-    const slot = this.getSelectedTeamSlot(team);
+  clearTeamPlayerSelection(): void {
+    this.selectedTeamEditorOffset = null;
+    this.selectedTeamEditorSlotIndex = null;
+    this.swapModeActive = false;
+  }
 
-    if (!slot) {
+  activateSwapMode(): void {
+    this.swapModeActive = true;
+  }
+
+  cancelSwapMode(): void {
+    this.swapModeActive = false;
+  }
+
+  openSelectedTeamPlayer(team: TeamRecord): void {
+    if (this.selectedTeamEditorOffset !== team.offset || this.selectedTeamEditorSlotIndex === null) {
       return;
     }
 
-    this.updateTeamPlayerId(team, slot, value);
-  }
-
-  updateSelectedTeamShirtNumber(team: TeamRecord, value: string | number): void {
-    const slot = this.getSelectedTeamSlot(team);
-
-    if (!slot) {
-      return;
-    }
-
-    this.updateTeamShirtNumber(team, slot, value);
-  }
-
-  updateSelectedTeamPosition(team: TeamRecord, value: string | number): void {
-    const slot = this.getSelectedTeamSlot(team);
-
-    if (!slot) {
-      return;
-    }
-
-    this.updateTeamPosition(team, slot, value);
-  }
-
-  deleteSelectedTeamPlayer(team: TeamRecord): void {
-    const slot = this.getSelectedTeamSlot(team);
-
-    if (!slot) {
-      return;
-    }
-
-    this.deleteTeamSlot(team, slot);
-  }
-
-  trackSketchPlayer(_: number, player: FormationSketchPlayer): number {
-    return player.slotIndex;
-  }
-
-  trackSketchSlot(_: number, slot: FormationSketchSlot): string {
-    return slot.slotKey;
+    const slotIndex = this.selectedTeamEditorSlotIndex;
+    this.clearTeamPlayerSelection();
+    this.openTeamPlayerEditPopup(team, slotIndex);
   }
 
   private swapFormationPlayers(
@@ -890,7 +1002,7 @@ export class AppComponent implements OnInit {
     const targetOrderIndex = orderedUsedPlayers.findIndex((player) => player.slotIndex === targetSlotIndex);
 
     if (sourceOrderIndex === -1 || targetOrderIndex === -1 || sourceOrderIndex === targetOrderIndex) {
-      this.clearSelectedTeamPlayer();
+      this.clearTeamPlayerSelection();
       return;
     }
 
@@ -907,27 +1019,83 @@ export class AppComponent implements OnInit {
     );
 
     this.replaceDisplayedTeam(team.offset, updatedTeam);
+    this.clearTeamPlayerSelection();
+  }
 
-    if (this.selectedTeamEditorOffset === team.offset) {
-      this.clearSelectedTeamPlayer();
+  trackSketchPlayer(_: number, player: FormationSketchPlayer): number {
+    return player.slotIndex;
+  }
+
+  trackSketchSlot(_: number, slot: FormationSketchSlot): string {
+    return slot.slotKey;
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────
+
+  getNationalityLabel(nationalityId: number): string {
+    const nationalityName = NATIONALITY_NAMES_BY_ID[nationalityId];
+    return nationalityName ? `${nationalityName} (${nationalityId})` : `Unknown (${nationalityId})`;
+  }
+
+  private escapeCsvValue(value: string): string {
+    const normalizedValue = value.replace(/"/g, '""');
+    return `"${normalizedValue}"`;
+  }
+
+  private async initializeApp(): Promise<void> {
+    await this.loadImportSource(false, false);
+    await this.restoreRememberedFiles();
+  }
+
+  private async restoreRememberedFiles(): Promise<void> {
+    const restoredPlayerFileName = await this.playerService.tryRestoreLastFile();
+    if (restoredPlayerFileName) {
+      this.applyPlayerFileLoaded();
     }
+
+    const restoredTeamFileName = await this.teamEditorService.tryRestoreLastFile();
+    if (restoredTeamFileName) {
+      this.applyTeamFileLoaded();
+    }
+
+    const restoredTeamsDatFileName = await this.teamsDatService.tryRestoreLastFile();
+    if (restoredTeamsDatFileName) {
+      this.applyTeamsDatLoaded();
+    }
+
+    this.checkAutoTransition();
+  }
+
+  private applyPlayerFileLoaded(): void {
+    this.teamPlayerNameCache.clear();
+    this.refreshDbBrowsePlayers();
+    this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+    this.rebuildRoleSelectOptions();
+  }
+
+  private applyTeamFileLoaded(): void {
+    this.refreshDbBrowsePlayers();
+    this.selectedTeamOffset = this.teamOptions.length > 0 ? this.teamOptions[0].offset : null;
+    this.displayedTeams = this.selectedTeamOffset === null
+      ? []
+      : this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(this.selectedTeamOffset)]);
+    this.rebuildRoleSelectOptions();
+  }
+
+  private applyTeamsDatLoaded(): void {
+    this.selectedTeamsDatIndex = this.teamsDatService.teamCount > 0 ? 0 : null;
+    this.rebuildRivalOptions();
   }
 
   private replaceDisplayedTeam(offset: number, updatedTeam: TeamRecord): void {
     const decoratedTeam = this.decorateTeamWithPlayerNames(updatedTeam);
     this.displayedTeams = this.displayedTeams.map((team) => team.offset === offset ? decoratedTeam : team);
+    this.rebuildRoleSelectOptions();
     this.refreshDbBrowsePlayers();
 
     if (this.selectedTeamOffset === offset && !this.displayedTeams.some((team) => team.offset === offset)) {
       this.displayedTeams = [decoratedTeam];
-    }
-
-    if (this.selectedTeamEditorOffset === offset && this.selectedTeamEditorSlotIndex !== null) {
-      const selectedSlot = decoratedTeam.slots.find((slot) => slot.index === this.selectedTeamEditorSlotIndex);
-
-      if (!selectedSlot || selectedSlot.isEmpty) {
-        this.clearSelectedTeamPlayer();
-      }
+      this.rebuildRoleSelectOptions();
     }
   }
 
@@ -936,6 +1104,7 @@ export class AppComponent implements OnInit {
 
     if (this.displayedTeams.length > 0) {
       this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+      this.rebuildRoleSelectOptions();
     }
 
     this.refreshDbBrowsePlayers();
@@ -973,6 +1142,7 @@ export class AppComponent implements OnInit {
 
       return left.index - right.index;
     });
+
     this.resetDbBrowsePagination();
   }
 
@@ -1071,6 +1241,7 @@ export class AppComponent implements OnInit {
 
   private getFormationFromId(formationId: number): FormationPreset | undefined {
     const formationValue = FORMATION_VALUE_BY_ID[formationId];
+
     if (!formationValue) {
       return undefined;
     }
@@ -1187,13 +1358,15 @@ export class AppComponent implements OnInit {
   }
 
   private toSketchPlayer(player: TeamSlot): FormationSketchPlayer {
+    const rawPlayer = this.fileLoaded ? this.playerService.readPlayer(player.playerId) : null;
     return {
       slotIndex: player.index,
       playerIdHex: player.playerIdHex,
       playerName: player.playerName,
       shirtNumber: player.shirtNumber,
       position: player.position,
-      positionLabel: this.getPositionLabel(player.position)
+      positionLabel: this.getPositionLabel(player.position),
+      ovr: rawPlayer ? this.playerService.calculateOVR(rawPlayer) : 0
     };
   }
 
@@ -1225,11 +1398,6 @@ export class AppComponent implements OnInit {
 
   private getPositionLabel(positionValue: number): string {
     return this.positions.find((position) => position.value === positionValue)?.label ?? `POS ${positionValue}`;
-  }
-
-  getNationalityLabel(nationalityId: number): string {
-    const nationalityName = NATIONALITY_NAMES_BY_ID[nationalityId];
-    return nationalityName ? `${nationalityName} (${nationalityId})` : `Unknown (${nationalityId})`;
   }
 
   private emptyPlayer(): Player {

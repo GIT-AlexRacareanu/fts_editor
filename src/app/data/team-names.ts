@@ -489,6 +489,7 @@ export const TEAM_NAMES_BY_ID: string[] = [
   'Oita',
   'Hiratsuka',
   'Kyoto Classic',
+  'Classic',
   'Classic 1',
   'Eibar',
   'Brentford',

@@ -172,7 +172,7 @@ export class TeamsDatService {
   updateRecord(index: number, changes: Partial<Pick<TeamsDatRecord,
     'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' |
     'formationId' | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' |
-    'freeKickRole' | 'region'
+    'freeKickRole' | 'region' | 'stadiumName'
   >>): TeamsDatRecord {
     const view = this.getView();
     const blockStart = this.getBlockStart(index);
@@ -223,8 +223,17 @@ export class TeamsDatService {
       bytes[blockStart + 0xFB] = 0x00;
     }
 
+    if (changes.stadiumName !== undefined) {
+      this.writeUtf16String(this.getTeamDataOrThrow(), blockStart + 0x128, 60, changes.stadiumName);
+    }
+
     const updatedRecord = this.parseRecord(index);
     this.records[index] = updatedRecord;
+    this.teamOptions = this.records.map((recordItem) => ({
+      value: recordItem.index,
+      label: recordItem.teamLabel + (recordItem.stadiumName ? ` | ${recordItem.stadiumName}` : '')
+    }));
+    this.formationIdByTeamId = this.buildFormationIdMap(this.records);
     return updatedRecord;
   }
 
@@ -303,6 +312,21 @@ export class TeamsDatService {
     }
 
     return output.trim();
+  }
+
+  private writeUtf16String(bytes: Uint8Array, start: number, maxBytes: number, value: string): void {
+    const normalizedValue = value.slice(0, Math.floor(maxBytes / 2));
+
+    for (let idx = 0; idx < maxBytes; idx += 2) {
+      bytes[start + idx] = 0x00;
+      bytes[start + idx + 1] = 0x00;
+    }
+
+    for (let idx = 0; idx < normalizedValue.length; idx += 1) {
+      const charCode = normalizedValue.charCodeAt(idx);
+      bytes[start + idx * 2] = charCode & 0xff;
+      bytes[start + idx * 2 + 1] = (charCode >> 8) & 0xff;
+    }
   }
 
   private formatTeamLabel(teamId: number): string {

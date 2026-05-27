@@ -150,6 +150,16 @@ export class PlayerService {
     await writable.close();
   }
 
+  async saveCurrentToSameFile(): Promise<void> {
+    if (!this.fileHandle || !this.binaryData) {
+      throw new Error('No file loaded');
+    }
+
+    const writable = await this.fileHandle.createWritable();
+    await writable.write(pako.deflate(this.binaryData));
+    await writable.close();
+  }
+
   async downloadFile(): Promise<void> {
     if (!this.binaryData) return;
     const blob = new Blob([pako.deflate(this.binaryData)], { type: 'application/octet-stream' });

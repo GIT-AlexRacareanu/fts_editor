@@ -1,284 +1,292 @@
-﻿<mat-toolbar color="primary" class="app-toolbar">
+<mat-toolbar color="primary" class="app-toolbar">
   <span>FTS 15 EDITOR PRO</span>
+  <span class="toolbar-spacer"></span>
+  <button mat-icon-button *ngIf="!showInitPage" (click)="goToInitPage()" title="Manage Files">
+    <mat-icon>folder_open</mat-icon>
+  </button>
 </mat-toolbar>
 
-<div class="app-container">
-  <mat-tab-group class="editor-tabs" [(selectedIndex)]="selectedEditorTab" animationDuration="0ms">
-    <mat-tab label="Player Edit">
+<!-- ─── INIT PAGE ─────────────────────────────────────────────── -->
+<div class="init-page" *ngIf="showInitPage">
+  <div class="init-container">
+    <h2 class="init-heading">FTS 15 EDITOR PRO</h2>
+
+    <button mat-raised-button color="primary" class="init-folder-btn" (click)="openFolder()">
+      <mat-icon>folder_open</mat-icon>
+      {{ allFilesLoaded ? 'CHANGE FOLDER' : 'SELECT FOLDER' }}
+    </button>
+
+    <div class="init-file-row" [class.init-file-row--loaded]="fileLoaded">
+      <mat-icon class="init-file-icon">{{ fileLoaded ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+      <div class="init-file-name">PLAYERS.DAT</div>
+    </div>
+
+    <div class="init-file-row" [class.init-file-row--loaded]="teamFileLoaded">
+      <mat-icon class="init-file-icon">{{ teamFileLoaded ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+      <div class="init-file-name">TEAMPLAYERLINKS_0.dat</div>
+    </div>
+
+    <div class="init-file-row" [class.init-file-row--loaded]="teamsDatLoaded">
+      <mat-icon class="init-file-icon">{{ teamsDatLoaded ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+      <div class="init-file-name">TEAMS.DAT</div>
+    </div>
+
+    <button mat-raised-button color="primary" class="init-continue-btn" [disabled]="!allFilesLoaded" (click)="enterMainApp()">
+      <mat-icon>play_arrow</mat-icon>
+      CONTINUE
+    </button>
+  </div>
+</div>
+
+<!-- ─── MAIN APP ──────────────────────────────────────────────── -->
+<div class="app-container" *ngIf="!showInitPage && allFilesLoaded">
+  <mat-tab-group class="editor-tabs" [(selectedIndex)]="activeMainTab" animationDuration="0ms">
+
+    <!-- ═══ TAB 0 — TEAM EDITOR ════════════════════════════════ -->
+    <mat-tab label="Team Editor">
       <div class="editor-tab-content">
-        <mat-card class="section-card">
+        <mat-card class="section-card team-editor-card">
           <mat-card-content>
-            <button mat-raised-button color="primary" class="full-width-btn" (click)="openFile()">
-              <mat-icon>folder_open</mat-icon>
-              OPEN PLAYERS.DAT
-            </button>
-          </mat-card-content>
-        </mat-card>
 
-        <div class="nav-controls">
-          <div class="player-current-id">Current ID {{ currentPlayerHexId }}</div>
-          <mat-form-field appearance="standard" class="player-id-field">
-            <mat-label>Hex ID</mat-label>
-            <input matInput [(ngModel)]="playerHexQuery" maxlength="4" (keyup.enter)="jumpToPlayerHex()">
-          </mat-form-field>
-          <button mat-icon-button (click)="jumpToPlayerHex()" [disabled]="!fileLoaded">
-            <mat-icon>tag</mat-icon>
-          </button>
-        </div>
+            <!-- Action buttons -->
+            <div class="team-actions">
+              <button mat-raised-button color="primary" class="team-action-btn" (click)="saveAllFiles()">
+                <mat-icon>save</mat-icon>
+                SAVE
+              </button>
+            </div>
 
-        <div class="search-row">
-          <mat-form-field appearance="standard" class="search-field">
-            <mat-label>Search player name or hex ID...</mat-label>
-            <input matInput [(ngModel)]="searchQuery" (keyup.enter)="searchPlayer()">
-          </mat-form-field>
-          <button mat-icon-button (click)="searchPlayer()">
-            <mat-icon>search</mat-icon>
-          </button>
-        </div>
-
-        <div class="import-toolbar">
-          <button mat-stroked-button color="accent" class="import-trigger-btn" (click)="openImportPicker()">
-            <mat-icon>upload_file</mat-icon>
-            IMPORT
-          </button>
-        </div>
-
-        <div class="import-picker-strip" *ngIf="showImportPicker">
-          <div class="import-picker-grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Search name</mat-label>
-              <input matInput [(ngModel)]="importSearchQuery">
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
-              <mat-label>Select player</mat-label>
-              <mat-select [(ngModel)]="selectedImportedPlayer" (selectionChange)="importSelectedPlayer()">
-                <mat-option *ngFor="let sourcePlayer of filteredImportedPlayers" [value]="sourcePlayer">
-                  {{ sourcePlayer.shortName }}
-                </mat-option>
+            <!-- Team selector -->
+            <mat-form-field appearance="outline" class="full-width-field team-jump-field">
+              <mat-label>Select team</mat-label>
+              <mat-select [(ngModel)]="selectedTeamOffset" (ngModelChange)="loadSingleTeam($event)">
+                <mat-option [value]="null">-- Select Team --</mat-option>
+                <mat-option *ngFor="let team of teamOptions" [value]="team.offset">{{ team.label }}</mat-option>
               </mat-select>
             </mat-form-field>
-          </div>
 
-          <p class="team-empty-state" *ngIf="filteredImportedPlayers.length === 0">No imported names match the current search.</p>
-        </div>
+            <p class="team-empty-state" *ngIf="displayedTeams.length === 0">Select a team above to view and edit its squad.</p>
 
-        <mat-card class="section-card">
-          <mat-card-header>
-            <mat-card-title>General Information</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <mat-form-field appearance="outline" class="full-width-field">
-              <mat-label>Full Name</mat-label>
-              <input matInput [(ngModel)]="player.name" (ngModelChange)="updateOVR()">
-            </mat-form-field>
-            <div class="stats-grid">
-              <mat-form-field appearance="outline">
-                <mat-label>Position</mat-label>
-                <mat-select [(ngModel)]="player.pos" (ngModelChange)="updateOVR()">
-                  <mat-option *ngFor="let p of positions" [value]="p.value">{{ p.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Foot</mat-label>
-                <mat-select [(ngModel)]="player.foot">
-                  <mat-option *ngFor="let f of feet" [value]="f.value">{{ f.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Nationality</mat-label>
-                <mat-select [(ngModel)]="player.nat">
-                  <mat-option *ngFor="let nationality of nationalities" [value]="nationality.value">
-                    {{ nationality.label }}
-                  </mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Height (cm)</mat-label>
-                <input matInput type="number" [(ngModel)]="player.estatura">
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Weight (kg)</mat-label>
-                <input matInput type="number" [(ngModel)]="player.peso">
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Year</mat-label>
-                <input matInput type="number" [(ngModel)]="player.year">
-              </mat-form-field>
+            <div class="team-results" *ngIf="displayedTeams.length > 0">
+              <section class="team-db-card" *ngFor="let team of displayedTeams">
+                <div class="team-db-header">
+                  <div class="team-db-header-main">
+                    <div class="team-db-title">{{ team.teamLabel }}</div>
+                    <div class="teams-dat-fields-row team-db-header-fields" *ngIf="selectedTeamsDatRecord as record">
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--id">
+                        <mat-label>Team ID</mat-label>
+                        <input matInput type="number" [ngModel]="record.teamId" (ngModelChange)="updateTeamsDatNumberField(record, 'teamId', $event)">
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--stadium">
+                        <mat-label>Stadium</mat-label>
+                        <input matInput [ngModel]="record.stadiumName" (ngModelChange)="updateTeamsDatStadiumName(record, $event)">
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field">
+                        <mat-label>League</mat-label>
+                        <mat-select [ngModel]="record.leagueId" (ngModelChange)="updateTeamsDatNumberField(record, 'leagueId', $event)">
+                          <mat-option *ngFor="let league of leagueOptions" [value]="league.value">{{ league.label }}</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--narrow">
+                        <mat-label>Region</mat-label>
+                        <input matInput maxlength="2" [ngModel]="record.region" (ngModelChange)="updateTeamsDatRegion(record, $event)">
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field">
+                        <mat-label>Rival</mat-label>
+                        <mat-select [ngModel]="record.rivalId" (ngModelChange)="updateTeamsDatNumberField(record, 'rivalId', $event)">
+                          <mat-option *ngFor="let t of rivalOptions" [value]="t.value">{{ t.label }}</mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field team-db-header-formation-field">
+                          <mat-label>Formation</mat-label>
+                          <mat-select [ngModel]="record.formationId" (ngModelChange)="updateTeamsDatFormation(record, $event)">
+                            <mat-option *ngFor="let f of formationIdOptions" [value]="f.id">{{ getFormationString(f.id) }}</mat-option>
+                          </mat-select>
+                        </mat-form-field>
+                    </div>
+                  </div>
+                    <div class="team-db-header-dat" *ngIf="selectedTeamsDatRecord as record">
+                      <div class="teams-dat-ovr-row">
+                        <div class="teams-dat-ovr-badge teams-dat-ovr-badge--att">
+                          <span class="teams-dat-ovr-label">ATT</span>
+                          <span class="teams-dat-ovr-value">{{ record.attackOvr }}</span>
+                        </div>
+                        <div class="teams-dat-ovr-badge teams-dat-ovr-badge--mid">
+                          <span class="teams-dat-ovr-label">MID</span>
+                          <span class="teams-dat-ovr-value">{{ record.midfieldOvr }}</span>
+                        </div>
+                        <div class="teams-dat-ovr-badge teams-dat-ovr-badge--def">
+                          <span class="teams-dat-ovr-label">DEF</span>
+                          <span class="teams-dat-ovr-value">{{ record.defenseOvr }}</span>
+                        </div>
+                      </div>
+                    </div>
+                </div>
+
+                <div class="team-db-body">
+                  <!-- Toolbar -->
+                  <div class="team-db-toolbar">
+                    <label class="team-player-count">
+                      <span>Players Count</span>
+                      <input type="number" [ngModel]="team.playerCount" (ngModelChange)="updateTeamPlayerCount(team, $event)">
+                    </label>
+                    <button mat-stroked-button color="accent" class="team-slot-action-btn" (click)="toggleTeamAddPicker(team)">
+                      <mat-icon>add</mat-icon>
+                      ADD PLAYER
+                    </button>
+                  </div>
+
+                  <!-- Add player picker -->
+                  <div class="import-picker-strip" *ngIf="teamAddPickerOffset === team.offset">
+                    <div class="import-picker-grid">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Search player</mat-label>
+                        <input matInput [(ngModel)]="teamAddSearchQuery">
+                      </mat-form-field>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Select player</mat-label>
+                        <mat-select [(ngModel)]="selectedTeamAddPlayerIndex" (selectionChange)="addSelectedPlayerToTeam(team)">
+                          <mat-option *ngFor="let player of filteredTeamAddPlayers" [value]="player.index">
+                            {{ player.name || 'Unnamed Player' }} ({{ player.hexId }}) — {{ player.positionLabel }}
+                          </mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                    </div>
+                    <p class="team-empty-state" *ngIf="filteredTeamAddPlayers.length === 0">No player matches the current search.</p>
+                  </div>
+
+                  <!-- Formation sketch -->
+                  <section class="team-formation" *ngIf="getFormationSketch(team) as formationSketch">
+                    <!-- Player action bar (shown when a player is selected) -->
+                    <div class="team-player-action-bar" *ngIf="getSelectedFormationPlayer(team, formationSketch) as selectedPlayer">
+                      <div class="team-player-action-info">
+                        <span class="team-player-action-name">{{ selectedPlayer.playerName || selectedPlayer.playerIdHex }}</span>
+                        <span class="team-player-action-pos">{{ selectedPlayer.positionLabel }} | #{{ selectedPlayer.shirtNumber }}</span>
+                      </div>
+                      <ng-container *ngIf="!swapModeActive">
+                        <button mat-raised-button color="primary" class="team-player-action-btn" (click)="openSelectedTeamPlayer(team)">
+                          <mat-icon>edit</mat-icon> Open
+                        </button>
+                        <button mat-stroked-button color="accent" class="team-player-action-btn" (click)="activateSwapMode()">
+                          <mat-icon>swap_horiz</mat-icon> Swap
+                        </button>
+                        <button mat-icon-button (click)="clearTeamPlayerSelection()" title="Deselect">
+                          <mat-icon>close</mat-icon>
+                        </button>
+                      </ng-container>
+                      <ng-container *ngIf="swapModeActive">
+                        <span class="team-player-swap-hint">Select another player to swap with</span>
+                        <button mat-stroked-button color="warn" class="team-player-action-btn" (click)="cancelSwapMode()">
+                          <mat-icon>cancel</mat-icon> Cancel
+                        </button>
+                      </ng-container>
+                    </div>
+
+                    <div class="team-formation-layout" *ngIf="formationSketch.slots.length > 0; else emptySketch">
+                      <div class="team-pitch" [class.team-pitch--swap-mode]="swapModeActive && selectedTeamEditorOffset === team.offset">
+                        <div
+                          class="team-pitch-slot"
+                          *ngFor="let slot of formationSketch.slots; let slotIndex = index; trackBy: trackSketchSlot"
+                          [style.top]="slot.top"
+                          [style.left]="slot.left">
+                          <div
+                            class="team-pitch-player"
+                            *ngIf="slot.player as player"
+                            [class.is-selected]="isTeamPlayerSelected(team, player.slotIndex)"
+                            [class.is-swap-target]="swapModeActive && selectedTeamEditorOffset === team.offset && !isTeamPlayerSelected(team, player.slotIndex)"
+                            (click)="selectTeamPlayerForAction(team, formationSketch, player.slotIndex)">
+                            <div class="team-pitch-shirt-marker">
+                              <span>{{ player.shirtNumber || '--' }}</span>
+                            </div>
+                            <div class="team-pitch-name">{{ player.playerName || player.playerIdHex }}</div>
+                            <div class="team-pitch-pos">{{ player.positionLabel }}</div>
+                            <div class="team-pitch-ovr" *ngIf="player.ovr > 0">{{ player.ovr }}</div>
+                          </div>
+                          <div class="team-pitch-empty-slot" *ngIf="!slot.player">{{ slot.targetPositionLabel }}</div>
+                        </div>
+                      </div>
+
+                      <aside class="team-reserve-panel">
+                        <div class="team-reserve-title">Other Players</div>
+                        <div class="team-reserve-list" *ngIf="formationSketch.reservePlayers.length > 0; else noReservePlayers">
+                          <div
+                            class="team-reserve-player"
+                            *ngFor="let player of formationSketch.reservePlayers; trackBy: trackSketchPlayer"
+                            [class.is-selected]="isTeamPlayerSelected(team, player.slotIndex)"
+                            [class.is-swap-target]="swapModeActive && selectedTeamEditorOffset === team.offset && !isTeamPlayerSelected(team, player.slotIndex)"
+                            (click)="selectTeamPlayerForAction(team, formationSketch, player.slotIndex)">
+                            <div class="team-pitch-shirt-marker team-pitch-shirt-marker--reserve">
+                              <span>{{ player.shirtNumber || '--' }}</span>
+                            </div>
+                            <div class="team-reserve-meta">
+                              <div class="team-reserve-name">{{ player.playerName || player.playerIdHex }}</div>
+                              <div class="team-reserve-pos">{{ player.positionLabel }}</div>
+                            </div>
+                            <div class="team-reserve-ovr" *ngIf="player.ovr > 0">{{ player.ovr }}</div>
+                          </div>
+                        </div>
+                        <ng-template #noReservePlayers>
+                          <p class="team-formation-empty">No extra players available.</p>
+                        </ng-template>
+                      </aside>
+                    </div>
+
+                    <ng-template #emptySketch>
+                      <p class="team-formation-empty">No players available for the first eleven sketch.</p>
+                    </ng-template>
+                  </section>
+                </div>
+              </section>
             </div>
-          </mat-card-content>
-        </mat-card>
 
-        <mat-card class="section-card card-relative">
-          <div class="ovr-badge" [style.background]="ovrColor">{{ fileLoaded ? ovr : '--' }}</div>
-          <mat-card-header>
-            <mat-card-title>Performance Attributes</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="stats-grid">
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>SPD</mat-label>
-                <input matInput type="number" [(ngModel)]="player.SPD" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>ACC</mat-label>
-                <input matInput type="number" [(ngModel)]="player.ACC" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>STR</mat-label>
-                <input matInput type="number" [(ngModel)]="player.STR" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>STA</mat-label>
-                <input matInput type="number" [(ngModel)]="player.STA" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>CON</mat-label>
-                <input matInput type="number" [(ngModel)]="player.CON" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>PAS</mat-label>
-                <input matInput type="number" [(ngModel)]="player.PAS" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>SHO</mat-label>
-                <input matInput type="number" [(ngModel)]="player.SHO" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>TAC</mat-label>
-                <input matInput type="number" [(ngModel)]="player.TAC" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>HEA</mat-label>
-                <input matInput type="number" [(ngModel)]="player.HEA" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>FK</mat-label>
-                <input matInput type="number" [(ngModel)]="player.FK" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>CRO</mat-label>
-                <input matInput type="number" [(ngModel)]="player.CRO" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-            </div>
-          </mat-card-content>
-        </mat-card>
+            <!-- Teams.dat tactics section (synced to selected team) -->
+            <section class="teams-dat-form" *ngIf="selectedTeamsDatRecord as record">
+              <div class="teams-dat-roles-grid">
+                <mat-form-field appearance="outline">
+                  <mat-label>Captain</mat-label>
+                  <mat-select [ngModel]="formatHexRoleValue(record.captainRole)" (ngModelChange)="updateTeamsDatRoleField(record, 'captainRole', $event)">
+                    <mat-option *ngFor="let opt of roleSelectOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Left Corner</mat-label>
+                  <mat-select [ngModel]="formatHexRoleValue(record.leftCornerRole)" (ngModelChange)="updateTeamsDatRoleField(record, 'leftCornerRole', $event)">
+                    <mat-option *ngFor="let opt of roleSelectOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Right Corner</mat-label>
+                  <mat-select [ngModel]="formatHexRoleValue(record.rightCornerRole)" (ngModelChange)="updateTeamsDatRoleField(record, 'rightCornerRole', $event)">
+                    <mat-option *ngFor="let opt of roleSelectOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Penalty</mat-label>
+                  <mat-select [ngModel]="formatHexRoleValue(record.penaltyRole)" (ngModelChange)="updateTeamsDatRoleField(record, 'penaltyRole', $event)">
+                    <mat-option *ngFor="let opt of roleSelectOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Free Kick</mat-label>
+                  <mat-select [ngModel]="formatHexRoleValue(record.freeKickRole)" (ngModelChange)="updateTeamsDatRoleField(record, 'freeKickRole', $event)">
+                    <mat-option *ngFor="let opt of roleSelectOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
+              </div>
+            </section>
 
-        <mat-card class="section-card gk-card">
-          <mat-card-header>
-            <mat-card-title class="accent-title">Goalkeeper Stats</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="stats-grid">
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>GKS</mat-label>
-                <input matInput type="number" [(ngModel)]="player.GKS" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>GKH</mat-label>
-                <input matInput type="number" [(ngModel)]="player.GKH" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-              <mat-form-field appearance="outline" class="stat-field">
-                <mat-label>GKP</mat-label>
-                <input matInput type="number" [(ngModel)]="player.GKP" (ngModelChange)="updateOVR()">
-              </mat-form-field>
-            </div>
-          </mat-card-content>
-        </mat-card>
-
-        <mat-card class="section-card">
-          <mat-card-header>
-            <mat-card-title>Appearance &amp; Face</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="stats-grid">
-              <mat-form-field appearance="outline">
-                <mat-label>Skin Color</mat-label>
-                <mat-select [(ngModel)]="player.skin">
-                  <mat-option *ngFor="let s of skinColors" [value]="s.value">{{ s.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Skin Tone</mat-label>
-                <mat-select [(ngModel)]="player.skin_tone">
-                  <mat-option *ngFor="let s of skinTones" [value]="s.value">{{ s.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Head Type</mat-label>
-                <mat-select [(ngModel)]="player.head_type">
-                  <mat-option *ngFor="let h of headTypes" [value]="h.value">{{ h.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Hair Type</mat-label>
-                <mat-select [(ngModel)]="player.hair_type">
-                  <mat-option *ngFor="let h of hairTypes" [value]="h.value">{{ h.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Hair Color</mat-label>
-                <mat-select [(ngModel)]="player.hair">
-                  <mat-option *ngFor="let h of hairColors" [value]="h.value">{{ h.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Beard Type</mat-label>
-                <mat-select [(ngModel)]="player.beard_type">
-                  <mat-option *ngFor="let b of beardTypes" [value]="b.value">{{ b.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Boots Color</mat-label>
-                <mat-select [(ngModel)]="player.boots">
-                  <mat-option *ngFor="let b of bootsColors" [value]="b.value">{{ b.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Sleeves</mat-label>
-                <mat-select [(ngModel)]="player.mangas">
-                  <mat-option *ngFor="let s of sleeves" [value]="s.value">{{ s.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Gloves</mat-label>
-                <mat-select [(ngModel)]="player.guantes">
-                  <mat-option *ngFor="let g of gloves" [value]="g.value">{{ g.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-            </div>
           </mat-card-content>
         </mat-card>
       </div>
     </mat-tab>
 
-    <mat-tab label="DB Search" *ngIf="fileLoaded">
+    <!-- ═══ TAB 1 — DB BROWSER ════════════════════════════════ -->
+    <mat-tab label="DB Browser">
       <div class="editor-tab-content">
         <mat-card class="section-card team-editor-card">
-          <mat-card-header>
-            <mat-card-title>Database Browse</mat-card-title>
-          </mat-card-header>
           <mat-card-content>
-            <div class="team-actions db-search-actions">
-              <button mat-raised-button color="primary" class="team-action-btn" (click)="openFile()">
-                <mat-icon>folder_open</mat-icon>
-                LOAD PLAYERS.DAT
-              </button>
-              <button mat-stroked-button color="accent" class="team-action-btn" (click)="openTeamFile()">
-                <mat-icon>upload_file</mat-icon>
-                LOAD TEAMPLAYERLINKS.DAT
-              </button>
-              <button mat-stroked-button color="accent" class="team-action-btn" (click)="openTeamsDatFile()">
-                <mat-icon>groups</mat-icon>
-                LOAD TEAMS.DAT
-              </button>
-              <button mat-stroked-button color="primary" class="team-action-btn" (click)="exportDbBrowseCsv()" [disabled]="filteredDbBrowsePlayers.length === 0">
-                <mat-icon>download</mat-icon>
-                EXPORT CSV
-              </button>
-            </div>
 
-            <div class="db-search-filters">
+            <div class="db-search-filters db-search-filters--3col">
               <mat-form-field appearance="outline">
                 <mat-label>Filter by name or hex ID</mat-label>
                 <input matInput [(ngModel)]="dbSearchNameQuery" (ngModelChange)="resetDbBrowsePagination()">
@@ -292,6 +300,13 @@
                   </mat-option>
                 </mat-select>
               </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Team</mat-label>
+                <mat-select [(ngModel)]="dbSearchTeamQuery" (ngModelChange)="resetDbBrowsePagination()">
+                  <mat-option [value]="null">All teams</mat-option>
+                  <mat-option *ngFor="let team of teamOptions" [value]="team.label">{{ team.label }}</mat-option>
+                </mat-select>
+              </mat-form-field>
             </div>
 
             <div class="db-search-results">
@@ -299,10 +314,9 @@
                 <span>
                   {{ filteredDbBrowsePlayers.length }} players
                   <ng-container *ngIf="filteredDbBrowsePlayers.length > 0">
-                    | {{ dbBrowseRangeStart }}-{{ dbBrowseRangeEnd }}
+                    | {{ dbBrowseRangeStart }}–{{ dbBrowseRangeEnd }}
                   </ng-container>
                 </span>
-                <span *ngIf="!teamFileLoaded">Load team DB to show clubs.</span>
               </div>
 
               <div class="db-search-pagination" *ngIf="filteredDbBrowsePlayers.length > 0">
@@ -322,12 +336,11 @@
                       <div class="db-search-player-name">{{ player.name || 'Unnamed Player' }}</div>
                       <div class="db-search-player-meta">ID {{ player.hexId }} | OVR {{ player.ovr }} | {{ player.positionLabel }}</div>
                     </div>
-                    <button mat-stroked-button color="primary" (click)="openDbBrowsePlayer(player.index)">Open</button>
+                    <button mat-stroked-button color="primary" (click)="openDbBrowsePlayer(player.index)">Edit</button>
                   </div>
-
                   <div class="db-search-card-details">
                     <span>Nationality {{ getNationalityLabel(player.nationalityId) }}</span>
-                    <span>Clubs {{ player.clubs.length > 0 ? player.clubs.join(', ') : 'None loaded' }}</span>
+                    <span>Clubs {{ player.clubs.length > 0 ? player.clubs.join(', ') : 'None' }}</span>
                   </div>
                 </article>
               </div>
@@ -336,363 +349,321 @@
                 <p class="team-empty-state">No players match the current filters.</p>
               </ng-template>
             </div>
+
           </mat-card-content>
         </mat-card>
       </div>
     </mat-tab>
 
-    <mat-tab label="Teams.dat Edit">
-      <div class="editor-tab-content">
-        <mat-card class="section-card team-editor-card">
-          <mat-card-header>
-            <mat-card-title>Core Tactical Teams Editor</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="team-actions">
-              <button mat-raised-button color="primary" class="team-action-btn" (click)="openTeamsDatFile()">
-                <mat-icon>upload_file</mat-icon>
-                LOAD TEAMS.DAT
-              </button>
-              <button mat-raised-button color="accent" class="team-action-btn" (click)="saveTeamsDat()" [disabled]="!teamsDatLoaded">
-                <mat-icon>save</mat-icon>
-                SAVE TO FILE
-              </button>
-              <button mat-stroked-button color="accent" class="team-action-btn" (click)="exportTeamsDat()" [disabled]="!teamsDatLoaded">
-                <mat-icon>download</mat-icon>
-                EXPORT TEAMS.DAT
-              </button>
-            </div>
-
-            <p class="team-empty-state" *ngIf="teamsDatLoaded">Loaded {{ teamsDatService.teamCount }} teams from teams.dat.</p>
-
-            <mat-form-field appearance="outline" class="full-width-field team-jump-field">
-              <mat-label>Jump to team</mat-label>
-              <mat-select [(ngModel)]="selectedTeamsDatIndex" (ngModelChange)="loadTeamsDatRecord($event)" [disabled]="!teamsDatLoaded">
-                <mat-option [value]="null">-- Jump to Team --</mat-option>
-                <mat-option *ngFor="let option of teamsDatOptions" [value]="option.value">{{ option.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-
-            <p class="team-empty-state" *ngIf="!teamsDatLoaded">Load teams.dat to edit formation IDs, set-piece roles, IDs, ratings, and region.</p>
-
-            <section class="teams-dat-form" *ngIf="selectedTeamsDatRecord as record">
-              <div class="team-db-header">
-                <div>
-                  <div class="team-db-title">{{ record.teamLabel }}</div>
-                  <div class="team-db-subtitle">Block 0x{{ record.blockStart.toString(16).toUpperCase() }} | Index {{ record.index + 1 }}</div>
-                </div>
-                <span>{{ record.stadiumName || 'No stadium label' }}</span>
-              </div>
-
-              <div class="teams-dat-grid">
-                <mat-form-field appearance="outline">
-                  <mat-label>Team ID (0x00)</mat-label>
-                  <input matInput type="number" [ngModel]="record.teamId" (ngModelChange)="updateTeamsDatNumberField(record, 'teamId', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>League ID (0x04)</mat-label>
-                  <input matInput type="number" [ngModel]="record.leagueId" (ngModelChange)="updateTeamsDatNumberField(record, 'leagueId', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Rival ID (0x08)</mat-label>
-                  <input matInput type="number" [ngModel]="record.rivalId" (ngModelChange)="updateTeamsDatNumberField(record, 'rivalId', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>ATT (0x0C)</mat-label>
-                  <input matInput type="number" [ngModel]="record.attackOvr" (ngModelChange)="updateTeamsDatNumberField(record, 'attackOvr', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>MID (0x10)</mat-label>
-                  <input matInput type="number" [ngModel]="record.midfieldOvr" (ngModelChange)="updateTeamsDatNumberField(record, 'midfieldOvr', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>DEF (0x14)</mat-label>
-                  <input matInput type="number" [ngModel]="record.defenseOvr" (ngModelChange)="updateTeamsDatNumberField(record, 'defenseOvr', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Region (0xF8)</mat-label>
-                  <input matInput maxlength="2" [ngModel]="record.region" (ngModelChange)="updateTeamsDatRegion(record, $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline" class="teams-dat-wide-field">
-                  <mat-label>Formation (0xB8)</mat-label>
-                  <mat-select [ngModel]="record.formationId" (ngModelChange)="updateTeamsDatFormation(record, $event)">
-                    <mat-option *ngFor="let formation of formationIdOptions" [value]="formation.id">{{ formation.label }}</mat-option>
-                  </mat-select>
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Captain (0xCC)</mat-label>
-                  <input matInput type="number" [ngModel]="record.captainRole" (ngModelChange)="updateTeamsDatNumberField(record, 'captainRole', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Left Corner (0xD0)</mat-label>
-                  <input matInput type="number" [ngModel]="record.leftCornerRole" (ngModelChange)="updateTeamsDatNumberField(record, 'leftCornerRole', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Right Corner (0xD4)</mat-label>
-                  <input matInput type="number" [ngModel]="record.rightCornerRole" (ngModelChange)="updateTeamsDatNumberField(record, 'rightCornerRole', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Penalty (0xD8)</mat-label>
-                  <input matInput type="number" [ngModel]="record.penaltyRole" (ngModelChange)="updateTeamsDatNumberField(record, 'penaltyRole', $event)">
-                </mat-form-field>
-
-                <mat-form-field appearance="outline">
-                  <mat-label>Free Kick (0xDC)</mat-label>
-                  <input matInput type="number" [ngModel]="record.freeKickRole" (ngModelChange)="updateTeamsDatNumberField(record, 'freeKickRole', $event)">
-                </mat-form-field>
-              </div>
-            </section>
-          </mat-card-content>
-        </mat-card>
-      </div>
-    </mat-tab>
-
-    <mat-tab label="Team Edit">
-      <div class="editor-tab-content">
-        <mat-card class="section-card team-editor-card">
-          <mat-card-header>
-            <mat-card-title>Team String Search</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="team-actions">
-              <button mat-raised-button color="primary" class="team-action-btn" (click)="openTeamFile()">
-                <mat-icon>upload_file</mat-icon>
-                LOAD TEAMPLAYERLINKS.DAT
-              </button>
-              <button mat-raised-button color="accent" class="team-action-btn" (click)="saveTeam()" [disabled]="!teamFileLoaded">
-                <mat-icon>save</mat-icon>
-                SAVE TO FILE
-              </button>
-              <button mat-stroked-button color="accent" class="team-action-btn" (click)="exportTeamDatabase()" [disabled]="!teamFileLoaded">
-                <mat-icon>download</mat-icon>
-                EXPORT DB
-              </button>
-            </div>
-
-            <div class="team-search-shell">
-              <mat-form-field appearance="standard" class="team-search-field">
-                <mat-label>Find player ID (hex)</mat-label>
-                <input matInput [(ngModel)]="teamSearchQuery" maxlength="4" (keyup.enter)="searchTeams()">
-              </mat-form-field>
-              <button mat-icon-button color="primary" (click)="searchTeams()" [disabled]="!teamFileLoaded">
-                <mat-icon>search</mat-icon>
-              </button>
-            </div>
-
-            <mat-form-field appearance="outline" class="full-width-field team-jump-field">
-              <mat-label>Jump to team</mat-label>
-              <mat-select [(ngModel)]="selectedTeamOffset" (ngModelChange)="loadSingleTeam($event)" [disabled]="!teamFileLoaded">
-                <mat-option [value]="null">-- Jump to Team --</mat-option>
-                <mat-option *ngFor="let team of teamOptions" [value]="team.offset">{{ team.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-
-            <p class="team-empty-state" *ngIf="!teamFileLoaded">Load a team database to search by player ID and edit team slots.</p>
-            <p class="team-empty-state" *ngIf="teamFileLoaded && displayedTeams.length === 0">No team is currently selected.</p>
-
-            <div class="team-results" *ngIf="displayedTeams.length > 0">
-              <section class="team-db-card" *ngFor="let team of displayedTeams">
-                <div class="team-db-header">
-                  <div>
-                    <div class="team-db-title">{{ team.teamLabel }}</div>
-                    <div class="team-db-subtitle">Offset {{ team.offset }}</div>
-                  </div>
-                  <span>{{ team.playerCount }} used slots</span>
-                </div>
-
-                <div class="team-db-body">
-                  <div class="team-db-toolbar">
-                    <label class="team-player-count">
-                      <span>Players Count</span>
-                      <input type="number" [ngModel]="team.playerCount" (ngModelChange)="updateTeamPlayerCount(team, $event)">
-                    </label>
-
-                    <button mat-stroked-button color="accent" class="team-slot-action-btn" (click)="toggleTeamAddPicker(team)">
-                      <mat-icon>add</mat-icon>
-                      ADD PLAYER
-                    </button>
-                  </div>
-
-                  <div class="import-picker-strip" *ngIf="teamAddPickerOffset === team.offset">
-                    <div class="import-picker-grid">
-                      <mat-form-field appearance="outline">
-                        <mat-label>Search player</mat-label>
-                        <input matInput [(ngModel)]="teamAddSearchQuery">
-                      </mat-form-field>
-
-                      <mat-form-field appearance="outline">
-                        <mat-label>Select player</mat-label>
-                        <mat-select [(ngModel)]="selectedTeamAddPlayerIndex" (selectionChange)="addSelectedPlayerToTeam(team)">
-                          <mat-option *ngFor="let player of filteredTeamAddPlayers" [value]="player.index">
-                            {{ player.name || 'Unnamed Player' }} ({{ player.hexId }}) - {{ player.positionLabel }}
-                          </mat-option>
-                        </mat-select>
-                      </mat-form-field>
-                    </div>
-
-                    <p class="team-empty-state" *ngIf="filteredTeamAddPlayers.length === 0">No player matches the current search.</p>
-                  </div>
-
-                  <section class="team-formation" *ngIf="getFormationSketch(team) as formationSketch">
-                    <div class="team-formation-header">
-                      <div>
-                        <h3>First 11 Sketch</h3>
-                        <p>Uses teams.dat formation when available; otherwise shows the first 11 players in slot order on the pitch.</p>
-                      </div>
-                      <div class="team-formation-controls">
-                        <span>Formation {{ formationSketch.formation.label }}</span>
-                        <span>Source {{ formationSketch.sourceLabel }}</span>
-                        <span>{{ formationSketch.slots.length }}/11 placed</span>
-                      </div>
-                    </div>
-
-                    <div class="team-formation-layout" *ngIf="formationSketch.slots.length > 0; else emptySketch">
-                      <div class="team-pitch">
-                        <div
-                          class="team-pitch-slot"
-                          *ngFor="let slot of formationSketch.slots; let slotIndex = index; trackBy: trackSketchSlot"
-                          [style.top]="slot.top"
-                          [style.left]="slot.left">
-                          <div
-                            class="team-pitch-player"
-                            *ngIf="slot.player as player"
-                            [class.is-selected]="isSelectedTeamPlayer(team, player.slotIndex)"
-                            (click)="selectTeamPlayer(team, formationSketch, player.slotIndex)">
-                            <div class="team-pitch-shirt-marker">
-                              <span>{{ player.shirtNumber || '--' }}</span>
-                            </div>
-                            <div class="team-pitch-name">{{ player.playerName || player.playerIdHex }}</div>
-                            <div class="team-pitch-pos">{{ player.positionLabel }}</div>
-                          </div>
-
-                          <div class="team-pitch-empty-slot" *ngIf="!slot.player">{{ slot.targetPositionLabel }}</div>
-                        </div>
-                      </div>
-
-                      <aside class="team-reserve-panel">
-                        <div class="team-reserve-title">Other Players</div>
-
-                        <div class="team-reserve-list" *ngIf="formationSketch.reservePlayers.length > 0; else noReservePlayers">
-                          <div
-                            class="team-reserve-player"
-                            *ngFor="let player of formationSketch.reservePlayers; trackBy: trackSketchPlayer"
-                            [class.is-selected]="isSelectedTeamPlayer(team, player.slotIndex)"
-                            (click)="selectTeamPlayer(team, formationSketch, player.slotIndex)">
-                            <div class="team-pitch-shirt-marker team-pitch-shirt-marker--reserve">
-                              <span>{{ player.shirtNumber || '--' }}</span>
-                            </div>
-                            <div class="team-reserve-meta">
-                              <div class="team-reserve-name">{{ player.playerName || player.playerIdHex }}</div>
-                              <div class="team-reserve-pos">{{ player.positionLabel }}</div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <ng-template #noReservePlayers>
-                          <p class="team-formation-empty">No extra players available.</p>
-                        </ng-template>
-                      </aside>
-
-                      <aside class="team-player-editor" *ngIf="getSelectedTeamSlot(team) as selectedSlot; else selectPlayerHint">
-                        <div class="team-player-editor-header">
-                          <div>
-                            <div class="team-player-editor-title">Selected Player</div>
-                            <div class="team-player-editor-name">{{ selectedSlot.playerName || selectedSlot.playerIdHex }}</div>
-                          </div>
-
-                          <button mat-icon-button type="button" (click)="clearSelectedTeamPlayer()">
-                            <mat-icon>close</mat-icon>
-                          </button>
-                        </div>
-
-                        <div class="team-player-editor-id">Slot {{ selectedSlot.index + 1 }} | ID {{ selectedSlot.playerIdHex }}</div>
-
-                        <label class="team-player-editor-field">
-                          <span>Player ID</span>
-                          <input
-                            #selectedPlayerIdInput
-                            type="text"
-                            maxlength="4"
-                            [value]="selectedSlot.playerIdHex"
-                            (blur)="updateSelectedTeamPlayerId(team, selectedPlayerIdInput.value)"
-                            (keyup.enter)="updateSelectedTeamPlayerId(team, selectedPlayerIdInput.value)">
-                        </label>
-
-                        <div class="team-player-editor-grid">
-                          <label class="team-player-editor-field">
-                            <span>Shirt</span>
-                            <input
-                              #selectedShirtNumberInput
-                              type="number"
-                              [value]="selectedSlot.shirtNumber"
-                              (blur)="updateSelectedTeamShirtNumber(team, selectedShirtNumberInput.value)"
-                              (keyup.enter)="updateSelectedTeamShirtNumber(team, selectedShirtNumberInput.value)">
-                          </label>
-
-                          <label class="team-player-editor-field">
-                            <span>Position</span>
-                            <select [ngModel]="selectedSlot.position" (ngModelChange)="updateSelectedTeamPosition(team, $event)">
-                              <option *ngFor="let position of positions" [ngValue]="position.value">{{ position.label }}</option>
-                            </select>
-                          </label>
-                        </div>
-
-                        <button mat-stroked-button color="warn" class="team-player-editor-delete" (click)="deleteSelectedTeamPlayer(team)">
-                          <mat-icon>delete</mat-icon>
-                          REMOVE PLAYER
-                        </button>
-                      </aside>
-
-                      <ng-template #selectPlayerHint>
-                        <aside class="team-player-editor team-player-editor--empty">
-                          <div class="team-player-editor-title">Player Editor</div>
-                          <p class="team-formation-empty">Select a player on the pitch or reserve list to edit ID, shirt, position, or remove them.</p>
-                        </aside>
-                      </ng-template>
-                    </div>
-
-                    <ng-template #emptySketch>
-                      <p class="team-formation-empty">No players available for the first eleven sketch.</p>
-                    </ng-template>
-                  </section>
-                </div>
-              </section>
-            </div>
-          </mat-card-content>
-        </mat-card>
-      </div>
-    </mat-tab>
   </mat-tab-group>
 </div>
 
-<!-- Bottom Bar -->
-<div class="bottom-bar" *ngIf="selectedEditorTab === 0">
-  <button mat-raised-button color="primary" class="save-btn" (click)="save()">SAVE TO FILE</button>
-  <button mat-icon-button (click)="startDownload()">
-    <mat-icon>save_alt</mat-icon>
-  </button>
-</div>
+<!-- ─── PLAYER EDIT POPUP ─────────────────────────────────────── -->
+<div class="popup-overlay" *ngIf="showPlayerEditPopup" (click)="closePlayerEditPopup()">
+  <div class="popup-panel" (click)="$event.stopPropagation()">
 
-<!-- Compress Modal -->
-<div class="modal-overlay" *ngIf="showModal">
-  <mat-card class="compress-card">
-    <mat-card-header>
-      <mat-card-title>Compressing...</mat-card-title>
-    </mat-card-header>
-    <mat-card-content>
-      <p>Please wait <b>{{ modalTimer }}</b>s</p>
-      <mat-progress-bar mode="determinate" [value]="((20 - modalTimer) / 20) * 100"></mat-progress-bar>
-    </mat-card-content>
-  </mat-card>
+    <!-- Popup header -->
+    <div class="popup-header">
+      <div class="popup-header-info">
+        <div class="popup-player-name">{{ popupPlayer.name || 'Unnamed Player' }}</div>
+        <div class="popup-player-meta">ID {{ currentPopupHexId }}</div>
+      </div>
+      <div class="popup-ovr" [style.background]="popupOvrColor">{{ popupOvr }}</div>
+      <button mat-icon-button (click)="closePlayerEditPopup()">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <!-- Popup scrollable body -->
+    <div class="popup-body">
+
+      <!-- Navigation -->
+      <div class="nav-controls">
+        <div class="player-current-id">ID {{ currentPopupHexId }}</div>
+        <mat-form-field appearance="standard" class="player-id-field">
+          <mat-label>Hex ID</mat-label>
+          <input matInput [(ngModel)]="popupPlayerHexQuery" maxlength="4" (keyup.enter)="jumpPopupPlayerHex()">
+        </mat-form-field>
+        <button mat-icon-button (click)="jumpPopupPlayerHex()">
+          <mat-icon>tag</mat-icon>
+        </button>
+      </div>
+
+      <div class="search-row">
+        <mat-form-field appearance="standard" class="search-field">
+          <mat-label>Search player name or hex ID...</mat-label>
+          <input matInput [(ngModel)]="popupSearchQuery" (keyup.enter)="searchPopupPlayer()">
+        </mat-form-field>
+        <button mat-icon-button (click)="searchPopupPlayer()">
+          <mat-icon>search</mat-icon>
+        </button>
+      </div>
+
+      <!-- Team Slot (only when opened from Team Editor) -->
+      <mat-card class="section-card" *ngIf="popupTeamContext && popupTeamSlot as slot">
+        <mat-card-header>
+          <mat-card-title>Team Slot</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="popup-team-slot-grid">
+            <label class="team-player-editor-field">
+              <span>Player ID</span>
+              <input
+                #popupPlayerIdInput
+                type="text"
+                maxlength="4"
+                [value]="slot.playerIdHex"
+                (blur)="updatePopupTeamPlayerId(popupPlayerIdInput.value)"
+                (keyup.enter)="updatePopupTeamPlayerId(popupPlayerIdInput.value)">
+            </label>
+            <label class="team-player-editor-field">
+              <span>Shirt</span>
+              <input
+                #popupShirtInput
+                type="number"
+                [value]="slot.shirtNumber"
+                (blur)="updatePopupTeamShirt(popupShirtInput.value)"
+                (keyup.enter)="updatePopupTeamShirt(popupShirtInput.value)">
+            </label>
+            <label class="team-player-editor-field">
+              <span>Position</span>
+              <select [ngModel]="slot.position" (ngModelChange)="updatePopupTeamPosition($event)">
+                <option *ngFor="let position of positions" [ngValue]="position.value">{{ position.label }}</option>
+              </select>
+            </label>
+          </div>
+          <button mat-stroked-button color="warn" class="team-player-editor-delete" (click)="deletePopupTeamPlayer()">
+            <mat-icon>delete</mat-icon>
+            REMOVE FROM TEAM
+          </button>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Import -->
+      <div class="import-toolbar">
+        <button mat-stroked-button color="accent" class="import-trigger-btn" (click)="openImportPicker()">
+          <mat-icon>upload_file</mat-icon>
+          IMPORT
+        </button>
+      </div>
+
+      <div class="import-picker-strip" *ngIf="showImportPicker">
+        <div class="import-picker-grid">
+          <mat-form-field appearance="outline">
+            <mat-label>Search name</mat-label>
+            <input matInput [(ngModel)]="importSearchQuery">
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Select player</mat-label>
+            <mat-select [(ngModel)]="selectedImportedPlayer" (selectionChange)="importSelectedPlayer()">
+              <mat-option *ngFor="let sourcePlayer of filteredImportedPlayers" [value]="sourcePlayer">
+                {{ sourcePlayer.shortName }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <p class="team-empty-state" *ngIf="filteredImportedPlayers.length === 0">No imported names match the current search.</p>
+      </div>
+
+      <!-- General Information -->
+      <mat-card class="section-card">
+        <mat-card-header>
+          <mat-card-title>General Information</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <mat-form-field appearance="outline" class="full-width-field">
+            <mat-label>Full Name</mat-label>
+            <input matInput [(ngModel)]="popupPlayer.name" (ngModelChange)="updatePopupOVR()">
+          </mat-form-field>
+          <div class="stats-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Position</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.pos" (ngModelChange)="updatePopupOVR()">
+                <mat-option *ngFor="let p of positions" [value]="p.value">{{ p.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Foot</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.foot">
+                <mat-option *ngFor="let f of feet" [value]="f.value">{{ f.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Nationality</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.nat">
+                <mat-option *ngFor="let nationality of nationalities" [value]="nationality.value">
+                  {{ nationality.label }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Height (cm)</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.estatura">
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Weight (kg)</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.peso">
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Year</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.year">
+            </mat-form-field>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Performance Attributes -->
+      <mat-card class="section-card">
+        <mat-card-header>
+          <mat-card-title>Performance Attributes</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="stats-grid">
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>SPD</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.SPD" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>ACC</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.ACC" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>STR</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.STR" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>STA</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.STA" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>CON</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.CON" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>PAS</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.PAS" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>SHO</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.SHO" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>TAC</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.TAC" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>HEA</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.HEA" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>FK</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.FK" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>CRO</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.CRO" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Goalkeeper Stats -->
+      <mat-card class="section-card gk-card">
+        <mat-card-header>
+          <mat-card-title class="accent-title">Goalkeeper Stats</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="stats-grid">
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>GKS</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.GKS" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>GKH</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.GKH" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="stat-field">
+              <mat-label>GKP</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.GKP" (ngModelChange)="updatePopupOVR()">
+            </mat-form-field>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Appearance & Face -->
+      <mat-card class="section-card">
+        <mat-card-header>
+          <mat-card-title>Appearance &amp; Face</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="stats-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Skin Color</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.skin">
+                <mat-option *ngFor="let s of skinColors" [value]="s.value">{{ s.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Skin Tone</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.skin_tone">
+                <mat-option *ngFor="let s of skinTones" [value]="s.value">{{ s.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Head Type</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.head_type">
+                <mat-option *ngFor="let h of headTypes" [value]="h.value">{{ h.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Hair Type</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.hair_type">
+                <mat-option *ngFor="let h of hairTypes" [value]="h.value">{{ h.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Hair Color</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.hair">
+                <mat-option *ngFor="let h of hairColors" [value]="h.value">{{ h.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Beard Type</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.beard_type">
+                <mat-option *ngFor="let b of beardTypes" [value]="b.value">{{ b.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Boots Color</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.boots">
+                <mat-option *ngFor="let b of bootsColors" [value]="b.value">{{ b.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Sleeves</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.mangas">
+                <mat-option *ngFor="let s of sleeves" [value]="s.value">{{ s.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Gloves</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.guantes">
+                <mat-option *ngFor="let g of gloves" [value]="g.value">{{ g.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+    </div><!-- end popup-body -->
+
+    <!-- Popup footer -->
+    <div class="popup-footer">
+      <button mat-raised-button color="primary" class="popup-footer-save" (click)="applyPopupChanges()">
+        APPLY
+      </button>
+      <button mat-stroked-button (click)="closePlayerEditPopup()">CLOSE</button>
+    </div>
+
+  </div>
 </div>
