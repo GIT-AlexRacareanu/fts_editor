@@ -102,7 +102,6 @@ export class AppComponent implements OnInit {
   importSourceFileName = '';
   showImportPicker = false;
   importSearchQuery = '';
-  selectedImportedPlayer: ImportedPlayerRecord | null = null;
 
   // ─── DB Browser ──────────────────────────────────────────────
   dbSearchNameQuery = '';
@@ -127,6 +126,7 @@ export class AppComponent implements OnInit {
   private readonly teamPlayerNameCache = new Map<number, string | null>();
   private readonly dbBrowsePageSize = 25;
   private readonly importSearchPageSize = 50;
+  private readonly importSearchMinLength = 3;
 
   readonly positions = [
     { value: 0, label: 'GK' }, { value: 1, label: 'LB' }, { value: 2, label: 'RB' },
@@ -350,7 +350,6 @@ export class AppComponent implements OnInit {
     this.popupSearchQuery = '';
     this.popupTeamContext = teamContext;
     this.showImportPicker = false;
-    this.selectedImportedPlayer = null;
     this.importSearchQuery = '';
     this.updatePopupOVR();
     this.showPlayerEditPopup = true;
@@ -513,21 +512,23 @@ export class AppComponent implements OnInit {
     this.showImportPicker = !this.showImportPicker;
   }
 
-  importSelectedPlayer(): void {
-    if (!this.selectedImportedPlayer) {
-      return;
-    }
-
-    const record = this.selectedImportedPlayer;
+  importSelectedPlayer(record: ImportedPlayerRecord): void {
     this.popupPlayer = this.playerImportService.mapImportedPlayer(record, this.popupPlayer);
     this.updatePopupOVR();
-    this.selectedImportedPlayer = null;
     this.importSearchQuery = '';
     this.showImportPicker = false;
     alert(`Imported ${record.shortName} into player ${this.currentPopupHexId}.`);
   }
 
+  get canSearchImportedPlayers(): boolean {
+    return this.importSearchQuery.trim().length >= this.importSearchMinLength;
+  }
+
   get filteredImportedPlayers(): ImportedPlayerRecord[] {
+    if (!this.canSearchImportedPlayers) {
+      return [];
+    }
+
     return this.playerImportService
       .searchPlayers(this.importedPlayers, this.importSearchQuery)
       .slice(0, this.importSearchPageSize);
@@ -552,7 +553,6 @@ export class AppComponent implements OnInit {
       this.importedPlayers = importedPlayers;
       this.importSourceFileName = this.importAssetUrl;
       this.importSearchQuery = '';
-      this.selectedImportedPlayer = null;
       this.showImportPicker = showPicker;
 
       if (notify) {

@@ -221,6 +221,43 @@
   margin-top: 12px;
 }
 
+/* ── Import picker ─────────────────────────────────────────── */
+
+.import-result-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.import-result-item {
+  width: 100%;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: rgba(15, 22, 35, 0.92);
+  color: var(--text);
+  text-align: left;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.import-result-item:hover {
+  border-color: var(--accent);
+  background: rgba(20, 30, 48, 0.95);
+}
+
+.import-result-name {
+  font-weight: 700;
+}
+
+.import-result-meta {
+  font-size: 0.82rem;
+  color: #9db0be;
+}
+
 /* ── Team DB card ──────────────────────────────────────────── */
 
 .team-db-card {

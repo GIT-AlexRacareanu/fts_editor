@@ -453,16 +453,25 @@
             <mat-label>Search name</mat-label>
             <input matInput [(ngModel)]="importSearchQuery">
           </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Select player</mat-label>
-            <mat-select [(ngModel)]="selectedImportedPlayer" (selectionChange)="importSelectedPlayer()">
-              <mat-option *ngFor="let sourcePlayer of filteredImportedPlayers" [value]="sourcePlayer">
-                {{ sourcePlayer.shortName }}
-              </mat-option>
-            </mat-select>
-          </mat-form-field>
         </div>
-        <p class="team-empty-state" *ngIf="filteredImportedPlayers.length === 0">No imported names match the current search.</p>
+
+        <p class="team-empty-state" *ngIf="!canSearchImportedPlayers">Type at least 3 characters to search.</p>
+
+        <div class="import-result-list" *ngIf="canSearchImportedPlayers && filteredImportedPlayers.length > 0">
+          <button
+            type="button"
+            class="import-result-item"
+            *ngFor="let sourcePlayer of filteredImportedPlayers"
+            (click)="importSelectedPlayer(sourcePlayer)">
+            <span class="import-result-name">{{ sourcePlayer.shortName }}</span>
+            <span class="import-result-meta">
+              OVR {{ sourcePlayer.overall }}
+              <ng-container *ngIf="sourcePlayer.nationalityName"> • {{ sourcePlayer.nationalityName }}</ng-container>
+              <ng-container *ngIf="sourcePlayer.clubPosition"> • {{ sourcePlayer.clubPosition }}</ng-container>
+            </span>
+          </button>
+        </div>
+        <p class="team-empty-state" *ngIf="canSearchImportedPlayers && filteredImportedPlayers.length === 0">No imported names match the current search.</p>
       </div>
 
       <!-- General Information -->

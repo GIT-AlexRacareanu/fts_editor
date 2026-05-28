@@ -105,13 +105,25 @@ export class PlayerImportService {
   }
 
   searchPlayers(players: ImportedPlayerRecord[], query: string): ImportedPlayerRecord[] {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = this.normalizeKey(query);
 
     if (!normalizedQuery) {
       return players;
     }
 
-    return players.filter((player) => player.shortName.toLowerCase().includes(normalizedQuery));
+    const queryTokens = normalizedQuery.split(' ').filter((token) => token.length > 0);
+
+    return players.filter((player) => {
+      const searchableText = this.normalizeKey([
+        player.shortName,
+        player.playerId,
+        player.nationalityName,
+        player.clubPosition,
+        String(player.overall)
+      ].join(' '));
+
+      return queryTokens.every((token) => searchableText.includes(token));
+    });
   }
 
   mapImportedPlayer(source: ImportedPlayerRecord, currentPlayer: Player): Player {
