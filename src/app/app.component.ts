@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { FORMATION_PRESETS, FormationPreset } from './data/formations';
 import { NATIONALITY_NAMES_BY_ID, NATIONALITY_OPTIONS } from './data/nationalities';
 import { Player } from './models/player.model';
@@ -81,6 +81,8 @@ interface PopupTeamContext {
   templateUrl: './app.component.html'
 })
 export class AppComponent implements OnInit {
+  @ViewChild('popupNameInput') popupNameInput?: ElementRef<HTMLInputElement>;
+
   private readonly importAssetUrl = 'assets/import/fc-player-import.csv';
 
   // ─── App flow ────────────────────────────────────────────────
@@ -102,6 +104,7 @@ export class AppComponent implements OnInit {
   importSourceFileName = '';
   showImportPicker = false;
   importSearchQuery = '';
+  importStatusMessage = '';
 
   // ─── DB Browser ──────────────────────────────────────────────
   dbSearchNameQuery = '';
@@ -351,6 +354,7 @@ export class AppComponent implements OnInit {
     this.popupTeamContext = teamContext;
     this.showImportPicker = false;
     this.importSearchQuery = '';
+    this.importStatusMessage = '';
     this.updatePopupOVR();
     this.showPlayerEditPopup = true;
   }
@@ -358,6 +362,7 @@ export class AppComponent implements OnInit {
   closePlayerEditPopup(): void {
     this.showPlayerEditPopup = false;
     this.popupTeamContext = null;
+    this.importStatusMessage = '';
   }
 
   updatePopupOVR(): void {
@@ -517,7 +522,8 @@ export class AppComponent implements OnInit {
     this.updatePopupOVR();
     this.importSearchQuery = '';
     this.showImportPicker = false;
-    alert(`Imported ${record.shortName} into player ${this.currentPopupHexId}.`);
+    this.importStatusMessage = `Imported ${record.shortName} into player ${this.currentPopupHexId}.`;
+    this.focusPopupNameField();
   }
 
   get canSearchImportedPlayers(): boolean {
@@ -566,6 +572,13 @@ export class AppComponent implements OnInit {
         alert(message || fallbackMessage);
       }
     }
+  }
+
+  private focusPopupNameField(): void {
+    setTimeout(() => {
+      this.popupNameInput?.nativeElement.focus();
+      this.popupNameInput?.nativeElement.select();
+    });
   }
 
   // ─── DB Browser ───────────────────────────────────────────────

@@ -447,6 +447,8 @@
         </button>
       </div>
 
+      <p class="import-status" *ngIf="importStatusMessage">{{ importStatusMessage }}</p>
+
       <div class="import-picker-strip" *ngIf="showImportPicker">
         <div class="import-picker-grid">
           <mat-form-field appearance="outline">
@@ -482,7 +484,7 @@
         <mat-card-content>
           <mat-form-field appearance="outline" class="full-width-field">
             <mat-label>Full Name</mat-label>
-            <input matInput [(ngModel)]="popupPlayer.name" (ngModelChange)="updatePopupOVR()">
+            <input #popupNameInput matInput [(ngModel)]="popupPlayer.name" (ngModelChange)="updatePopupOVR()">
           </mat-form-field>
           <div class="stats-grid">
             <mat-form-field appearance="outline">
