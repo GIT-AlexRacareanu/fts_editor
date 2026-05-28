@@ -133,6 +133,12 @@ body {
   border: 1px solid #1d2d44 !important;
 }
 
+/* Keep Material overlays (mat-select, autocomplete, datepicker) above custom popup overlays. */
+.cdk-overlay-container,
+.cdk-global-overlay-wrapper {
+  z-index: 5000 !important;
+}
+
 /* Toolbar */
 .mat-toolbar {
   background: linear-gradient(135deg, #0d47a1 0%, #1565c0 50%, #0277bd 100%) !important;
