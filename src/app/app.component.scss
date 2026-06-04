@@ -926,6 +926,82 @@
   color: var(--accent) !important;
 }
 
+/* ── OVR tuning table ─────────────────────────────────────── */
+
+.ovr-tuning-table {
+  overflow-x: auto;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(15, 22, 35, 0.92);
+}
+
+.ovr-tuning-row {
+  display: grid;
+  grid-template-columns: 52px repeat(14, 56px) 64px;
+  gap: 6px;
+  align-items: center;
+  min-width: 980px;
+
+  & + .ovr-tuning-row {
+    margin-top: 6px;
+  }
+
+  &.ovr-tuning-row--header {
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(70, 90, 120, 0.5);
+  }
+}
+
+.ovr-tuning-role,
+.ovr-tuning-col {
+  text-align: center;
+  color: #9db0be;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ovr-tuning-role {
+  color: var(--accent);
+}
+
+.ovr-mini-input {
+  width: 100%;
+  min-height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(70, 90, 120, 0.7);
+  background: rgba(10, 16, 28, 0.95);
+  color: var(--text);
+  text-align: center;
+  font-weight: 700;
+  padding: 0 6px;
+}
+
+.ovr-tuning-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ovr-multiplier-field {
+  display: inline-grid;
+  gap: 4px;
+
+  span {
+    color: #9db0be;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .ovr-mini-input {
+    width: 100px;
+  }
+}
+
 /* ── Navigation / search rows ──────────────────────────────── */
 
 .nav-controls {
@@ -1132,6 +1208,40 @@
   @media (min-width: 500px) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+.popup-unmapped-hint {
+  margin: 0 0 10px;
+  color: #9db0be;
+  font-size: 0.78rem;
+}
+
+.popup-unmapped-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.popup-unmapped-item {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: rgba(15, 22, 35, 0.8);
+}
+
+.popup-unmapped-offset {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.74rem;
+  color: #cfd8dc;
+  font-weight: 700;
+}
+
+.popup-unmapped-value {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.72rem;
+  color: #9ef0bd;
 }
 
 .popup-footer {

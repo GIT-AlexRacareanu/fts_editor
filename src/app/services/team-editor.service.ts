@@ -259,10 +259,46 @@ export class TeamEditorService {
     const team = this.getTeam(offset);
 
     return this.updateSlot(offset, slotIndex, {
-      playerIdHex: this.formatPlayerId(EMPTY_PLAYER_ID),
+      playerIdHex: this.formatPlayerId(UNUSED_PLAYER_ID),
       shirtNumber: 0,
       position: 0
     }, Math.max(team.playerCount - 1, 0));
+  }
+
+  clearAllTeams(starterPositionsByTeamId?: ReadonlyMap<number, readonly number[]>): void {
+    const view = this.getView();
+    const ACTIVE_SLOTS = 18;
+
+    this.teamOptions.forEach(({ offset }) => {
+      const teamId = view.getUint32(offset, true);
+      const starterPositions = starterPositionsByTeamId?.get(teamId) ?? [];
+      view.setUint32(offset + 4, ACTIVE_SLOTS, true);
+
+      for (let index = 0; index < SLOT_COUNT; index++) {
+        const attrPtr = offset + ATTRIBUTES_OFFSET + index * 4;
+        const idPtr = offset + PLAYER_ID_OFFSET + index * 4;
+
+        if (index < ACTIVE_SLOTS) {
+          view.setUint16(idPtr, index, true);
+          view.setUint16(idPtr + 2, 0, true);
+        } else {
+          view.setUint16(idPtr, UNUSED_PLAYER_ID, true);
+          view.setUint16(idPtr + 2, UNUSED_PLAYER_ID, true);
+        }
+
+        const cleanPosition = index < 11
+          ? (starterPositions[index] ?? 0)
+          : (index === 11
+            ? 0
+            : (index < ACTIVE_SLOTS ? starterPositions[index - 10] ?? 0 : 0));
+        const starterFlag = index < 11 ? 1 : 0;
+
+        view.setUint8(attrPtr, 0);
+        view.setUint8(attrPtr + 1, cleanPosition);
+        view.setUint8(attrPtr + 2, starterFlag);
+        view.setUint8(attrPtr + 3, 0);
+      }
+    });
   }
 
   reorderUsedPlayers(offset: number, orderedSlotIndexes: number[], starterPositions: number[]): TeamRecord {
@@ -306,7 +342,9 @@ export class TeamEditorService {
     const view = new DataView(this.binaryData.buffer);
     const options: TeamOption[] = [];
 
-    for (let offset = TEAM_START_OFFSET; offset < this.binaryData.byteLength - TEAM_STRIDE; offset += TEAM_STRIDE) {
+    const lastTeamOffset = this.binaryData.byteLength - TEAM_STRIDE;
+
+    for (let offset = TEAM_START_OFFSET; offset <= lastTeamOffset; offset += TEAM_STRIDE) {
       const teamId = view.getUint32(offset, true);
       options.push({
         offset,

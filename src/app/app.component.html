@@ -54,6 +54,10 @@
                 <mat-icon>save</mat-icon>
                 SAVE
               </button>
+              <button mat-stroked-button color="warn" class="team-action-btn" (click)="clearTeamPlayerLinks()" title="Reset all team rosters to clean state">
+                <mat-icon>delete_sweep</mat-icon>
+                CLEAN START
+              </button>
             </div>
 
             <!-- Team selector -->
@@ -196,7 +200,7 @@
                             [class.is-swap-target]="swapModeActive && selectedTeamEditorOffset === team.offset && !isTeamPlayerSelected(team, player.slotIndex)"
                             (click)="selectTeamPlayerForAction(team, formationSketch, player.slotIndex)">
                             <div class="team-pitch-shirt-marker">
-                              <span>{{ player.shirtNumber || '--' }}</span>
+                              <span>{{ player.shirtNumber }}</span>
                             </div>
                             <div class="team-pitch-name">{{ player.playerName || player.playerIdHex }}</div>
                             <div class="team-pitch-pos">{{ player.positionLabel }}</div>
@@ -216,7 +220,7 @@
                             [class.is-swap-target]="swapModeActive && selectedTeamEditorOffset === team.offset && !isTeamPlayerSelected(team, player.slotIndex)"
                             (click)="selectTeamPlayerForAction(team, formationSketch, player.slotIndex)">
                             <div class="team-pitch-shirt-marker team-pitch-shirt-marker--reserve">
-                              <span>{{ player.shirtNumber || '--' }}</span>
+                              <span>{{ player.shirtNumber }}</span>
                             </div>
                             <div class="team-reserve-meta">
                               <div class="team-reserve-name">{{ player.playerName || player.playerIdHex }}</div>
@@ -445,6 +449,15 @@
           <mat-icon>upload_file</mat-icon>
           IMPORT
         </button>
+        <button
+          mat-raised-button
+          color="primary"
+          class="import-trigger-btn"
+          [disabled]="isBulkImporting"
+          (click)="bulkReplaceAllPlayersAndDownload()">
+          <mat-icon>{{ isBulkImporting ? 'hourglass_top' : 'library_add' }}</mat-icon>
+          {{ isBulkImporting ? 'REPLACING...' : 'BULK REPLACE ALL + DOWNLOAD' }}
+        </button>
       </div>
 
       <p class="import-status" *ngIf="importStatusMessage">{{ importStatusMessage }}</p>
@@ -514,6 +527,16 @@
             <mat-form-field appearance="outline">
               <mat-label>Weight (kg)</mat-label>
               <input matInput type="number" [(ngModel)]="popupPlayer.peso">
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Birth Day</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.birthDay">
+              <mat-hint>0x70..0x73</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Birth Month</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.birthMonth">
+              <mat-hint>0x74..0x77</mat-hint>
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>Year</mat-label>

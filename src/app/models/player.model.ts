@@ -5,6 +5,10 @@ export interface Player {
   nat: number;
   estatura: number;
   peso: number;
+  hiddenFromTransferMarket?: number;
+  isIconLegend?: number;
+  birthDay: number;
+  birthMonth: number;
   year: number;
   skin: number;
   skin_tone: number;

@@ -169,6 +169,26 @@ export class TeamsDatService {
     return this.formationIdByTeamId.get(teamId) ?? null;
   }
 
+  resetAllTeamRoles(playerId = 0): void {
+    if (!this.hasData) {
+      throw new Error('No teams.dat loaded');
+    }
+
+    const nextRolePlayerId = this.clamp(playerId, 0, 0xffffffff);
+    const bytes = this.getTeamDataOrThrow();
+    const view = this.getView(bytes);
+
+    for (let index = 0; index < this.records.length; index += 1) {
+      const blockStart = this.getBlockStart(index);
+      view.setUint32(blockStart + 0xCC, nextRolePlayerId, true);
+      view.setUint32(blockStart + 0xD0, nextRolePlayerId, true);
+      view.setUint32(blockStart + 0xD4, nextRolePlayerId, true);
+      view.setUint32(blockStart + 0xD8, nextRolePlayerId, true);
+      view.setUint32(blockStart + 0xDC, nextRolePlayerId, true);
+      this.records[index] = this.parseRecord(index, view, bytes);
+    }
+  }
+
   updateRecord(index: number, changes: Partial<Pick<TeamsDatRecord,
     'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' |
     'formationId' | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' |

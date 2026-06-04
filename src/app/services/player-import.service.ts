@@ -28,6 +28,25 @@ export interface ImportedPlayerRecord {
   goalkeepingHandling: number;
   goalkeepingPositioning: number;
   goalkeepingReflexes: number;
+  jumping: number;
+  finishing: number;
+  shotPower: number;
+  longShots: number;
+  volleys: number;
+  penalties: number;
+  curve: number;
+  agility: number;
+  balance: number;
+  ballControl: number;
+  shortPassing: number;
+  longPassing: number;
+  vision: number;
+  interceptions: number;
+  defAwareness: number;
+}
+
+export interface ImportPlayerMapOptions {
+  includeYear?: boolean;
 }
 
 const POSITION_MAP: Record<string, number> = {
@@ -65,6 +84,8 @@ const POSITION_MAP: Record<string, number> = {
 const NATIONALITY_ALIASES: Record<string, string> = {
   usa: 'united states',
   unitedstates: 'united states',
+  holland: 'netherlands',
+  'the netherlands': 'netherlands',
   'korea republic': 'south korea',
   'korea rp': 'south korea',
   'republic of korea': 'south korea',
@@ -89,7 +110,7 @@ export class PlayerImportService {
     }
 
     const [headerRow, ...dataRows] = rows;
-    const headerIndexes = new Map(headerRow.map((header, index) => [header.trim(), index]));
+    const headerIndexes = new Map(headerRow.map((header, index) => [this.normalizeKey(header), index]));
 
     return dataRows
       .filter((row) => row.some((value) => value.trim().length > 0))
@@ -126,30 +147,44 @@ export class PlayerImportService {
     });
   }
 
-  mapImportedPlayer(source: ImportedPlayerRecord, currentPlayer: Player): Player {
+  mapImportedPlayer(
+    source: ImportedPlayerRecord,
+    currentPlayer: Player,
+    options: ImportPlayerMapOptions = {}
+  ): Player {
+    const { includeYear = true } = options;
+    const shooting = source.shooting;
+    const freeKick = source.skillFkAccuracy;
+    const crossing = source.attackingCrossing;
+    const dribblingControl = source.dribbling;
+    const heading = source.attackingHeadingAccuracy;
+    const passing = source.passing;
+    const tackling = this.averageStats(source.defendingSlidingTackle, source.defendingStandingTackle);
+
     return {
       ...currentPlayer,
-      name: source.shortName,
+      name: this.toGameName(source.shortName, currentPlayer.name),
       pos: this.mapPosition(source, currentPlayer.pos),
       foot: this.mapFoot(source.preferredFoot, currentPlayer.foot),
       nat: this.mapNationality(source.nationalityName, currentPlayer.nat),
       estatura: this.clampByte(source.heightCm, currentPlayer.estatura),
       peso: this.clampByte(source.weightKg, currentPlayer.peso),
-      year: this.mapYear(source.age, currentPlayer.year),
+      hiddenFromTransferMarket: 0,
+      isIconLegend: 0,
+      birthDay: 1,
+      birthMonth: 1,
+      year: includeYear ? this.mapYear(source.age, currentPlayer.year) : currentPlayer.year,
       ACC: this.clampStat(source.movementAcceleration, currentPlayer.ACC),
       SPD: this.clampStat(source.movementSprintSpeed, currentPlayer.SPD),
       STA: this.clampStat(source.powerStamina, currentPlayer.STA),
       STR: this.clampStat(source.powerStrength, currentPlayer.STR),
-      TAC: this.clampStat(
-        Math.round((source.defendingStandingTackle + source.defendingSlidingTackle) / 2),
-        currentPlayer.TAC
-      ),
-      CON: this.clampStat(source.dribbling, currentPlayer.CON),
-      SHO: this.clampStat(source.shooting, currentPlayer.SHO),
-      CRO: this.clampStat(source.attackingCrossing, currentPlayer.CRO),
-      FK: this.clampStat(source.skillFkAccuracy, currentPlayer.FK),
-      PAS: this.clampStat(source.passing, currentPlayer.PAS),
-      HEA: this.clampStat(source.attackingHeadingAccuracy, currentPlayer.HEA),
+      TAC: this.clampStat(tackling, currentPlayer.TAC),
+      CON: this.clampStat(dribblingControl, currentPlayer.CON),
+      SHO: this.clampStat(shooting, currentPlayer.SHO),
+      CRO: this.clampStat(crossing, currentPlayer.CRO),
+      FK: this.clampStat(freeKick, currentPlayer.FK),
+      PAS: this.clampStat(passing, currentPlayer.PAS),
+      HEA: this.clampStat(heading, currentPlayer.HEA),
       GKS: this.clampStat(source.goalkeepingReflexes, currentPlayer.GKS),
       GKH: this.clampStat(source.goalkeepingHandling, currentPlayer.GKH),
       GKP: this.clampStat(source.goalkeepingPositioning, currentPlayer.GKP)
@@ -157,59 +192,117 @@ export class PlayerImportService {
   }
 
   private toImportedPlayerRecord(row: string[], headerIndexes: Map<string, number>): ImportedPlayerRecord | null {
-    const shortName = this.getField(row, headerIndexes, 'short_name');
+    const shortName = this.getFieldByAliases(row, headerIndexes, ['short_name', 'name']);
 
     if (!shortName) {
       return null;
     }
 
+    const finishing = this.getNumberFieldByAliases(row, headerIndexes, ['finishing']);
+    const shotPower = this.getNumberFieldByAliases(row, headerIndexes, ['shot_power', 'shot power']);
+    const longShots = this.getNumberFieldByAliases(row, headerIndexes, ['long_shots', 'long shots']);
+    const volleys = this.getNumberFieldByAliases(row, headerIndexes, ['volleys']);
+    const penalties = this.getNumberFieldByAliases(row, headerIndexes, ['penalties']);
+    const shooting = this.averageNonZero([
+      this.getNumberFieldByAliases(row, headerIndexes, ['shooting']),
+      finishing,
+      shotPower,
+      longShots,
+      volleys,
+      penalties
+    ]);
+
+    const shortPassing = this.getNumberFieldByAliases(row, headerIndexes, ['short_passing', 'short passing']);
+    const longPassing = this.getNumberFieldByAliases(row, headerIndexes, ['long_passing', 'long passing']);
+    const vision = this.getNumberFieldByAliases(row, headerIndexes, ['vision']);
+    const passing = this.averageNonZero([
+      this.getNumberFieldByAliases(row, headerIndexes, ['passing']),
+      shortPassing,
+      longPassing,
+      vision
+    ]);
+
+    const headingAccuracy = this.getNumberFieldByAliases(row, headerIndexes, ['attacking_heading_accuracy', 'heading_accuracy', 'heading accuracy']);
+    const curve = this.getNumberFieldByAliases(row, headerIndexes, ['curve']);
+    const agility = this.getNumberFieldByAliases(row, headerIndexes, ['agility']);
+    const balance = this.getNumberFieldByAliases(row, headerIndexes, ['balance']);
+    const ballControl = this.getNumberFieldByAliases(row, headerIndexes, ['ball_control', 'ball control']);
+    const interceptions = this.getNumberFieldByAliases(row, headerIndexes, ['interceptions']);
+    const defAwareness = this.getNumberFieldByAliases(row, headerIndexes, ['def_awareness', 'def awareness']);
+
     return {
-      playerId: this.getField(row, headerIndexes, 'player_id'),
+      playerId: this.getFieldByAliases(row, headerIndexes, ['player_id']),
       shortName,
-      overall: this.getNumberField(row, headerIndexes, 'overall'),
-      age: this.getNumberField(row, headerIndexes, 'age'),
-      heightCm: this.getNumberField(row, headerIndexes, 'height_cm'),
-      weightKg: this.getNumberField(row, headerIndexes, 'weight_kg'),
-      clubPosition: this.getField(row, headerIndexes, 'club_position'),
-      nationalityName: this.getField(row, headerIndexes, 'nationality_name'),
-      preferredFoot: this.getField(row, headerIndexes, 'preferred_foot'),
-      shooting: this.getNumberField(row, headerIndexes, 'shooting'),
-      passing: this.getNumberField(row, headerIndexes, 'passing'),
-      dribbling: this.getNumberField(row, headerIndexes, 'dribbling'),
-      attackingCrossing: this.getNumberField(row, headerIndexes, 'attacking_crossing'),
-      attackingHeadingAccuracy: this.getNumberField(row, headerIndexes, 'attacking_heading_accuracy'),
-      skillFkAccuracy: this.getNumberField(row, headerIndexes, 'skill_fk_accuracy'),
-      movementAcceleration: this.getNumberField(row, headerIndexes, 'movement_acceleration'),
-      movementSprintSpeed: this.getNumberField(row, headerIndexes, 'movement_sprint_speed'),
-      powerStamina: this.getNumberField(row, headerIndexes, 'power_stamina'),
-      powerStrength: this.getNumberField(row, headerIndexes, 'power_strength'),
-      defendingStandingTackle: this.getNumberField(row, headerIndexes, 'defending_standing_tackle'),
-      defendingSlidingTackle: this.getNumberField(row, headerIndexes, 'defending_sliding_tackle'),
-      goalkeepingDiving: this.getNumberField(row, headerIndexes, 'goalkeeping_diving'),
-      goalkeepingHandling: this.getNumberField(row, headerIndexes, 'goalkeeping_handling'),
-      goalkeepingPositioning: this.getNumberField(row, headerIndexes, 'goalkeeping_positioning'),
-      goalkeepingReflexes: this.getNumberField(row, headerIndexes, 'goalkeeping_reflexes')
+      overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall']),
+      age: this.getNumberFieldByAliases(row, headerIndexes, ['age']),
+      heightCm: this.getNumberFieldByAliases(row, headerIndexes, ['height_cm', 'height']),
+      weightKg: this.getNumberFieldByAliases(row, headerIndexes, ['weight_kg', 'weight']),
+      clubPosition: this.getFieldByAliases(row, headerIndexes, ['club_position', 'position']),
+      nationalityName: this.getFieldByAliases(row, headerIndexes, ['nationality_name', 'nation']),
+      preferredFoot: this.getFieldByAliases(row, headerIndexes, ['preferred_foot', 'preferred foot']),
+      shooting,
+      passing,
+      dribbling: this.getNumberFieldByAliases(row, headerIndexes, ['dribbling']),
+      attackingCrossing: this.getNumberFieldByAliases(row, headerIndexes, ['attacking_crossing', 'crossing']),
+      attackingHeadingAccuracy: headingAccuracy,
+      skillFkAccuracy: this.getNumberFieldByAliases(row, headerIndexes, ['skill_fk_accuracy', 'free_kick_accuracy', 'free kick accuracy']),
+      movementAcceleration: this.getNumberFieldByAliases(row, headerIndexes, ['movement_acceleration', 'acceleration']),
+      movementSprintSpeed: this.getNumberFieldByAliases(row, headerIndexes, ['movement_sprint_speed', 'sprint_speed', 'sprint speed']),
+      powerStamina: this.getNumberFieldByAliases(row, headerIndexes, ['power_stamina', 'stamina']),
+      powerStrength: this.getNumberFieldByAliases(row, headerIndexes, ['power_strength', 'strength']),
+      defendingStandingTackle: this.getNumberFieldByAliases(row, headerIndexes, ['defending_standing_tackle', 'standing_tackle', 'standing tackle']),
+      defendingSlidingTackle: this.getNumberFieldByAliases(row, headerIndexes, ['defending_sliding_tackle', 'sliding_tackle', 'sliding tackle']),
+      goalkeepingDiving: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_diving', 'gk_diving', 'gk diving']),
+      goalkeepingHandling: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_handling', 'gk_handling', 'gk handling']),
+      goalkeepingPositioning: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_positioning', 'gk_positioning', 'gk positioning']),
+      goalkeepingReflexes: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_reflexes', 'gk_reflexes', 'gk reflexes']),
+      jumping: this.getNumberFieldByAliases(row, headerIndexes, ['jumping']),
+      finishing,
+      shotPower,
+      longShots,
+      volleys,
+      penalties,
+      curve,
+      agility,
+      balance,
+      ballControl,
+      shortPassing,
+      longPassing,
+      vision,
+      interceptions,
+      defAwareness
     };
   }
 
-  private getField(row: string[], headerIndexes: Map<string, number>, fieldName: string): string {
-    const columnIndex = headerIndexes.get(fieldName);
+  private getFieldByAliases(row: string[], headerIndexes: Map<string, number>, fieldNames: string[]): string {
+    for (const fieldName of fieldNames) {
+      const columnIndex = headerIndexes.get(this.normalizeKey(fieldName));
 
-    if (columnIndex === undefined) {
-      return '';
+      if (columnIndex !== undefined) {
+        return (row[columnIndex] ?? '').trim();
+      }
     }
 
-    return (row[columnIndex] ?? '').trim();
+    return '';
   }
 
-  private getNumberField(row: string[], headerIndexes: Map<string, number>, fieldName: string): number {
-    const value = this.getField(row, headerIndexes, fieldName);
-    const parsed = Number(value);
+  private getNumberFieldByAliases(row: string[], headerIndexes: Map<string, number>, fieldNames: string[]): number {
+    const value = this.getFieldByAliases(row, headerIndexes, fieldNames);
+    const parsed = this.parseLooseNumber(value);
 
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
   private parseCsvRows(csvText: string): string[][] {
+    const delimiter = this.detectDelimiter(csvText);
+
+    if (delimiter === '\t') {
+      return csvText
+        .split(/\r?\n/)
+        .filter((line) => line.length > 0)
+        .map((line) => line.split('\t'));
+    }
+
     const rows: string[][] = [];
     let currentRow: string[] = [];
     let currentField = '';
@@ -229,7 +322,7 @@ export class PlayerImportService {
         continue;
       }
 
-      if (char === ',' && !insideQuotes) {
+      if (char === delimiter && !insideQuotes) {
         currentRow.push(currentField);
         currentField = '';
         continue;
@@ -256,6 +349,95 @@ export class PlayerImportService {
     }
 
     return rows;
+  }
+
+  private detectDelimiter(csvText: string): string {
+    const firstLine = csvText.split(/\r?\n/, 1)[0] ?? '';
+    const commaCount = (firstLine.match(/,/g) ?? []).length;
+    const tabCount = (firstLine.match(/\t/g) ?? []).length;
+    const semicolonCount = (firstLine.match(/;/g) ?? []).length;
+
+    if (tabCount >= commaCount && tabCount >= semicolonCount && tabCount > 0) {
+      return '\t';
+    }
+
+    if (semicolonCount > commaCount && semicolonCount > 0) {
+      return ';';
+    }
+
+    return ',';
+  }
+
+  private parseLooseNumber(value: string): number {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return 0;
+    }
+
+    const directParsed = Number(trimmed);
+
+    if (Number.isFinite(directParsed)) {
+      return directParsed;
+    }
+
+    const match = trimmed.match(/-?\d+(?:\.\d+)?/);
+
+    if (!match) {
+      return 0;
+    }
+
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private averageNonZero(values: number[]): number {
+    const nonZeroValues = values.filter((value) => Number.isFinite(value) && value > 0);
+
+    if (nonZeroValues.length === 0) {
+      return 0;
+    }
+
+    return Math.round(nonZeroValues.reduce((total, value) => total + value, 0) / nonZeroValues.length);
+  }
+
+  private averageStats(...values: number[]): number {
+    if (values.length === 0) {
+      return 0;
+    }
+
+    const fallback = values[values.length - 1];
+    const explicitValues = values.slice(0, -1).filter((value) => Number.isFinite(value) && value > 0);
+
+    if (explicitValues.length === 0) {
+      return fallback;
+    }
+
+    return Math.round(explicitValues.reduce((total, value) => total + value, 0) / explicitValues.length);
+  }
+
+  private toGameName(sourceName: string, fallback: string): string {
+    const normalized = sourceName.trim();
+
+    if (!normalized) {
+      return fallback;
+    }
+
+    // Keep names that are already in abbreviated in-game style.
+    if (/^[A-Za-z]\.\s+/.test(normalized)) {
+      return normalized;
+    }
+
+    const parts = normalized.split(/\s+/).filter((part) => part.length > 0);
+
+    if (parts.length < 2) {
+      return normalized;
+    }
+
+    const firstName = parts[0];
+    const surname = parts.slice(1).join(' ');
+
+    return `${firstName[0].toUpperCase()}. ${surname}`;
   }
 
   private mapPosition(source: ImportedPlayerRecord, fallback: number): number {
@@ -355,10 +537,10 @@ export class PlayerImportService {
 
   private clampStat(value: number, fallback: number): number {
     if (!Number.isFinite(value)) {
-      return fallback;
+      return Math.max(1, Math.min(99, Math.round(fallback)));
     }
 
-    return Math.max(0, Math.min(99, Math.round(value)));
+    return Math.max(1, Math.min(99, Math.round(value)));
   }
 
   private clampByte(value: number, fallback: number): number {

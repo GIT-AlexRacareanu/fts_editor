@@ -16,37 +16,30 @@ export const OFFSET_MAP: Record<string, number> = {
 const STAT_ORDER = ['STR', 'STA', 'SPD', 'ACC', 'CON', 'PAS', 'CRO', 'SHO', 'HEA', 'TAC', 'FK', 'GKS', 'GKH', 'GKP'] as const;
 type Stat = typeof STAT_ORDER[number];
 
-const GK_WEIGHTS = [1, 1, 3, 2, 2, 1, 0, 0, 0, 1, 1, 10, 10, 10];
-const DEF_WEIGHTS = [5, 2, 6, 2, 5, 4, 1, 1, 9, 9, 0, 0, 0, 0];
-const MID_WEIGHTS = [4, 2, 3, 2, 4, 8, 7, 3, 3, 4, 0, 0, 0, 0];
-const ATT_WEIGHTS = [4, 2, 6, 2, 6, 4, 2, 10, 6, 2, 0, 0, 0, 0];
+type OvrCategory = 'gk' | 'def' | 'mid' | 'att';
 
-const GK_BONUS = 6;
-const DEF_BONUS = 6;
-const MID_BONUS = 10;
-const ATT_BONUS = 6;
+interface OvrProfile {
+  weights: number[];
+  bonus: number;
+}
 
-const RATING_MULTIPLIER = 0x3f866666;
+export interface ReplacePlayersOptions {
+  templatePlayerIndex?: number;
+}
+
+const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
+  gk: { weights: [2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 10, 10, 10], bonus: 10 },
+  def: { weights: [5, 0, 2, 0, 3, 2, 1, 1, 5, 8, 0, 0, 0, 0], bonus: 15 },
+  mid: { weights: [5, 8, 2, 6, 15, 20, 15, 5, 0, 8, 0, 0, 0, 0], bonus: 10 },
+  att: { weights: [5, 1, 6, 2, 10, 4, 6, 20, 5, 0, 0, 0, 0, 0], bonus: 10 }
+};
+
+const RATING_MULTIPLIER_BITS = 0x3f833333;
 
 function ieee754ToFloat(bits: number): number {
   const buf = new ArrayBuffer(4);
   new DataView(buf).setUint32(0, bits, false);
   return new DataView(buf).getFloat32(0, false);
-}
-
-const IN_R1 = ieee754ToFloat(RATING_MULTIPLIER);
-
-function getWeightsAndBonus(posCategory: number): { weights: number[]; bonus: number } {
-  switch (posCategory) {
-    case 0:
-      return { weights: GK_WEIGHTS, bonus: GK_BONUS };
-    case 1:
-      return { weights: DEF_WEIGHTS, bonus: DEF_BONUS };
-    case 2:
-      return { weights: MID_WEIGHTS, bonus: MID_BONUS };
-    default:
-      return { weights: ATT_WEIGHTS, bonus: ATT_BONUS };
-  }
 }
 
 function getPositionCategory(position: number): number {
@@ -68,23 +61,42 @@ function getPositionCategory(position: number): number {
 @Injectable({ providedIn: 'root' })
 export class PlayerService {
   private readonly storageKey = 'players-dat';
+  private readonly playerIdOffset = 0x0c;
+  private readonly hiddenFromTransferMarketOffset = 0x6e;
+  private readonly isIconLegendOffset = 0x6f;
+  private readonly birthDayOffset = 0x70;
+  private readonly birthMonthOffset = 0x74;
+  private readonly playerStride = 112;
+  private readonly yearOffset = 120;
+  private readonly totalPlayersOffset = 8;
 
   binaryData: Uint8Array | null = null;
   fileHandle: any = null;
 
+  private readonly profiles: Record<OvrCategory, OvrProfile> = DEFAULT_PROFILES;
+  private readonly ratingMultiplier = ieee754ToFloat(RATING_MULTIPLIER_BITS);
+
   constructor(private readonly fileHandleStorage: FileHandleStorageService) {}
 
   formatPlayerId(index: number): string {
-    return index.toString(16).toUpperCase().padStart(4, '0');
+    return this.getStoredPlayerId(index).toString(16).toUpperCase().padStart(4, '0');
   }
 
   parsePlayerId(value: string): number {
     const parsed = Number.parseInt(value.trim(), 16);
-    if (Number.isNaN(parsed) || parsed < 0 || parsed >= this.totalPlayers) {
+    if (Number.isNaN(parsed) || parsed < 0 || parsed > 0xffff) {
       return -1;
     }
 
-    return parsed;
+    const total = this.totalPlayers;
+
+    for (let index = 0; index < total; index += 1) {
+      if (this.getStoredPlayerId(index) === parsed) {
+        return index;
+      }
+    }
+
+    return -1;
   }
 
   getPlayerNameByIndex(index: number): string | null {
@@ -95,9 +107,85 @@ export class PlayerService {
     return this.readPlayer(index).name || null;
   }
 
+  getStoredPlayerId(index: number): number {
+    if (!this.binaryData || index < 0 || index >= this.totalPlayers) {
+      return index;
+    }
+
+    const view = new DataView(this.binaryData.buffer);
+    const base = index * this.playerStride;
+    return view.getUint16(base + this.playerIdOffset, true);
+  }
+
   get totalPlayers(): number {
     if (!this.binaryData) return 0;
-    return new DataView(this.binaryData.buffer).getUint16(8, true);
+
+    const headerTotal = new DataView(this.binaryData.buffer).getUint16(this.totalPlayersOffset, true);
+
+    if (this.binaryData.byteLength < this.yearOffset + 2) {
+      return headerTotal;
+    }
+
+    const derivedTotal = Math.floor((this.binaryData.byteLength - (this.yearOffset + 2)) / this.playerStride) + 1;
+
+    return Math.max(headerTotal, derivedTotal);
+  }
+
+  replacePlayers(
+    players: Player[],
+    options: ReplacePlayersOptions = {}
+  ): { replaced: number; previousTotal: number; nextTotal: number } {
+    if (!this.binaryData) {
+      throw new Error('No file loaded');
+    }
+
+    const previousTotal = this.totalPlayers;
+    const templateRecord = this.captureTemplateRecord(options.templatePlayerIndex, previousTotal);
+    const replaced = Math.min(players.length, 0xffff);
+    const nextTotal = replaced;
+    const requiredLength = nextTotal > 0
+      ? (nextTotal - 1) * this.playerStride + this.yearOffset + 2
+      : this.totalPlayersOffset + 2;
+
+    if (this.binaryData.byteLength !== requiredLength) {
+      const nextBinaryData = new Uint8Array(requiredLength);
+      const copyLength = Math.min(this.binaryData.byteLength, requiredLength);
+      nextBinaryData.set(this.binaryData.subarray(0, copyLength));
+      this.binaryData = nextBinaryData;
+    }
+
+    const headerView = new DataView(this.binaryData.buffer);
+    headerView.setUint16(this.totalPlayersOffset, nextTotal, true);
+
+    if (templateRecord) {
+      for (let index = 0; index < replaced; index++) {
+        this.seedPlayerRecord(index, templateRecord);
+      }
+    }
+
+    for (let index = 0; index < replaced; index++) {
+      this.writePlayer(index, players[index]);
+    }
+
+    return { replaced, previousTotal, nextTotal };
+  }
+
+  private captureTemplateRecord(templatePlayerIndex: number | undefined, previousTotal: number): Uint8Array | null {
+    if (templatePlayerIndex === undefined || templatePlayerIndex < 0 || templatePlayerIndex >= previousTotal || !this.binaryData) {
+      return null;
+    }
+
+    const templateBase = templatePlayerIndex * this.playerStride;
+    return new Uint8Array(this.binaryData.slice(templateBase, templateBase + this.playerStride));
+  }
+
+  private seedPlayerRecord(index: number, templateRecord: Uint8Array): void {
+    if (!this.binaryData) {
+      return;
+    }
+
+    const targetBase = index * this.playerStride;
+    this.binaryData.set(templateRecord, targetBase);
   }
 
   async loadFile(fileHandle?: any): Promise<string> {
@@ -174,8 +262,12 @@ export class PlayerService {
     const base = idx * 112;
     const nameArr = new Uint8Array(this.binaryData!.buffer.slice(base + 48, base + 80));
     const name = new TextDecoder('utf-16').decode(nameArr).replace(/\0/g, '').trim();
+    const hiddenFromTransferMarket = view.getUint8(base + this.hiddenFromTransferMarketOffset);
+    const isIconLegend = view.getUint8(base + this.isIconLegendOffset);
+    const birthDay = view.getUint32(base + this.birthDayOffset, true);
+    const birthMonth = view.getUint32(base + this.birthMonthOffset, true);
     const year = view.getUint16(base + 120, true);
-    const player: any = { name, year };
+    const player: any = { name, hiddenFromTransferMarket, isIconLegend, birthDay, birthMonth, year };
     for (const key of Object.keys(OFFSET_MAP)) {
       player[key] = view.getUint8(base + OFFSET_MAP[key]);
     }
@@ -188,6 +280,11 @@ export class PlayerService {
     for (let i = 0; i < 16; i++) {
       view.setUint16(base + 48 + i * 2, i < player.name.length ? player.name.charCodeAt(i) : 0, true);
     }
+    view.setUint16(base + this.playerIdOffset, idx, true);
+    view.setUint8(base + this.hiddenFromTransferMarketOffset, player.hiddenFromTransferMarket ?? 0);
+    view.setUint8(base + this.isIconLegendOffset, player.isIconLegend ?? 0);
+    view.setUint32(base + this.birthDayOffset, player.birthDay, true);
+    view.setUint32(base + this.birthMonthOffset, player.birthMonth, true);
     for (const key of Object.keys(OFFSET_MAP)) {
       view.setUint8(base + OFFSET_MAP[key], (player as any)[key]);
     }
@@ -212,7 +309,7 @@ export class PlayerService {
 
   calculateOVR(player: Player): number {
     const posCategory = getPositionCategory(player.pos);
-    const { weights, bonus } = getWeightsAndBonus(posCategory);
+    const { weights, bonus } = this.getProfileByPositionCategory(posCategory);
 
     let weightedSum = 0;
     let totalWeight = 0;
@@ -227,9 +324,28 @@ export class PlayerService {
       }
     }
 
-    const raw = Math.floor((bonus * maxStat + weightedSum) * IN_R1 / (bonus + totalWeight));
+    const denominator = bonus + totalWeight;
+
+    if (denominator <= 0) {
+      return 0;
+    }
+
+    const raw = Math.floor((bonus * maxStat + weightedSum) * this.ratingMultiplier / denominator);
 
     return Math.max(0, Math.min(100, raw));
+  }
+
+  private getProfileByPositionCategory(posCategory: number): OvrProfile {
+    switch (posCategory) {
+      case 0:
+        return this.profiles.gk;
+      case 1:
+        return this.profiles.def;
+      case 2:
+        return this.profiles.mid;
+      default:
+        return this.profiles.att;
+    }
   }
 
   private async hasReadPermission(fileHandle: any): Promise<boolean> {

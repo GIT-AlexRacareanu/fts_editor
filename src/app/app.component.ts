@@ -105,6 +105,7 @@ export class AppComponent implements OnInit {
   showImportPicker = false;
   importSearchQuery = '';
   importStatusMessage = '';
+  isBulkImporting = false;
 
   // ─── DB Browser ──────────────────────────────────────────────
   dbSearchNameQuery = '';
@@ -574,6 +575,64 @@ export class AppComponent implements OnInit {
     }
   }
 
+  async bulkReplaceAllPlayersAndDownload(): Promise<void> {
+    if (!this.fileLoaded) {
+      alert('Load PLAYERS.DAT first.');
+      return;
+    }
+
+    if (this.isBulkImporting) {
+      return;
+    }
+
+    if (!this.importSourceLoaded) {
+      await this.loadImportSource(false, true);
+    }
+
+    if (!this.importSourceLoaded) {
+      return;
+    }
+
+    const sourcePlayers = this.importedPlayers;
+    const shouldContinue = confirm(
+      `This will fully replace PLAYERS.DAT players with ${sourcePlayers.length} imported players from ${this.importSourceFileName || this.importAssetUrl}, update the player count header, and download players.dat. Continue?`
+    );
+
+    if (!shouldContinue) {
+      return;
+    }
+
+    this.isBulkImporting = true;
+
+    try {
+      const hasTemplatePlayer = this.playerService.totalPlayers > 0;
+      const templatePlayer = hasTemplatePlayer ? this.playerService.readPlayer(0) : this.emptyPlayer();
+      const mappedPlayers = sourcePlayers.map((sourcePlayer) =>
+        this.playerImportService.mapImportedPlayer(sourcePlayer, templatePlayer, { includeYear: false })
+      );
+
+      const result = this.playerService.replacePlayers(
+        mappedPlayers,
+        hasTemplatePlayer ? { templatePlayerIndex: 0 } : {}
+      );
+      this.applyPlayerFileLoaded();
+      await this.playerService.downloadFile();
+
+      this.showImportPicker = false;
+      this.importSearchQuery = '';
+      this.importStatusMessage = `Bulk replace complete: roster replaced with ${result.replaced} imported players (${result.previousTotal} -> ${result.nextTotal}) and downloaded players.dat.`;
+
+      if (mappedPlayers.length > result.replaced) {
+        alert(`Only ${result.replaced} players were kept because players.dat supports a maximum of 65535 players.`);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Bulk import failed.';
+      alert(message);
+    } finally {
+      this.isBulkImporting = false;
+    }
+  }
+
   private focusPopupNameField(): void {
     setTimeout(() => {
       this.popupNameInput?.nativeElement.focus();
@@ -719,6 +778,26 @@ export class AppComponent implements OnInit {
 
   // ─── Save ─────────────────────────────────────────────────────
 
+  clearTeamPlayerLinks(): void {
+    if (!this.teamEditorService.hasData) {
+      alert('Load TEAMPLAYERLINKS file first.');
+      return;
+    }
+
+    if (!this.teamsDatService.hasData) {
+      alert('Load TEAMS.DAT file first.');
+      return;
+    }
+
+    if (!confirm('This will reset all team rosters: slots 0–17 set to player 0x0000, slots 18–31 set to 0xFFFF, and all captain/set-piece roles to player 0x0000. Continue?')) {
+      return;
+    }
+
+    this.teamEditorService.clearAllTeams(this.buildCleanStarterPositionsByTeamId());
+    this.teamsDatService.resetAllTeamRoles(0);
+    this.loadSingleTeam(this.selectedTeamOffset);
+  }
+
   async saveAllFiles(): Promise<void> {
     if (!this.allFilesLoaded) {
       alert('Load all files first.');
@@ -840,21 +919,13 @@ export class AppComponent implements OnInit {
   }
 
   getFormationSketch(team: TeamRecord): FormationSketch {
-    const usedPlayers = team.slots.filter((slot) => !slot.isEmpty);
-    const starters = team.slots
-      .filter((slot) => !slot.isEmpty)
-      .slice(0, 11);
+    const activeSlots = team.slots
+      .slice(0, Math.min(team.playerCount, team.slots.length))
+      .filter((slot) => slot.playerId !== 0xffff);
+
+    const starters = activeSlots.slice(0, 11);
 
     const resolvedFormation = this.resolveFormationForTeam(team);
-
-    if (starters.length === 0) {
-      return {
-        formation: resolvedFormation.formation ?? this.formations[0],
-        slots: [],
-        reservePlayers: [],
-        sourceLabel: resolvedFormation.sourceLabel
-      };
-    }
 
     const sketch = resolvedFormation.formation
       ? this.buildFormationSketch(starters, resolvedFormation.formation)
@@ -862,7 +933,7 @@ export class AppComponent implements OnInit {
 
     return {
       ...sketch,
-      reservePlayers: usedPlayers.slice(11).map((player) => this.toSketchPlayer(player)),
+      reservePlayers: activeSlots.slice(11).map((player) => this.toSketchPlayer(player)),
       sourceLabel: resolvedFormation.sourceLabel
     };
   }
@@ -942,7 +1013,8 @@ export class AppComponent implements OnInit {
     }
 
     this.roleSelectOptions = team.slots
-      .filter((s) => !s.isEmpty)
+      .slice(0, Math.min(team.playerCount, team.slots.length))
+      .filter((s) => s.playerId !== 0xffff)
       .map((s) => ({
         value: s.playerIdHex,
         label: `${s.playerIdHex}  ${s.playerName || s.playerIdHex}`
@@ -1196,7 +1268,7 @@ export class AppComponent implements OnInit {
   }
 
   private resolveTeamSlotPlayerName(slot: TeamSlot): string | undefined {
-    if (!this.fileLoaded || slot.isEmpty) {
+    if (!this.fileLoaded || slot.playerId === 0xffff) {
       return undefined;
     }
 
@@ -1282,6 +1354,37 @@ export class AppComponent implements OnInit {
     }
 
     return FORMATION_BY_VALUE.get(formationValue);
+  }
+
+  private buildCleanStarterPositionsByTeamId(): Map<number, readonly number[]> {
+    const positionsByTeamId = new Map<number, readonly number[]>();
+
+    const defaultFormation = this.getFormationFromId(0) ?? this.formations[0];
+    const defaultStarterPositions = this.getStarterPositionsFromFormation(defaultFormation);
+
+    if (!this.teamsDatService.hasData) {
+      return positionsByTeamId;
+    }
+
+    this.teamsDatService.records.forEach((record) => {
+      const formation = this.getFormationFromId(record.formationId) ?? defaultFormation;
+      const starterPositions = this.getStarterPositionsFromFormation(formation);
+      positionsByTeamId.set(record.teamId, starterPositions.length > 0 ? starterPositions : defaultStarterPositions);
+    });
+
+    return positionsByTeamId;
+  }
+
+  private getStarterPositionsFromFormation(formation: FormationPreset): number[] {
+    const starterPositions = [0];
+
+    formation.lines.forEach((line) => {
+      line.slots.forEach((slot) => {
+        starterPositions.push(slot.positions[0] ?? 0);
+      });
+    });
+
+    return starterPositions.slice(0, 11);
   }
 
   private matchFormation(players: TeamSlot[], formation: FormationPreset): {
@@ -1437,7 +1540,9 @@ export class AppComponent implements OnInit {
 
   private emptyPlayer(): Player {
     return {
-      name: '', pos: 0, foot: 0, nat: 0, estatura: 0, peso: 0, year: 0,
+      name: '', pos: 0, foot: 0, nat: 0, estatura: 0, peso: 0,
+      hiddenFromTransferMarket: 0, isIconLegend: 0,
+      birthDay: 0, birthMonth: 0, year: 0,
       skin: 0, skin_tone: 255, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 255, guantes: 5,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
