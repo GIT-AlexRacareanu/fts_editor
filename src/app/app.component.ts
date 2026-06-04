@@ -1467,11 +1467,16 @@ export class AppComponent implements OnInit {
           return left.rank - right.rank;
         }
 
+        // Keep lineup selection stable: existing lower slot indexes win ties.
+        if (left.player.index !== right.player.index) {
+          return left.player.index - right.player.index;
+        }
+
         if (left.player.shirtNumber !== right.player.shirtNumber) {
           return left.player.shirtNumber - right.player.shirtNumber;
         }
 
-        return left.player.index - right.player.index;
+        return 0;
       })[0];
   }
 

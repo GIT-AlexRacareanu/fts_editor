@@ -114,6 +114,34 @@ describe('TeamEditorService', () => {
     expect(increased.playerCount).toBe(32);
     expect(decreased.playerCount).toBe(0);
   });
+
+  it('marks truncated counted slots as UNUSED when player count is reduced', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 4,
+      playerIds: [0x0010, 0x0020, 0x0030, 0x0040]
+    });
+
+    const updatedTeam = service.updatePlayerCount(offset, 2);
+
+    expect(updatedTeam.playerCount).toBe(2);
+    expect(updatedTeam.slots[2].playerId).toBe(0xffff);
+    expect(updatedTeam.slots[3].playerId).toBe(0xffff);
+  });
+
+  it('normalizes id padding word to 0 when reordering active players', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 2,
+      playerIds: [0x0010, 0x0020]
+    });
+    const view = new DataView(service.binaryData!.buffer);
+    const firstSlotIdOffset = offset + PLAYER_ID_OFFSET;
+    view.setUint16(firstSlotIdOffset + 2, 0xffff, true);
+
+    service.reorderUsedPlayers(offset, [0, 1], [0, 0]);
+
+    expect(view.getUint16(firstSlotIdOffset, true)).toBe(0x0010);
+    expect(view.getUint16(firstSlotIdOffset + 2, true)).toBe(0x0000);
+  });
 });
 
 function seedTeamBinary(

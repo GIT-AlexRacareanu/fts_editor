@@ -179,10 +179,37 @@ export class TeamEditorService {
 
   updatePlayerCount(offset: number, playerCount: number): TeamRecord {
     const view = this.getView();
+    const team = this.getTeam(offset);
+    const previousPlayerCount = this.clamp(Math.trunc(team.playerCount), 0, SLOT_COUNT);
     const normalizedPlayerCount = Number.isFinite(playerCount)
       ? Math.trunc(playerCount)
       : 0;
-    view.setUint32(offset + 4, this.clamp(normalizedPlayerCount, 0, SLOT_COUNT), true);
+    const nextPlayerCount = this.clamp(normalizedPlayerCount, 0, SLOT_COUNT);
+
+    if (nextPlayerCount < previousPlayerCount) {
+      for (let index = nextPlayerCount; index < previousPlayerCount; index++) {
+        const attrPtr = offset + ATTRIBUTES_OFFSET + index * 4;
+        const idPtr = offset + PLAYER_ID_OFFSET + index * 4;
+        view.setUint32(attrPtr, 0, true);
+        view.setUint16(idPtr, UNUSED_PLAYER_ID, true);
+        view.setUint16(idPtr + 2, UNUSED_PLAYER_ID, true);
+      }
+    }
+
+    if (nextPlayerCount > previousPlayerCount) {
+      for (let index = previousPlayerCount; index < nextPlayerCount; index++) {
+        const idPtr = offset + PLAYER_ID_OFFSET + index * 4;
+        const currentPlayerId = view.getUint16(idPtr, true);
+
+        if (currentPlayerId === UNUSED_PLAYER_ID) {
+          view.setUint16(idPtr, EMPTY_PLAYER_ID, true);
+        }
+
+        view.setUint16(idPtr + 2, view.getUint16(idPtr, true) === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0, true);
+      }
+    }
+
+    view.setUint32(offset + 4, nextPlayerCount, true);
     return this.getTeam(offset);
   }
 
@@ -214,7 +241,7 @@ export class TeamEditorService {
     }
 
     if (nextPlayerCount !== undefined) {
-      view.setUint32(offset + 4, nextPlayerCount, true);
+      view.setUint32(offset + 4, this.clamp(Math.trunc(nextPlayerCount), 0, SLOT_COUNT), true);
     }
 
     return this.getTeam(offset);
@@ -356,6 +383,7 @@ export class TeamEditorService {
       view.setUint8(attrPtr, sourceSlot.shirtNumber);
       view.setUint8(attrPtr + 1, starterPositions[orderIndex] ?? sourceSlot.position);
       view.setUint16(idPtr, sourceSlot.playerId, true);
+      view.setUint16(idPtr + 2, sourceSlot.playerId === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0, true);
     });
 
     return this.getTeam(offset);
