@@ -85,6 +85,35 @@ describe('TeamEditorService', () => {
     expect(view.getUint16(reusedSlotOffset, true)).toBe(0x0033);
     expect(view.getUint16(reusedSlotOffset + 2, true)).toBe(0x0000);
   });
+
+  it('compacts counted slots when deleting a player so active slots remain contiguous', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 4,
+      playerIds: [0x0010, 0x0020, 0x0030, 0x0040]
+    });
+
+    const updatedTeam = service.deleteSlot(offset, 1);
+
+    expect(updatedTeam.playerCount).toBe(3);
+    expect(updatedTeam.slots[0].playerId).toBe(0x0010);
+    expect(updatedTeam.slots[1].playerId).toBe(0x0030);
+    expect(updatedTeam.slots[2].playerId).toBe(0x0040);
+    expect(updatedTeam.slots[3].playerId).toBe(0xffff);
+    expect(updatedTeam.slots[3].isEmpty).toBeTrue();
+  });
+
+  it('clamps player count updates to the 0..32 slot range', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 2,
+      playerIds: [0x0010, 0x0020]
+    });
+
+    const increased = service.updatePlayerCount(offset, 200);
+    const decreased = service.updatePlayerCount(offset, -50);
+
+    expect(increased.playerCount).toBe(32);
+    expect(decreased.playerCount).toBe(0);
+  });
 });
 
 function seedTeamBinary(

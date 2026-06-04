@@ -179,7 +179,10 @@ export class TeamEditorService {
 
   updatePlayerCount(offset: number, playerCount: number): TeamRecord {
     const view = this.getView();
-    view.setUint32(offset + 4, this.clamp(playerCount, 0, 0xffffffff), true);
+    const normalizedPlayerCount = Number.isFinite(playerCount)
+      ? Math.trunc(playerCount)
+      : 0;
+    view.setUint32(offset + 4, this.clamp(normalizedPlayerCount, 0, SLOT_COUNT), true);
     return this.getTeam(offset);
   }
 
@@ -257,12 +260,36 @@ export class TeamEditorService {
 
   deleteSlot(offset: number, slotIndex: number): TeamRecord {
     const team = this.getTeam(offset);
+    const normalizedPlayerCount = this.clamp(Math.trunc(team.playerCount), 0, SLOT_COUNT);
+    const isCountedSlot = slotIndex >= 0 && slotIndex < normalizedPlayerCount;
+    const slot = team.slots[slotIndex];
 
-    return this.updateSlot(offset, slotIndex, {
-      playerIdHex: this.formatPlayerId(UNUSED_PLAYER_ID),
-      shirtNumber: 0,
-      position: 0
-    }, Math.max(team.playerCount - 1, 0));
+    if (!isCountedSlot || !slot || slot.isEmpty) {
+      return team;
+    }
+
+    const view = this.getView();
+    const activeLastIndex = normalizedPlayerCount - 1;
+
+    for (let index = slotIndex; index < activeLastIndex; index++) {
+      const sourceAttrPtr = offset + ATTRIBUTES_OFFSET + (index + 1) * 4;
+      const sourceIdPtr = offset + PLAYER_ID_OFFSET + (index + 1) * 4;
+      const targetAttrPtr = offset + ATTRIBUTES_OFFSET + index * 4;
+      const targetIdPtr = offset + PLAYER_ID_OFFSET + index * 4;
+
+      view.setUint32(targetAttrPtr, view.getUint32(sourceAttrPtr, true), true);
+      view.setUint16(targetIdPtr, view.getUint16(sourceIdPtr, true), true);
+      view.setUint16(targetIdPtr + 2, view.getUint16(sourceIdPtr + 2, true), true);
+    }
+
+    const clearAttrPtr = offset + ATTRIBUTES_OFFSET + activeLastIndex * 4;
+    const clearIdPtr = offset + PLAYER_ID_OFFSET + activeLastIndex * 4;
+    view.setUint32(clearAttrPtr, 0, true);
+    view.setUint16(clearIdPtr, UNUSED_PLAYER_ID, true);
+    view.setUint16(clearIdPtr + 2, UNUSED_PLAYER_ID, true);
+    view.setUint32(offset + 4, activeLastIndex, true);
+
+    return this.getTeam(offset);
   }
 
   clearAllTeams(starterPositionsByTeamId?: ReadonlyMap<number, readonly number[]>): void {
@@ -304,6 +331,7 @@ export class TeamEditorService {
   reorderUsedPlayers(offset: number, orderedSlotIndexes: number[], starterPositions: number[]): TeamRecord {
     const team = this.getTeam(offset);
     const usedIndexes = team.slots
+      .slice(0, this.clamp(Math.trunc(team.playerCount), 0, SLOT_COUNT))
       .filter((slot) => !slot.isEmpty)
       .map((slot) => slot.index);
 

@@ -921,7 +921,7 @@ export class AppComponent implements OnInit {
   getFormationSketch(team: TeamRecord): FormationSketch {
     const activeSlots = team.slots
       .slice(0, Math.min(team.playerCount, team.slots.length))
-      .filter((slot) => slot.playerId !== 0xffff);
+      .filter((slot) => !slot.isEmpty);
 
     const starters = activeSlots.slice(0, 11);
 
