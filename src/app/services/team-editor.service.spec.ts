@@ -142,6 +142,44 @@ describe('TeamEditorService', () => {
     expect(view.getUint16(firstSlotIdOffset, true)).toBe(0x0010);
     expect(view.getUint16(firstSlotIdOffset + 2, true)).toBe(0x0000);
   });
+
+  it('clamps slot position edits to valid pitch range', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 1,
+      playerIds: [0x0010]
+    });
+
+    const updatedTeam = service.updateSlot(offset, 0, { position: 200 });
+
+    expect(updatedTeam.slots[0].position).toBe(22);
+  });
+
+  it('normalizes active slot starter flags and padding before save', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 12,
+      playerIds: [
+        0x0010, 0x0011, 0x0012, 0x0013, 0x0014, 0x0015,
+        0x0016, 0x0017, 0x0018, 0x0019, 0x001A, 0x001B
+      ]
+    });
+    const view = new DataView(service.binaryData!.buffer);
+    const slot0AttrOffset = offset + 8;
+    const slot11AttrOffset = offset + 8 + 11 * 4;
+    const slot0IdOffset = offset + PLAYER_ID_OFFSET;
+
+    view.setUint8(slot0AttrOffset + 2, 0);
+    view.setUint8(slot11AttrOffset + 2, 1);
+    view.setUint8(slot11AttrOffset + 3, 9);
+    view.setUint16(slot0IdOffset + 2, 0xffff, true);
+
+    const normalizedCount = service.normalizeActiveSlotAttributes();
+
+    expect(normalizedCount).toBeGreaterThan(0);
+    expect(view.getUint8(slot0AttrOffset + 2)).toBe(1);
+    expect(view.getUint8(slot11AttrOffset + 2)).toBe(0);
+    expect(view.getUint8(slot11AttrOffset + 3)).toBe(0);
+    expect(view.getUint16(slot0IdOffset + 2, true)).toBe(0x0000);
+  });
 });
 
 function seedTeamBinary(

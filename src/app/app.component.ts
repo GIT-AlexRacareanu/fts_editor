@@ -804,6 +804,36 @@ export class AppComponent implements OnInit {
       return;
     }
 
+    const forcedRoleTeams = this.forceAllRolesToFirstTeamPlayer();
+
+    if (forcedRoleTeams > 0) {
+      alert(`Forced captain/corner/penalty/free-kick roles to the first active player for ${forcedRoleTeams} teams before save.`);
+    }
+
+    const normalizedSlots = this.teamEditorService.normalizeActiveSlotAttributes();
+
+    if (normalizedSlots > 0) {
+      alert(`Adjusted ${normalizedSlots} TEAMPLAYERLINKS slots to safe position/starter values before save.`);
+    }
+
+    const invalidPlayerRefs = this.teamEditorService.validatePlayerReferences(this.playerService.totalPlayers);
+
+    if (invalidPlayerRefs.length > 0) {
+      const previewRows = invalidPlayerRefs
+        .slice(0, 8)
+        .map((issue) => `${issue.teamLabel} | slot ${issue.slotIndex} | player ${issue.playerIdHex}`);
+      const truncatedLabel = invalidPlayerRefs.length > previewRows.length
+        ? `\n...and ${invalidPlayerRefs.length - previewRows.length} more invalid references.`
+        : '';
+
+      alert(
+        'Save blocked: TEAMPLAYERLINKS contains player IDs missing from PLAYERS.DAT.\n\n'
+        + previewRows.join('\n')
+        + truncatedLabel
+      );
+      return;
+    }
+
     try {
       await this.playerService.saveCurrentToSameFile();
       await this.teamEditorService.saveToSameFile();
@@ -813,6 +843,57 @@ export class AppComponent implements OnInit {
       const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
       alert(message);
     }
+  }
+
+  private forceAllRolesToFirstTeamPlayer(): number {
+    if (!this.teamEditorService.hasData || !this.teamsDatService.hasData) {
+      return 0;
+    }
+
+    const firstPlayerIdByTeamId = new Map<number, number>();
+
+    this.teamEditorService.teamOptions.forEach(({ offset }) => {
+      const team = this.teamEditorService.getTeam(offset);
+      const activeSlotLimit = Math.min(team.playerCount, team.slots.length);
+      const firstActiveSlot = team.slots
+        .slice(0, activeSlotLimit)
+        .find((slot) => !slot.isEmpty);
+
+      if (firstActiveSlot) {
+        firstPlayerIdByTeamId.set(team.teamId, firstActiveSlot.playerId);
+      }
+    });
+
+    let updatedTeams = 0;
+
+    this.teamsDatService.records.forEach((record) => {
+      const rolePlayerId = firstPlayerIdByTeamId.get(record.teamId);
+
+      if (rolePlayerId === undefined) {
+        return;
+      }
+
+      this.teamsDatService.updateRecord(record.index, {
+        captainRole: rolePlayerId,
+        leftCornerRole: rolePlayerId,
+        rightCornerRole: rolePlayerId,
+        penaltyRole: rolePlayerId,
+        freeKickRole: rolePlayerId
+      });
+
+      updatedTeams += 1;
+    });
+
+    return updatedTeams;
+  }
+
+  downloadTeamPlayerLinksUncompressed(): void {
+    if (!this.teamFileLoaded) {
+      alert('Load TEAMPLAYERLINKS file first.');
+      return;
+    }
+
+    this.teamEditorService.exportUncompressedFile();
   }
 
   // ─── Team Editor ──────────────────────────────────────────────

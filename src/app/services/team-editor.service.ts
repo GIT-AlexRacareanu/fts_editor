@@ -13,6 +13,16 @@ const ATTRIBUTES_OFFSET = 8;
 const PLAYER_ID_OFFSET = 136;
 const EMPTY_PLAYER_ID = 0;
 const UNUSED_PLAYER_ID = 0xffff;
+const MAX_POSITION_VALUE = 22;
+const STARTER_SLOT_COUNT = 11;
+
+export interface TeamPlayerReferenceIssue {
+  teamOffset: number;
+  teamLabel: string;
+  slotIndex: number;
+  playerId: number;
+  playerIdHex: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class TeamEditorService {
@@ -100,6 +110,22 @@ export class TeamEditorService {
     URL.revokeObjectURL(link.href);
   }
 
+  exportUncompressedFile(fileName = 'TEAMPLAYERLINKS_0_uncompressed.dat'): void {
+    if (!this.binaryData) {
+      return;
+    }
+
+    const bytes = new Uint8Array(this.binaryData.byteLength);
+    bytes.set(this.binaryData);
+
+    const blob = new Blob([bytes.buffer], { type: 'application/octet-stream' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
   getTeam(offset: number): TeamRecord {
     if (!this.binaryData) {
       throw new Error('No team database loaded');
@@ -177,6 +203,43 @@ export class TeamEditorService {
     );
   }
 
+  validatePlayerReferences(maxPlayerCount: number): TeamPlayerReferenceIssue[] {
+    if (!this.binaryData) {
+      return [];
+    }
+
+    const normalizedMaxPlayerCount = Number.isFinite(maxPlayerCount)
+      ? this.clamp(Math.trunc(maxPlayerCount), 0, 0xffff)
+      : 0;
+
+    const issues: TeamPlayerReferenceIssue[] = [];
+
+    this.teamOptions.forEach(({ offset }) => {
+      const team = this.getTeam(offset);
+      const activeSlotCount = this.clamp(Math.trunc(team.playerCount), 0, SLOT_COUNT);
+
+      for (let slotIndex = 0; slotIndex < activeSlotCount; slotIndex += 1) {
+        const slot = team.slots[slotIndex];
+
+        if (!slot || slot.isEmpty) {
+          continue;
+        }
+
+        if (slot.playerId >= normalizedMaxPlayerCount) {
+          issues.push({
+            teamOffset: team.offset,
+            teamLabel: team.teamLabel,
+            slotIndex,
+            playerId: slot.playerId,
+            playerIdHex: slot.playerIdHex
+          });
+        }
+      }
+    });
+
+    return issues;
+  }
+
   updatePlayerCount(offset: number, playerCount: number): TeamRecord {
     const view = this.getView();
     const team = this.getTeam(offset);
@@ -237,7 +300,7 @@ export class TeamEditorService {
     }
 
     if (changes.position !== undefined) {
-      view.setUint8(attrPtr + 1, this.clamp(changes.position, 0, 0xff));
+      view.setUint8(attrPtr + 1, this.clamp(changes.position, 0, MAX_POSITION_VALUE));
     }
 
     if (nextPlayerCount !== undefined) {
@@ -348,7 +411,7 @@ export class TeamEditorService {
         const starterFlag = index < 11 ? 1 : 0;
 
         view.setUint8(attrPtr, 0);
-        view.setUint8(attrPtr + 1, cleanPosition);
+        view.setUint8(attrPtr + 1, this.clamp(cleanPosition, 0, MAX_POSITION_VALUE));
         view.setUint8(attrPtr + 2, starterFlag);
         view.setUint8(attrPtr + 3, 0);
       }
@@ -381,12 +444,60 @@ export class TeamEditorService {
       const attrPtr = offset + ATTRIBUTES_OFFSET + targetSlotIndex * 4;
       const idPtr = offset + PLAYER_ID_OFFSET + targetSlotIndex * 4;
       view.setUint8(attrPtr, sourceSlot.shirtNumber);
-      view.setUint8(attrPtr + 1, starterPositions[orderIndex] ?? sourceSlot.position);
+      view.setUint8(attrPtr + 1, this.clamp(starterPositions[orderIndex] ?? sourceSlot.position, 0, MAX_POSITION_VALUE));
+      view.setUint8(attrPtr + 2, orderIndex < STARTER_SLOT_COUNT ? 1 : 0);
+      view.setUint8(attrPtr + 3, 0);
       view.setUint16(idPtr, sourceSlot.playerId, true);
       view.setUint16(idPtr + 2, sourceSlot.playerId === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0, true);
     });
 
     return this.getTeam(offset);
+  }
+
+  normalizeActiveSlotAttributes(): number {
+    if (!this.binaryData) {
+      return 0;
+    }
+
+    const view = this.getView();
+    let updatedSlots = 0;
+
+    this.teamOptions.forEach(({ offset }) => {
+      const playerCount = this.clamp(view.getUint32(offset + 4, true), 0, SLOT_COUNT);
+
+      for (let slotIndex = 0; slotIndex < playerCount; slotIndex += 1) {
+        const attrPtr = offset + ATTRIBUTES_OFFSET + slotIndex * 4;
+        const idPtr = offset + PLAYER_ID_OFFSET + slotIndex * 4;
+        const playerId = view.getUint16(idPtr, true);
+
+        if (this.isEmptySlot(playerId)) {
+          continue;
+        }
+
+        const currentPosition = view.getUint8(attrPtr + 1);
+        const normalizedPosition = this.clamp(currentPosition, 0, MAX_POSITION_VALUE);
+        const currentStarterFlag = view.getUint8(attrPtr + 2);
+        const normalizedStarterFlag = slotIndex < STARTER_SLOT_COUNT ? 1 : 0;
+        const currentPadding = view.getUint8(attrPtr + 3);
+        const currentPlayerPad = view.getUint16(idPtr + 2, true);
+        const normalizedPlayerPad = playerId === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0;
+
+        if (
+          normalizedPosition !== currentPosition
+          || normalizedStarterFlag !== currentStarterFlag
+          || currentPadding !== 0
+          || currentPlayerPad !== normalizedPlayerPad
+        ) {
+          view.setUint8(attrPtr + 1, normalizedPosition);
+          view.setUint8(attrPtr + 2, normalizedStarterFlag);
+          view.setUint8(attrPtr + 3, 0);
+          view.setUint16(idPtr + 2, normalizedPlayerPad, true);
+          updatedSlots += 1;
+        }
+      }
+    });
+
+    return updatedSlots;
   }
 
   private scanTeams(): void {
