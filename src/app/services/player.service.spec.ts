@@ -57,6 +57,8 @@ function createPlayer(name: string): Player {
     nat: 0,
     estatura: 180,
     peso: 75,
+    birthDay: 1,
+    birthMonth: 1,
     year: 2000,
     skin: 0,
     skin_tone: 0,

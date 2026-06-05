@@ -502,38 +502,6 @@ export class AppComponent implements OnInit {
     this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, ctx.slotIndex, { position: Number(value) }));
   }
 
-  updatePopupTeamRoleFlag(
-    flag: 'starter' | 'captain' | 'penaltyTaker' | 'freeKickTaker' | 'leftCornerTaker' | 'rightCornerTaker',
-    enabled: boolean
-  ): void {
-    const ctx = this.popupTeamContext;
-
-    if (!ctx) {
-      return;
-    }
-
-    const team = this.displayedTeams.find((t) => t.offset === ctx.teamOffset);
-
-    if (!team) {
-      return;
-    }
-
-    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, ctx.slotIndex, { [flag]: enabled }));
-  }
-
-  formatTacticalByteHex(value: number): string {
-    return `0x${this.clampInteger(value, 0, 255).toString(16).toUpperCase().padStart(2, '0')}`;
-  }
-
-  private clampInteger(value: number, min: number, max: number): number {
-    if (!Number.isFinite(value)) {
-      return min;
-    }
-
-    const normalized = Math.trunc(value);
-    return Math.max(min, Math.min(max, normalized));
-  }
-
   deletePopupTeamPlayer(): void {
     const ctx = this.popupTeamContext;
 

@@ -118,17 +118,27 @@ export class PlayerService {
   }
 
   get totalPlayers(): number {
-    if (!this.binaryData) return 0;
-
-    const headerTotal = new DataView(this.binaryData.buffer).getUint16(this.totalPlayersOffset, true);
-
-    if (this.binaryData.byteLength < this.yearOffset + 2) {
-      return headerTotal;
+    if (!this.binaryData) {
+      return 0;
     }
 
-    const derivedTotal = Math.floor((this.binaryData.byteLength - (this.yearOffset + 2)) / this.playerStride) + 1;
+    const headerTotal = new DataView(this.binaryData.buffer).getUint16(this.totalPlayersOffset, true);
+    const derivedTotal = this.getDerivedPlayerCount(this.binaryData.byteLength);
 
-    return Math.max(headerTotal, derivedTotal);
+    // Prefer the derived count to avoid trusting corrupted headers that can cause out-of-bounds access.
+    if (derivedTotal > 0) {
+      return derivedTotal;
+    }
+
+    return headerTotal;
+  }
+
+  private getDerivedPlayerCount(byteLength: number): number {
+    if (!Number.isFinite(byteLength) || byteLength < this.yearOffset + 2) {
+      return 0;
+    }
+
+    return Math.floor((byteLength - (this.yearOffset + 2)) / this.playerStride) + 1;
   }
 
   replacePlayers(

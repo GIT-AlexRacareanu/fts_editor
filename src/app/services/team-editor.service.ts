@@ -731,7 +731,8 @@ export class TeamEditorService {
       return 0;
     }
 
-    return Math.floor((byteLength - TEAM_START_OFFSET) / TEAM_STRIDE);
+    const detectedTeamCount = Math.floor((byteLength - TEAM_START_OFFSET) / TEAM_STRIDE);
+    return detectedTeamCount > 0 ? detectedTeamCount + 1 : 0;
   }
 
   private isCompressed(data: Uint8Array): boolean {

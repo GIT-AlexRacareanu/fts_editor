@@ -61,6 +61,45 @@ describe('PlayerImportService', () => {
     expect(parsed[0].jumping).toBe(79);
   });
 
+  it('parses FC face-stat exports when detail columns are missing', () => {
+    const csv = [
+      'Name,OVR,PAC,SHO,PAS,DRI,DEF,PHY,Position,Preferred Foot,Height,Weight,Age,Nationality',
+      'Sample Player,77,80,74,71,78,66,73,CAM,Right,"5\'11\" / 180cm","176lb / 80kg",24,Portugal'
+    ].join('\n');
+
+    const parsed = service.parseCsv(csv);
+
+    expect(parsed.length).toBe(1);
+    expect(parsed[0].overall).toBe(77);
+    expect(parsed[0].shooting).toBe(74);
+    expect(parsed[0].passing).toBe(71);
+    expect(parsed[0].dribbling).toBe(78);
+    expect(parsed[0].movementAcceleration).toBe(80);
+    expect(parsed[0].movementSprintSpeed).toBe(80);
+    expect(parsed[0].defendingStandingTackle).toBe(66);
+    expect(parsed[0].defendingSlidingTackle).toBe(66);
+    expect(parsed[0].powerStamina).toBe(73);
+    expect(parsed[0].powerStrength).toBe(73);
+    expect(parsed[0].heightCm).toBe(180);
+    expect(parsed[0].weightKg).toBe(80);
+    expect(parsed[0].clubPosition).toBe('CAM');
+    expect(parsed[0].preferredFoot).toBe('Right');
+    expect(parsed[0].nationalityName).toBe('Portugal');
+  });
+
+  it('parses imperial-first height and weight formats', () => {
+    const csv = [
+      'Name,Height,Weight,Position,Preferred foot,Nation',
+      'Format Player,"5\'9\" / 175cm","159lb / 72kg",CM,Left,Spain'
+    ].join('\n');
+
+    const parsed = service.parseCsv(csv);
+
+    expect(parsed.length).toBe(1);
+    expect(parsed[0].heightCm).toBe(175);
+    expect(parsed[0].weightKg).toBe(72);
+  });
+
   it('maps RM and LM imports to RM and LM in game', () => {
     const basePlayer = {
       name: 'Base', pos: 11, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,

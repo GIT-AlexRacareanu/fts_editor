@@ -218,7 +218,7 @@ export class PlayerImportService {
     const volleys = this.getNumberFieldByAliases(row, headerIndexes, ['volleys']);
     const penalties = this.getNumberFieldByAliases(row, headerIndexes, ['penalties']);
     const shooting = this.averageNonZero([
-      this.getNumberFieldByAliases(row, headerIndexes, ['shooting']),
+      this.getNumberFieldByAliases(row, headerIndexes, ['shooting', 'sho']),
       finishing,
       shotPower,
       longShots,
@@ -230,7 +230,7 @@ export class PlayerImportService {
     const longPassing = this.getNumberFieldByAliases(row, headerIndexes, ['long_passing', 'long passing']);
     const vision = this.getNumberFieldByAliases(row, headerIndexes, ['vision']);
     const passing = this.averageNonZero([
-      this.getNumberFieldByAliases(row, headerIndexes, ['passing']),
+      this.getNumberFieldByAliases(row, headerIndexes, ['passing', 'pas']),
       shortPassing,
       longPassing,
       vision
@@ -245,27 +245,57 @@ export class PlayerImportService {
     const defAwareness = this.getNumberFieldByAliases(row, headerIndexes, ['def_awareness', 'def awareness']);
 
     return {
-      playerId: this.getFieldByAliases(row, headerIndexes, ['player_id']),
+      playerId: this.getFieldByAliases(row, headerIndexes, ['player_id', 'id', 'playerid', 'sofifa_id']),
       shortName,
-      overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall']),
+      overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall', 'ovr', 'rating']),
       age: this.getNumberFieldByAliases(row, headerIndexes, ['age']),
-      heightCm: this.getNumberFieldByAliases(row, headerIndexes, ['height_cm', 'height']),
-      weightKg: this.getNumberFieldByAliases(row, headerIndexes, ['weight_kg', 'weight']),
-      clubPosition: this.getFieldByAliases(row, headerIndexes, ['club_position', 'position']),
-      nationalityName: this.getFieldByAliases(row, headerIndexes, ['nationality_name', 'nation']),
-      preferredFoot: this.getFieldByAliases(row, headerIndexes, ['preferred_foot', 'preferred foot']),
+      heightCm: this.getHeightFieldByAliases(row, headerIndexes, ['height_cm', 'height']),
+      weightKg: this.getWeightFieldByAliases(row, headerIndexes, ['weight_kg', 'weight']),
+      clubPosition: this.getFieldByAliases(row, headerIndexes, ['club_position', 'position', 'best_position', 'best position']),
+      nationalityName: this.getFieldByAliases(row, headerIndexes, ['nationality_name', 'nation', 'nationality', 'country region', 'country']),
+      preferredFoot: this.getFieldByAliases(row, headerIndexes, ['preferred_foot', 'preferred foot', 'preferredfoot', 'foot']),
       shooting,
       passing,
-      dribbling: this.getNumberFieldByAliases(row, headerIndexes, ['dribbling']),
+      dribbling: this.getNumberFieldByAliases(row, headerIndexes, ['dribbling', 'dri']),
       attackingCrossing: this.getNumberFieldByAliases(row, headerIndexes, ['attacking_crossing', 'crossing']),
       attackingHeadingAccuracy: headingAccuracy,
       skillFkAccuracy: this.getNumberFieldByAliases(row, headerIndexes, ['skill_fk_accuracy', 'free_kick_accuracy', 'free kick accuracy']),
-      movementAcceleration: this.getNumberFieldByAliases(row, headerIndexes, ['movement_acceleration', 'acceleration']),
-      movementSprintSpeed: this.getNumberFieldByAliases(row, headerIndexes, ['movement_sprint_speed', 'sprint_speed', 'sprint speed']),
-      powerStamina: this.getNumberFieldByAliases(row, headerIndexes, ['power_stamina', 'stamina']),
-      powerStrength: this.getNumberFieldByAliases(row, headerIndexes, ['power_strength', 'strength']),
-      defendingStandingTackle: this.getNumberFieldByAliases(row, headerIndexes, ['defending_standing_tackle', 'standing_tackle', 'standing tackle']),
-      defendingSlidingTackle: this.getNumberFieldByAliases(row, headerIndexes, ['defending_sliding_tackle', 'sliding_tackle', 'sliding tackle']),
+      movementAcceleration: this.getStatWithFallbackAliases(
+        row,
+        headerIndexes,
+        ['movement_acceleration', 'acceleration'],
+        ['pace', 'pac']
+      ),
+      movementSprintSpeed: this.getStatWithFallbackAliases(
+        row,
+        headerIndexes,
+        ['movement_sprint_speed', 'sprint_speed', 'sprint speed'],
+        ['pace', 'pac']
+      ),
+      powerStamina: this.getStatWithFallbackAliases(
+        row,
+        headerIndexes,
+        ['power_stamina', 'stamina'],
+        ['physical', 'phy']
+      ),
+      powerStrength: this.getStatWithFallbackAliases(
+        row,
+        headerIndexes,
+        ['power_strength', 'strength'],
+        ['physical', 'phy']
+      ),
+      defendingStandingTackle: this.getStatWithFallbackAliases(
+        row,
+        headerIndexes,
+        ['defending_standing_tackle', 'standing_tackle', 'standing tackle'],
+        ['defending', 'def']
+      ),
+      defendingSlidingTackle: this.getStatWithFallbackAliases(
+        row,
+        headerIndexes,
+        ['defending_sliding_tackle', 'sliding_tackle', 'sliding tackle'],
+        ['defending', 'def']
+      ),
       goalkeepingDiving: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_diving', 'gk_diving', 'gk diving']),
       goalkeepingHandling: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_handling', 'gk_handling', 'gk handling']),
       goalkeepingPositioning: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_positioning', 'gk_positioning', 'gk positioning']),
@@ -303,6 +333,35 @@ export class PlayerImportService {
   private getNumberFieldByAliases(row: string[], headerIndexes: Map<string, number>, fieldNames: string[]): number {
     const value = this.getFieldByAliases(row, headerIndexes, fieldNames);
     const parsed = this.parseLooseNumber(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getStatWithFallbackAliases(
+    row: string[],
+    headerIndexes: Map<string, number>,
+    aliases: string[],
+    fallbackAliases: string[]
+  ): number {
+    const explicitValue = this.getNumberFieldByAliases(row, headerIndexes, aliases);
+
+    if (explicitValue > 0) {
+      return explicitValue;
+    }
+
+    return this.getNumberFieldByAliases(row, headerIndexes, fallbackAliases);
+  }
+
+  private getHeightFieldByAliases(row: string[], headerIndexes: Map<string, number>, fieldNames: string[]): number {
+    const value = this.getFieldByAliases(row, headerIndexes, fieldNames);
+    const parsed = this.parseHeightCm(value);
+
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getWeightFieldByAliases(row: string[], headerIndexes: Map<string, number>, fieldNames: string[]): number {
+    const value = this.getFieldByAliases(row, headerIndexes, fieldNames);
+    const parsed = this.parseWeightKg(value);
 
     return Number.isFinite(parsed) ? parsed : 0;
   }
@@ -403,6 +462,56 @@ export class PlayerImportService {
 
     const parsed = Number(match[0]);
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private parseHeightCm(value: string): number {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return 0;
+    }
+
+    const cmMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*cm\b/i);
+
+    if (cmMatch) {
+      return this.parseLooseNumber(cmMatch[1]);
+    }
+
+    const feetInchesMatch = trimmed.match(/(\d+)\s*'\s*(\d+)(?:\"|\b)/);
+
+    if (feetInchesMatch) {
+      const feet = this.parseLooseNumber(feetInchesMatch[1]);
+      const inches = this.parseLooseNumber(feetInchesMatch[2]);
+
+      if (feet > 0 || inches > 0) {
+        return Math.round((feet * 12 + inches) * 2.54);
+      }
+    }
+
+    return this.parseLooseNumber(trimmed);
+  }
+
+  private parseWeightKg(value: string): number {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return 0;
+    }
+
+    const kgMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*kg\b/i);
+
+    if (kgMatch) {
+      return this.parseLooseNumber(kgMatch[1]);
+    }
+
+    const lbsMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds)\b/i);
+
+    if (lbsMatch) {
+      const pounds = this.parseLooseNumber(lbsMatch[1]);
+      return pounds > 0 ? Math.round(pounds * 0.45359237) : 0;
+    }
+
+    return this.parseLooseNumber(trimmed);
   }
 
   private averageNonZero(values: number[]): number {
