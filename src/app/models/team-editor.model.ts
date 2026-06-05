@@ -2,6 +2,13 @@ export interface TeamSlot {
   index: number;
   playerId: number;
   playerIdHex: string;
+  tacticalByte: number;
+  isStarter: boolean;
+  isCaptain: boolean;
+  isPenaltyTaker: boolean;
+  isFreeKickTaker: boolean;
+  isLeftCornerTaker: boolean;
+  isRightCornerTaker: boolean;
   shirtNumber: number;
   position: number;
   isEmpty: boolean;

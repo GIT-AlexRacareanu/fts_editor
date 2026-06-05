@@ -172,6 +172,54 @@ describe('PlayerImportService', () => {
     expect(mapped.name).toBe('V. van Dijk');
   });
 
+  it('replaces special characters with Latin base letters during import name mapping', () => {
+    const basePlayer = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
+      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+
+    const imported = createImportedPlayer({ shortName: 'Ștefan Ødegaard' });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer);
+
+    expect(mapped.name).toBe('S. Odegard');
+  });
+
+  it('strips Romanian diacritics to ASCII during import name mapping', () => {
+    const basePlayer = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
+      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+
+    const imported = createImportedPlayer({ shortName: 'Răzvan Mățel' });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer);
+
+    expect(mapped.name).toBe('R. Matel');
+  });
+
+  it('keeps mapped game names within 16 characters including spaces', () => {
+    const basePlayer = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
+      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+
+    const imported = createImportedPlayer({ shortName: 'Alexandru Constantin Popescu' });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer);
+
+    expect(mapped.name.length).toBeLessThanOrEqual(16);
+  });
+
   it('maps Holland and The Netherlands to Netherlands nationality', () => {
     const basePlayer = {
       name: 'Base', pos: 0, foot: 0, nat: 84, estatura: 180, peso: 75, year: 2000,

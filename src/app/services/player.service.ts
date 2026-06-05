@@ -277,8 +277,12 @@ export class PlayerService {
   writePlayer(idx: number, player: Player): void {
     const view = new DataView(this.binaryData!.buffer);
     const base = idx * 112;
+    const truncatedName = player.name.slice(0, 16);
+
+    player.name = truncatedName;
+
     for (let i = 0; i < 16; i++) {
-      view.setUint16(base + 48 + i * 2, i < player.name.length ? player.name.charCodeAt(i) : 0, true);
+      view.setUint16(base + 48 + i * 2, i < truncatedName.length ? truncatedName.charCodeAt(i) : 0, true);
     }
     view.setUint16(base + this.playerIdOffset, idx, true);
     view.setUint8(base + this.hiddenFromTransferMarketOffset, player.hiddenFromTransferMarket ?? 0);

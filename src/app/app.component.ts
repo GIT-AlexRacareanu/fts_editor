@@ -76,6 +76,8 @@ interface PopupTeamContext {
   slotIndex: number;
 }
 
+type TeamsRoleField = 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole';
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html'
@@ -309,7 +311,26 @@ export class AppComponent implements OnInit {
       return null;
     }
 
-    return this.teamsDatService.records[this.selectedTeamsDatIndex] ?? null;
+    const baseRecord = this.teamsDatService.records[this.selectedTeamsDatIndex] ?? null;
+
+    if (!baseRecord) {
+      return null;
+    }
+
+    const selectedTeam = this.displayedTeams.find((team) => team.teamId === baseRecord.teamId);
+
+    if (!selectedTeam) {
+      return baseRecord;
+    }
+
+    return {
+      ...baseRecord,
+      captainRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'captainRole'),
+      leftCornerRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'leftCornerRole'),
+      rightCornerRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'rightCornerRole'),
+      penaltyRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'penaltyRole'),
+      freeKickRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'freeKickRole')
+    };
   }
 
   get teamsDatOptions(): { value: number; label: string }[] {
@@ -479,6 +500,38 @@ export class AppComponent implements OnInit {
     }
 
     this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, ctx.slotIndex, { position: Number(value) }));
+  }
+
+  updatePopupTeamRoleFlag(
+    flag: 'starter' | 'captain' | 'penaltyTaker' | 'freeKickTaker' | 'leftCornerTaker' | 'rightCornerTaker',
+    enabled: boolean
+  ): void {
+    const ctx = this.popupTeamContext;
+
+    if (!ctx) {
+      return;
+    }
+
+    const team = this.displayedTeams.find((t) => t.offset === ctx.teamOffset);
+
+    if (!team) {
+      return;
+    }
+
+    this.replaceDisplayedTeam(team.offset, this.teamEditorService.updateSlot(team.offset, ctx.slotIndex, { [flag]: enabled }));
+  }
+
+  formatTacticalByteHex(value: number): string {
+    return `0x${this.clampInteger(value, 0, 255).toString(16).toUpperCase().padStart(2, '0')}`;
+  }
+
+  private clampInteger(value: number, min: number, max: number): number {
+    if (!Number.isFinite(value)) {
+      return min;
+    }
+
+    const normalized = Math.trunc(value);
+    return Math.max(min, Math.min(max, normalized));
   }
 
   deletePopupTeamPlayer(): void {
@@ -789,12 +842,15 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    if (!confirm('This will reset all team rosters: slots 0–17 set to player 0x0000, slots 18–31 set to 0xFFFF, and all captain/set-piece roles to player 0x0000. Continue?')) {
+    if (!confirm('This will reset all team rosters: slots 0–17 set to players 0x0001..0x0012, slots 18–31 set to 0xFFFF, and all captain/set-piece roles cleared to 0xFFFFFFFF. Continue?')) {
       return;
     }
 
-    this.teamEditorService.clearAllTeams(this.buildCleanStarterPositionsByTeamId());
-    this.teamsDatService.resetAllTeamRoles(0);
+    this.teamEditorService.clearAllTeams(
+      this.buildCleanStarterPositionsByTeamId(),
+      this.buildCleanReservePositionsByPlayerId()
+    );
+    this.teamsDatService.resetAllTeamRoles(0xffffffff);
     this.loadSingleTeam(this.selectedTeamOffset);
   }
 
@@ -804,10 +860,10 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    const forcedRoleTeams = this.forceAllRolesToFirstTeamPlayer();
+    const syncedRoles = this.syncAllTeamsDatRolesWithCurrentRosters(true, true);
 
-    if (forcedRoleTeams > 0) {
-      alert(`Forced captain/corner/penalty/free-kick roles to the first active player for ${forcedRoleTeams} teams before save.`);
+    if (syncedRoles > 0) {
+      alert(`Synced captain/corner/penalty/free-kick roles for ${syncedRoles} teams across TEAMPLAYERLINKS and TEAMS.DAT (first active player receives all roles).`);
     }
 
     const normalizedSlots = this.teamEditorService.normalizeActiveSlotAttributes();
@@ -845,46 +901,189 @@ export class AppComponent implements OnInit {
     }
   }
 
-  private forceAllRolesToFirstTeamPlayer(): number {
+  private syncAllTeamsDatRolesWithCurrentRosters(syncTeamPlayerLinks = false, forceFirstPlayerAllRoles = false): number {
     if (!this.teamEditorService.hasData || !this.teamsDatService.hasData) {
       return 0;
     }
 
-    const firstPlayerIdByTeamId = new Map<number, number>();
+    let syncedTeams = 0;
 
     this.teamEditorService.teamOptions.forEach(({ offset }) => {
       const team = this.teamEditorService.getTeam(offset);
-      const activeSlotLimit = Math.min(team.playerCount, team.slots.length);
-      const firstActiveSlot = team.slots
-        .slice(0, activeSlotLimit)
-        .find((slot) => !slot.isEmpty);
 
-      if (firstActiveSlot) {
-        firstPlayerIdByTeamId.set(team.teamId, firstActiveSlot.playerId);
+      if (this.syncTeamsDatRolesForTeam(team, syncTeamPlayerLinks, forceFirstPlayerAllRoles)) {
+        syncedTeams += 1;
       }
     });
 
-    let updatedTeams = 0;
+    return syncedTeams;
+  }
 
-    this.teamsDatService.records.forEach((record) => {
-      const rolePlayerId = firstPlayerIdByTeamId.get(record.teamId);
+  private syncTeamsDatRolesForTeam(team: TeamRecord, syncTeamPlayerLinks = false, forceFirstPlayerAllRoles = false): boolean {
+    if (!this.teamsDatService.hasData) {
+      return false;
+    }
 
-      if (rolePlayerId === undefined) {
+    const CLEAR_ROLE_PLAYER_ID = 0xffffffff;
+    const activeSlots = this.getActiveTeamSlots(team);
+    const activePlayerIds = new Set(activeSlots.map((slot) => slot.playerId));
+    const fallbackRolePlayerId = activeSlots[0]?.playerId ?? CLEAR_ROLE_PLAYER_ID;
+    const record = this.teamsDatService.records.find((entry) => entry.teamId === team.teamId);
+
+    if (!record) {
+      return false;
+    }
+
+    const nextCaptainRole = forceFirstPlayerAllRoles
+      ? fallbackRolePlayerId
+      : this.resolveEffectiveRolePlayerId(team, record, 'captainRole');
+    const nextLeftCornerRole = forceFirstPlayerAllRoles
+      ? fallbackRolePlayerId
+      : this.resolveEffectiveRolePlayerId(team, record, 'leftCornerRole');
+    const nextRightCornerRole = forceFirstPlayerAllRoles
+      ? fallbackRolePlayerId
+      : this.resolveEffectiveRolePlayerId(team, record, 'rightCornerRole');
+    const nextPenaltyRole = forceFirstPlayerAllRoles
+      ? fallbackRolePlayerId
+      : this.resolveEffectiveRolePlayerId(team, record, 'penaltyRole');
+    const nextFreeKickRole = forceFirstPlayerAllRoles
+      ? fallbackRolePlayerId
+      : this.resolveEffectiveRolePlayerId(team, record, 'freeKickRole');
+
+    let updated = false;
+
+    if (
+      nextCaptainRole !== record.captainRole
+      || nextLeftCornerRole !== record.leftCornerRole
+      || nextRightCornerRole !== record.rightCornerRole
+      || nextPenaltyRole !== record.penaltyRole
+      || nextFreeKickRole !== record.freeKickRole
+    ) {
+      this.teamsDatService.updateRecord(record.index, {
+        captainRole: nextCaptainRole,
+        leftCornerRole: nextLeftCornerRole,
+        rightCornerRole: nextRightCornerRole,
+        penaltyRole: nextPenaltyRole,
+        freeKickRole: nextFreeKickRole
+      });
+      updated = true;
+    }
+
+    if (!syncTeamPlayerLinks) {
+      return updated;
+    }
+
+    const rolePlayerIds: Record<TeamsRoleField, number> = {
+      captainRole: activePlayerIds.has(nextCaptainRole) ? nextCaptainRole : fallbackRolePlayerId,
+      leftCornerRole: activePlayerIds.has(nextLeftCornerRole) ? nextLeftCornerRole : fallbackRolePlayerId,
+      rightCornerRole: activePlayerIds.has(nextRightCornerRole) ? nextRightCornerRole : fallbackRolePlayerId,
+      penaltyRole: activePlayerIds.has(nextPenaltyRole) ? nextPenaltyRole : fallbackRolePlayerId,
+      freeKickRole: activePlayerIds.has(nextFreeKickRole) ? nextFreeKickRole : fallbackRolePlayerId
+    };
+
+    const updatedTeam = this.applyRolesToTeamPlayerLinks(team, rolePlayerIds);
+    return updated || updatedTeam !== team;
+  }
+
+  private getActiveTeamSlots(team: TeamRecord): TeamSlot[] {
+    return team.slots
+      .slice(0, Math.min(team.playerCount, team.slots.length))
+      .filter((slot) => !slot.isEmpty);
+  }
+
+  private resolveEffectiveRolePlayerId(team: TeamRecord, record: TeamsDatRecord, field: TeamsRoleField): number {
+    const CLEAR_ROLE_PLAYER_ID = 0xffffffff;
+    const activeSlots = this.getActiveTeamSlots(team);
+    const activePlayerIds = new Set(activeSlots.map((slot) => slot.playerId));
+    const roleFromTeamPlayerLinks = this.getRolePlayerIdFromTeamPlayerLinks(team, field);
+
+    if (roleFromTeamPlayerLinks !== null) {
+      return roleFromTeamPlayerLinks;
+    }
+
+    const roleFromTeamsDat = record[field];
+
+    if (activePlayerIds.has(roleFromTeamsDat)) {
+      return roleFromTeamsDat;
+    }
+
+    return activeSlots[0]?.playerId ?? CLEAR_ROLE_PLAYER_ID;
+  }
+
+  private getRolePlayerIdFromTeamPlayerLinks(team: TeamRecord, field: TeamsRoleField): number | null {
+    const roleSlot = this.getActiveTeamSlots(team).find((slot) => {
+      switch (field) {
+        case 'captainRole':
+          return slot.isCaptain;
+        case 'leftCornerRole':
+          return slot.isLeftCornerTaker;
+        case 'rightCornerRole':
+          return slot.isRightCornerTaker;
+        case 'penaltyRole':
+          return slot.isPenaltyTaker;
+        case 'freeKickRole':
+          return slot.isFreeKickTaker;
+      }
+    });
+
+    return roleSlot ? roleSlot.playerId : null;
+  }
+
+  private applyRolesToTeamPlayerLinks(team: TeamRecord, rolePlayerIds: Record<TeamsRoleField, number>): TeamRecord {
+    const activeSlots = this.getActiveTeamSlots(team);
+    let updatedTeam = team;
+    let updated = false;
+
+    activeSlots.forEach((slot) => {
+      const shouldCaptain = slot.playerId === rolePlayerIds.captainRole;
+      const shouldLeftCorner = slot.playerId === rolePlayerIds.leftCornerRole;
+      const shouldRightCorner = slot.playerId === rolePlayerIds.rightCornerRole;
+      const shouldPenalty = slot.playerId === rolePlayerIds.penaltyRole;
+      const shouldFreeKick = slot.playerId === rolePlayerIds.freeKickRole;
+
+      if (
+        slot.isCaptain === shouldCaptain
+        && slot.isLeftCornerTaker === shouldLeftCorner
+        && slot.isRightCornerTaker === shouldRightCorner
+        && slot.isPenaltyTaker === shouldPenalty
+        && slot.isFreeKickTaker === shouldFreeKick
+      ) {
         return;
       }
 
-      this.teamsDatService.updateRecord(record.index, {
-        captainRole: rolePlayerId,
-        leftCornerRole: rolePlayerId,
-        rightCornerRole: rolePlayerId,
-        penaltyRole: rolePlayerId,
-        freeKickRole: rolePlayerId
+      updatedTeam = this.teamEditorService.updateSlot(team.offset, slot.index, {
+        captain: shouldCaptain,
+        leftCornerTaker: shouldLeftCorner,
+        rightCornerTaker: shouldRightCorner,
+        penaltyTaker: shouldPenalty,
+        freeKickTaker: shouldFreeKick
       });
-
-      updatedTeams += 1;
+      updated = true;
     });
 
-    return updatedTeams;
+    return updated ? updatedTeam : team;
+  }
+
+  private setRoleForCurrentTeam(field: TeamsRoleField, playerId: number): void {
+    const team = this.displayedTeams[0] ?? null;
+
+    if (!team) {
+      return;
+    }
+
+    const rolePlayerIds: Record<TeamsRoleField, number> = {
+      captainRole: field === 'captainRole' ? playerId : (this.getRolePlayerIdFromTeamPlayerLinks(team, 'captainRole') ?? 0xffffffff),
+      leftCornerRole: field === 'leftCornerRole' ? playerId : (this.getRolePlayerIdFromTeamPlayerLinks(team, 'leftCornerRole') ?? 0xffffffff),
+      rightCornerRole: field === 'rightCornerRole' ? playerId : (this.getRolePlayerIdFromTeamPlayerLinks(team, 'rightCornerRole') ?? 0xffffffff),
+      penaltyRole: field === 'penaltyRole' ? playerId : (this.getRolePlayerIdFromTeamPlayerLinks(team, 'penaltyRole') ?? 0xffffffff),
+      freeKickRole: field === 'freeKickRole' ? playerId : (this.getRolePlayerIdFromTeamPlayerLinks(team, 'freeKickRole') ?? 0xffffffff)
+    };
+
+    const updatedTeam = this.applyRolesToTeamPlayerLinks(team, rolePlayerIds);
+
+    if (updatedTeam !== team) {
+      this.replaceDisplayedTeam(team.offset, updatedTeam);
+    }
   }
 
   downloadTeamPlayerLinksUncompressed(): void {
@@ -1059,7 +1258,7 @@ export class AppComponent implements OnInit {
 
   updateTeamsDatRoleField(
     record: TeamsDatRecord,
-    field: 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole',
+    field: TeamsRoleField,
     value: string | number
   ): void {
     const rawValue = typeof value === 'number' ? value.toString(16) : value;
@@ -1073,6 +1272,7 @@ export class AppComponent implements OnInit {
       'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole'
     >> = {};
 
+    this.setRoleForCurrentTeam(field, parsedValue);
     changes[field] = parsedValue;
     this.teamsDatService.updateRecord(record.index, changes);
   }
@@ -1276,6 +1476,8 @@ export class AppComponent implements OnInit {
   }
 
   private replaceDisplayedTeam(offset: number, updatedTeam: TeamRecord): void {
+    this.syncTeamsDatRolesForTeam(updatedTeam);
+
     const decoratedTeam = this.decorateTeamWithPlayerNames(updatedTeam);
     this.displayedTeams = this.displayedTeams.map((team) => team.offset === offset ? decoratedTeam : team);
     this.rebuildRoleSelectOptions();
@@ -1466,6 +1668,25 @@ export class AppComponent implements OnInit {
     });
 
     return starterPositions.slice(0, 11);
+  }
+
+  private buildCleanReservePositionsByPlayerId(): Map<number, number> {
+    const reservePositionsByPlayerId = new Map<number, number>();
+
+    if (!this.fileLoaded) {
+      return reservePositionsByPlayerId;
+    }
+
+    for (let playerId = 1; playerId <= 18; playerId += 1) {
+      if (playerId >= this.playerService.totalPlayers) {
+        continue;
+      }
+
+      const player = this.playerService.readPlayer(playerId);
+      reservePositionsByPlayerId.set(playerId, Number.isFinite(player.pos) ? player.pos : 0);
+    }
+
+    return reservePositionsByPlayerId;
   }
 
   private matchFormation(players: TeamSlot[], formation: FormationPreset): {

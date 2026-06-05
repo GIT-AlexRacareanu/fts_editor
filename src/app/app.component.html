@@ -433,12 +433,48 @@
                 (blur)="updatePopupTeamShirt(popupShirtInput.value)"
                 (keyup.enter)="updatePopupTeamShirt(popupShirtInput.value)">
             </label>
-            <label class="team-player-editor-field">
-              <span>Position</span>
-              <select [ngModel]="slot.position" (ngModelChange)="updatePopupTeamPosition($event)">
-                <option *ngFor="let position of positions" [ngValue]="position.value">{{ position.label }}</option>
-              </select>
-            </label>
+            <div class="team-player-editor-field">
+              <span>Tactic Flags</span>
+              <div class="team-role-flags-grid">
+                <label>
+                  <input type="checkbox" [checked]="slot.isStarter" (change)="updatePopupTeamRoleFlag('starter', $any($event.target).checked)">
+                  Starter
+                </label>
+                <label>
+                  <input type="checkbox" [checked]="slot.isCaptain" (change)="updatePopupTeamRoleFlag('captain', $any($event.target).checked)">
+                  Captain
+                </label>
+                <label>
+                  <input type="checkbox" [checked]="slot.isPenaltyTaker" (change)="updatePopupTeamRoleFlag('penaltyTaker', $any($event.target).checked)">
+                  Penalty
+                </label>
+                <label>
+                  <input type="checkbox" [checked]="slot.isFreeKickTaker" (change)="updatePopupTeamRoleFlag('freeKickTaker', $any($event.target).checked)">
+                  Free Kick
+                </label>
+                <label>
+                  <input type="checkbox" [checked]="slot.isLeftCornerTaker" (change)="updatePopupTeamRoleFlag('leftCornerTaker', $any($event.target).checked)">
+                  Corner Left
+                </label>
+                <label>
+                  <input type="checkbox" [checked]="slot.isRightCornerTaker" (change)="updatePopupTeamRoleFlag('rightCornerTaker', $any($event.target).checked)">
+                  Corner Right
+                </label>
+              </div>
+              <div class="team-tactical-byte-preview">
+                Byte 2 (Tactic):
+                <strong>{{ slot.tacticalByte }}</strong>
+                <span>{{ formatTacticalByteHex(slot.tacticalByte) }}</span>
+              </div>
+              <div class="team-tactical-bit-legend">
+                <span>Starter = 1</span>
+                <span>Captain = 2</span>
+                <span>Penalty = 4</span>
+                <span>Free Kick = 8</span>
+                <span>Corner Left = 16</span>
+                <span>Corner Right = 32</span>
+              </div>
+            </div>
           </div>
           <button mat-stroked-button color="warn" class="team-player-editor-delete" (click)="deletePopupTeamPlayer()">
             <mat-icon>delete</mat-icon>

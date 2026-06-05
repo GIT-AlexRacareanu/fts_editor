@@ -96,8 +96,22 @@ const NATIONALITY_ALIASES: Record<string, string> = {
   'macedonia fyrom': 'north macedonia'
 };
 
+const SPECIAL_LATIN_MAP: Record<string, string> = {
+  'ß': 'ss', 'ẞ': 'SS',
+  'Æ': 'AE', 'æ': 'ae',
+  'Œ': 'OE', 'œ': 'oe',
+  'Ø': 'O', 'ø': 'o',
+  'Ð': 'D', 'ð': 'd',
+  'Þ': 'Th', 'þ': 'th',
+  'Ł': 'L', 'ł': 'l',
+  'Đ': 'D', 'đ': 'd',
+  'Ħ': 'H', 'ħ': 'h',
+  'Ŋ': 'N', 'ŋ': 'n'
+};
+
 @Injectable({ providedIn: 'root' })
 export class PlayerImportService {
+  private readonly maxGameNameLength = 16;
   private readonly nationalityIndex = new Map<string, number>(
     Object.entries(NATIONALITY_NAMES_BY_ID).map(([id, name]) => [this.normalizeKey(name), Number(id)])
   );
@@ -417,27 +431,27 @@ export class PlayerImportService {
   }
 
   private toGameName(sourceName: string, fallback: string): string {
-    const normalized = sourceName.trim();
+    const normalized = this.toLatinAscii(sourceName);
 
     if (!normalized) {
-      return fallback;
+      return this.trimToGameNameLength(this.toLatinAscii(fallback));
     }
 
     // Keep names that are already in abbreviated in-game style.
     if (/^[A-Za-z]\.\s+/.test(normalized)) {
-      return normalized;
+      return this.trimToGameNameLength(normalized);
     }
 
     const parts = normalized.split(/\s+/).filter((part) => part.length > 0);
 
     if (parts.length < 2) {
-      return normalized;
+      return this.trimToGameNameLength(normalized);
     }
 
     const firstName = parts[0];
     const surname = parts.slice(1).join(' ');
 
-    return `${firstName[0].toUpperCase()}. ${surname}`;
+    return this.trimToGameNameLength(`${firstName[0].toUpperCase()}. ${surname}`);
   }
 
   private mapPosition(source: ImportedPlayerRecord, fallback: number): number {
@@ -552,11 +566,30 @@ export class PlayerImportService {
   }
 
   private normalizeKey(value: string): string {
-    return value
+    return this.toLatinBase(value)
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-zA-Z0-9]+/g, ' ')
       .trim()
       .toLowerCase();
+  }
+
+  private toLatinAscii(value: string): string {
+    return this.toLatinBase(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Za-z0-9 .'-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private trimToGameNameLength(value: string): string {
+    return value.slice(0, this.maxGameNameLength).trimEnd();
+  }
+
+  private toLatinBase(value: string): string {
+    return Array.from(value)
+      .map((char) => SPECIAL_LATIN_MAP[char] ?? char)
+      .join('');
   }
 }

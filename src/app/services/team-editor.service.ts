@@ -8,13 +8,22 @@ declare const pako: any;
 
 const TEAM_STRIDE = 264;
 const TEAM_START_OFFSET = 0x10;
+const HEADER_FIELD_SIZE = 4;
+const MAX_REASONABLE_TEAM_COUNT = 10000;
 const SLOT_COUNT = 32;
-const ATTRIBUTES_OFFSET = 8;
-const PLAYER_ID_OFFSET = 136;
+const PLAYER_ENTRY_SIZE = 4;
+const ATTRIBUTES_OFFSET = 0x08;
+const PLAYER_ID_OFFSET = 0x88;
 const EMPTY_PLAYER_ID = 0;
 const UNUSED_PLAYER_ID = 0xffff;
 const MAX_POSITION_VALUE = 22;
 const STARTER_SLOT_COUNT = 11;
+const TACTIC_STARTER = 1;
+const TACTIC_CAPTAIN = 2;
+const TACTIC_PENALTY = 4;
+const TACTIC_FREE_KICK = 8;
+const TACTIC_LEFT_CORNER = 16;
+const TACTIC_RIGHT_CORNER = 32;
 
 export interface TeamPlayerReferenceIssue {
   teamOffset: number;
@@ -32,6 +41,7 @@ export class TeamEditorService {
   fileHandle: any = null;
   teamOptions: TeamOption[] = [];
   private wasCompressed = false;
+  private teamCountHeaderOffset: number | null = null;
 
   constructor(private readonly fileHandleStorage: FileHandleStorageService) {}
 
@@ -62,6 +72,7 @@ export class TeamEditorService {
     this.fileHandle = nextHandle;
     this.wasCompressed = this.isCompressed(input);
     this.binaryData = this.wasCompressed ? new Uint8Array(pako.inflate(input)) : input;
+    this.syncTeamCountHeaderWithDerivedCount();
     this.scanTeams();
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
@@ -137,14 +148,22 @@ export class TeamEditorService {
     const slots: TeamSlot[] = [];
 
     for (let index = 0; index < SLOT_COUNT; index++) {
-      const attrPtr = offset + ATTRIBUTES_OFFSET + index * 4;
-      const idPtr = offset + PLAYER_ID_OFFSET + index * 4;
+      const attrPtr = offset + ATTRIBUTES_OFFSET + index * PLAYER_ENTRY_SIZE;
+      const idPtr = offset + PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE;
       const playerId = view.getUint16(idPtr, true);
+      const tacticalByte = view.getUint8(attrPtr + 2);
 
       slots.push({
         index,
         playerId,
         playerIdHex: this.formatPlayerId(playerId),
+        tacticalByte,
+        isStarter: this.hasTacticFlag(tacticalByte, TACTIC_STARTER),
+        isCaptain: this.hasTacticFlag(tacticalByte, TACTIC_CAPTAIN),
+        isPenaltyTaker: this.hasTacticFlag(tacticalByte, TACTIC_PENALTY),
+        isFreeKickTaker: this.hasTacticFlag(tacticalByte, TACTIC_FREE_KICK),
+        isLeftCornerTaker: this.hasTacticFlag(tacticalByte, TACTIC_LEFT_CORNER),
+        isRightCornerTaker: this.hasTacticFlag(tacticalByte, TACTIC_RIGHT_CORNER),
         shirtNumber: view.getUint8(attrPtr),
         position: view.getUint8(attrPtr + 1),
         isEmpty: this.isEmptySlot(playerId)
@@ -251,8 +270,8 @@ export class TeamEditorService {
 
     if (nextPlayerCount < previousPlayerCount) {
       for (let index = nextPlayerCount; index < previousPlayerCount; index++) {
-        const attrPtr = offset + ATTRIBUTES_OFFSET + index * 4;
-        const idPtr = offset + PLAYER_ID_OFFSET + index * 4;
+        const attrPtr = offset + ATTRIBUTES_OFFSET + index * PLAYER_ENTRY_SIZE;
+        const idPtr = offset + PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE;
         view.setUint32(attrPtr, 0, true);
         view.setUint16(idPtr, UNUSED_PLAYER_ID, true);
         view.setUint16(idPtr + 2, UNUSED_PLAYER_ID, true);
@@ -261,13 +280,16 @@ export class TeamEditorService {
 
     if (nextPlayerCount > previousPlayerCount) {
       for (let index = previousPlayerCount; index < nextPlayerCount; index++) {
-        const idPtr = offset + PLAYER_ID_OFFSET + index * 4;
+        const attrPtr = offset + ATTRIBUTES_OFFSET + index * PLAYER_ENTRY_SIZE;
+        const idPtr = offset + PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE;
         const currentPlayerId = view.getUint16(idPtr, true);
 
         if (currentPlayerId === UNUSED_PLAYER_ID) {
           view.setUint16(idPtr, EMPTY_PLAYER_ID, true);
         }
 
+        const tacticalByte = index < STARTER_SLOT_COUNT ? TACTIC_STARTER : 0;
+        view.setUint8(attrPtr + 2, tacticalByte);
         view.setUint16(idPtr + 2, view.getUint16(idPtr, true) === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0, true);
       }
     }
@@ -279,12 +301,22 @@ export class TeamEditorService {
   updateSlot(
     offset: number,
     slotIndex: number,
-    changes: { playerIdHex?: string; shirtNumber?: number; position?: number },
+    changes: {
+      playerIdHex?: string;
+      shirtNumber?: number;
+      position?: number;
+      starter?: boolean;
+      captain?: boolean;
+      penaltyTaker?: boolean;
+      freeKickTaker?: boolean;
+      leftCornerTaker?: boolean;
+      rightCornerTaker?: boolean;
+    },
     nextPlayerCount?: number
   ): TeamRecord {
     const view = this.getView();
-    const attrPtr = offset + ATTRIBUTES_OFFSET + slotIndex * 4;
-    const idPtr = offset + PLAYER_ID_OFFSET + slotIndex * 4;
+    const attrPtr = offset + ATTRIBUTES_OFFSET + slotIndex * PLAYER_ENTRY_SIZE;
+    const idPtr = offset + PLAYER_ID_OFFSET + slotIndex * PLAYER_ENTRY_SIZE;
 
     if (changes.playerIdHex !== undefined) {
       const parsed = Number.parseInt(changes.playerIdHex.trim(), 16);
@@ -302,6 +334,35 @@ export class TeamEditorService {
     if (changes.position !== undefined) {
       view.setUint8(attrPtr + 1, this.clamp(changes.position, 0, MAX_POSITION_VALUE));
     }
+
+    let tacticalByte = view.getUint8(attrPtr + 2);
+
+    if (changes.starter !== undefined) {
+      tacticalByte = this.toggleTacticFlag(tacticalByte, TACTIC_STARTER, changes.starter);
+    }
+
+    if (changes.captain !== undefined) {
+      tacticalByte = this.toggleTacticFlag(tacticalByte, TACTIC_CAPTAIN, changes.captain);
+    }
+
+    if (changes.penaltyTaker !== undefined) {
+      tacticalByte = this.toggleTacticFlag(tacticalByte, TACTIC_PENALTY, changes.penaltyTaker);
+    }
+
+    if (changes.freeKickTaker !== undefined) {
+      tacticalByte = this.toggleTacticFlag(tacticalByte, TACTIC_FREE_KICK, changes.freeKickTaker);
+    }
+
+    if (changes.leftCornerTaker !== undefined) {
+      tacticalByte = this.toggleTacticFlag(tacticalByte, TACTIC_LEFT_CORNER, changes.leftCornerTaker);
+    }
+
+    if (changes.rightCornerTaker !== undefined) {
+      tacticalByte = this.toggleTacticFlag(tacticalByte, TACTIC_RIGHT_CORNER, changes.rightCornerTaker);
+    }
+
+    view.setUint8(attrPtr + 2, tacticalByte);
+    view.setUint8(attrPtr + 3, 0);
 
     if (nextPlayerCount !== undefined) {
       view.setUint32(offset + 4, this.clamp(Math.trunc(nextPlayerCount), 0, SLOT_COUNT), true);
@@ -325,26 +386,26 @@ export class TeamEditorService {
     return this.updateSlot(offset, insertSlot.index, {
       playerIdHex: this.formatPlayerId(EMPTY_PLAYER_ID),
       shirtNumber: 0,
-      position: 0
+      position: 0,
+      starter: insertSlot.index < STARTER_SLOT_COUNT
     }, nextPlayerCount);
   }
 
   addPlayer(offset: number, playerId: number, position: number): TeamRecord | null {
     const team = this.getTeam(offset);
-    const insertSlot = this.findInsertSlot(team);
+    const insertSlot = this.findAppendSlot(team);
 
     if (!insertSlot) {
       return null;
     }
 
-    const nextPlayerCount = insertSlot.index < team.playerCount
-      ? team.playerCount
-      : Math.min(team.playerCount + 1, SLOT_COUNT);
+    const nextPlayerCount = Math.min(insertSlot.index + 1, SLOT_COUNT);
 
     return this.updateSlot(offset, insertSlot.index, {
       playerIdHex: this.formatPlayerId(playerId),
       shirtNumber: 0,
-      position
+      position,
+      starter: insertSlot.index < STARTER_SLOT_COUNT
     }, nextPlayerCount);
   }
 
@@ -362,18 +423,17 @@ export class TeamEditorService {
     const activeLastIndex = normalizedPlayerCount - 1;
 
     for (let index = slotIndex; index < activeLastIndex; index++) {
-      const sourceAttrPtr = offset + ATTRIBUTES_OFFSET + (index + 1) * 4;
-      const sourceIdPtr = offset + PLAYER_ID_OFFSET + (index + 1) * 4;
-      const targetAttrPtr = offset + ATTRIBUTES_OFFSET + index * 4;
-      const targetIdPtr = offset + PLAYER_ID_OFFSET + index * 4;
+      const sourceAttrPtr = offset + ATTRIBUTES_OFFSET + (index + 1) * PLAYER_ENTRY_SIZE;
+      const sourceIdPtr = offset + PLAYER_ID_OFFSET + (index + 1) * PLAYER_ENTRY_SIZE;
+      const targetAttrPtr = offset + ATTRIBUTES_OFFSET + index * PLAYER_ENTRY_SIZE;
+      const targetIdPtr = offset + PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE;
 
       view.setUint32(targetAttrPtr, view.getUint32(sourceAttrPtr, true), true);
-      view.setUint16(targetIdPtr, view.getUint16(sourceIdPtr, true), true);
-      view.setUint16(targetIdPtr + 2, view.getUint16(sourceIdPtr + 2, true), true);
+      view.setUint32(targetIdPtr, view.getUint32(sourceIdPtr, true), true);
     }
 
-    const clearAttrPtr = offset + ATTRIBUTES_OFFSET + activeLastIndex * 4;
-    const clearIdPtr = offset + PLAYER_ID_OFFSET + activeLastIndex * 4;
+    const clearAttrPtr = offset + ATTRIBUTES_OFFSET + activeLastIndex * PLAYER_ENTRY_SIZE;
+    const clearIdPtr = offset + PLAYER_ID_OFFSET + activeLastIndex * PLAYER_ENTRY_SIZE;
     view.setUint32(clearAttrPtr, 0, true);
     view.setUint16(clearIdPtr, UNUSED_PLAYER_ID, true);
     view.setUint16(clearIdPtr + 2, UNUSED_PLAYER_ID, true);
@@ -382,7 +442,10 @@ export class TeamEditorService {
     return this.getTeam(offset);
   }
 
-  clearAllTeams(starterPositionsByTeamId?: ReadonlyMap<number, readonly number[]>): void {
+  clearAllTeams(
+    starterPositionsByTeamId?: ReadonlyMap<number, readonly number[]>,
+    reservePositionsByPlayerId?: ReadonlyMap<number, number>
+  ): void {
     const view = this.getView();
     const ACTIVE_SLOTS = 18;
 
@@ -392,11 +455,12 @@ export class TeamEditorService {
       view.setUint32(offset + 4, ACTIVE_SLOTS, true);
 
       for (let index = 0; index < SLOT_COUNT; index++) {
-        const attrPtr = offset + ATTRIBUTES_OFFSET + index * 4;
-        const idPtr = offset + PLAYER_ID_OFFSET + index * 4;
+        const attrPtr = offset + ATTRIBUTES_OFFSET + index * PLAYER_ENTRY_SIZE;
+        const idPtr = offset + PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE;
+        const playerId = index + 1;
 
         if (index < ACTIVE_SLOTS) {
-          view.setUint16(idPtr, index, true);
+          view.setUint16(idPtr, playerId, true);
           view.setUint16(idPtr + 2, 0, true);
         } else {
           view.setUint16(idPtr, UNUSED_PLAYER_ID, true);
@@ -405,14 +469,12 @@ export class TeamEditorService {
 
         const cleanPosition = index < 11
           ? (starterPositions[index] ?? 0)
-          : (index === 11
-            ? 0
-            : (index < ACTIVE_SLOTS ? starterPositions[index - 10] ?? 0 : 0));
-        const starterFlag = index < 11 ? 1 : 0;
-
+          : (index < ACTIVE_SLOTS
+            ? (reservePositionsByPlayerId?.get(playerId) ?? 0)
+            : 0);
         view.setUint8(attrPtr, 0);
         view.setUint8(attrPtr + 1, this.clamp(cleanPosition, 0, MAX_POSITION_VALUE));
-        view.setUint8(attrPtr + 2, starterFlag);
+        view.setUint8(attrPtr + 2, index < STARTER_SLOT_COUNT ? TACTIC_STARTER : 0);
         view.setUint8(attrPtr + 3, 0);
       }
     });
@@ -441,14 +503,16 @@ export class TeamEditorService {
 
     usedIndexes.forEach((targetSlotIndex, orderIndex) => {
       const sourceSlot = orderedSlots[orderIndex];
-      const attrPtr = offset + ATTRIBUTES_OFFSET + targetSlotIndex * 4;
-      const idPtr = offset + PLAYER_ID_OFFSET + targetSlotIndex * 4;
-      view.setUint8(attrPtr, sourceSlot.shirtNumber);
-      view.setUint8(attrPtr + 1, this.clamp(starterPositions[orderIndex] ?? sourceSlot.position, 0, MAX_POSITION_VALUE));
-      view.setUint8(attrPtr + 2, orderIndex < STARTER_SLOT_COUNT ? 1 : 0);
-      view.setUint8(attrPtr + 3, 0);
+      const attrPtr = offset + ATTRIBUTES_OFFSET + targetSlotIndex * PLAYER_ENTRY_SIZE;
+      const idPtr = offset + PLAYER_ID_OFFSET + targetSlotIndex * PLAYER_ENTRY_SIZE;
+      const tacticalByte = this.toggleTacticFlag(sourceSlot.tacticalByte, TACTIC_STARTER, orderIndex < STARTER_SLOT_COUNT);
+
       view.setUint16(idPtr, sourceSlot.playerId, true);
       view.setUint16(idPtr + 2, sourceSlot.playerId === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0, true);
+      view.setUint8(attrPtr, sourceSlot.shirtNumber);
+      view.setUint8(attrPtr + 1, this.clamp(starterPositions[orderIndex] ?? sourceSlot.position, 0, MAX_POSITION_VALUE));
+      view.setUint8(attrPtr + 2, tacticalByte);
+      view.setUint8(attrPtr + 3, 0);
     });
 
     return this.getTeam(offset);
@@ -466,8 +530,8 @@ export class TeamEditorService {
       const playerCount = this.clamp(view.getUint32(offset + 4, true), 0, SLOT_COUNT);
 
       for (let slotIndex = 0; slotIndex < playerCount; slotIndex += 1) {
-        const attrPtr = offset + ATTRIBUTES_OFFSET + slotIndex * 4;
-        const idPtr = offset + PLAYER_ID_OFFSET + slotIndex * 4;
+        const attrPtr = offset + ATTRIBUTES_OFFSET + slotIndex * PLAYER_ENTRY_SIZE;
+        const idPtr = offset + PLAYER_ID_OFFSET + slotIndex * PLAYER_ENTRY_SIZE;
         const playerId = view.getUint16(idPtr, true);
 
         if (this.isEmptySlot(playerId)) {
@@ -476,22 +540,24 @@ export class TeamEditorService {
 
         const currentPosition = view.getUint8(attrPtr + 1);
         const normalizedPosition = this.clamp(currentPosition, 0, MAX_POSITION_VALUE);
-        const currentStarterFlag = view.getUint8(attrPtr + 2);
-        const normalizedStarterFlag = slotIndex < STARTER_SLOT_COUNT ? 1 : 0;
-        const currentPadding = view.getUint8(attrPtr + 3);
-        const currentPlayerPad = view.getUint16(idPtr + 2, true);
-        const normalizedPlayerPad = playerId === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0;
+        const currentTacticalByte = view.getUint8(attrPtr + 2);
+        const knownFlagsMask = TACTIC_STARTER | TACTIC_CAPTAIN | TACTIC_PENALTY | TACTIC_FREE_KICK | TACTIC_LEFT_CORNER | TACTIC_RIGHT_CORNER;
+        let normalizedTacticalByte = currentTacticalByte & knownFlagsMask;
+        normalizedTacticalByte = this.toggleTacticFlag(normalizedTacticalByte, TACTIC_STARTER, slotIndex < STARTER_SLOT_COUNT);
+        const currentAttrPadding = view.getUint8(attrPtr + 3);
+        const currentIdPad = view.getUint16(idPtr + 2, true);
+        const normalizedIdPad = playerId === UNUSED_PLAYER_ID ? UNUSED_PLAYER_ID : 0;
 
         if (
           normalizedPosition !== currentPosition
-          || normalizedStarterFlag !== currentStarterFlag
-          || currentPadding !== 0
-          || currentPlayerPad !== normalizedPlayerPad
+          || normalizedTacticalByte !== currentTacticalByte
+          || currentAttrPadding !== 0
+          || currentIdPad !== normalizedIdPad
         ) {
           view.setUint8(attrPtr + 1, normalizedPosition);
-          view.setUint8(attrPtr + 2, normalizedStarterFlag);
+          view.setUint8(attrPtr + 2, normalizedTacticalByte);
           view.setUint8(attrPtr + 3, 0);
-          view.setUint16(idPtr + 2, normalizedPlayerPad, true);
+          view.setUint16(idPtr + 2, normalizedIdPad, true);
           updatedSlots += 1;
         }
       }
@@ -526,7 +592,7 @@ export class TeamEditorService {
     const view = this.getView();
 
     for (let index = 0; index < SLOT_COUNT; index++) {
-      const playerId = view.getUint16(offset + PLAYER_ID_OFFSET + index * 4, true);
+      const playerId = view.getUint16(offset + PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE, true);
       if (this.isEmptySlot(playerId)) {
         continue;
       }
@@ -541,6 +607,14 @@ export class TeamEditorService {
 
   private formatPlayerId(playerId: number): string {
     return playerId.toString(16).toUpperCase().padStart(4, '0');
+  }
+
+  private hasTacticFlag(tacticalByte: number, flag: number): boolean {
+    return (tacticalByte & flag) === flag;
+  }
+
+  private toggleTacticFlag(tacticalByte: number, flag: number, enabled: boolean): number {
+    return enabled ? (tacticalByte | flag) : (tacticalByte & ~flag);
   }
 
   private findInsertSlot(team: TeamRecord): TeamSlot | undefined {
@@ -558,6 +632,19 @@ export class TeamEditorService {
     }
 
     return team.slots.find((slot) => slot.isEmpty);
+  }
+
+  private findAppendSlot(team: TeamRecord): TeamSlot | undefined {
+    const normalizedPlayerCount = this.clamp(Math.trunc(team.playerCount), 0, SLOT_COUNT);
+
+    for (let index = normalizedPlayerCount; index < SLOT_COUNT; index += 1) {
+      const slot = team.slots[index];
+      if (slot?.isEmpty) {
+        return slot;
+      }
+    }
+
+    return undefined;
   }
 
   private isEmptySlot(playerId: number): boolean {
@@ -581,6 +668,72 @@ export class TeamEditorService {
     return new DataView(this.binaryData.buffer);
   }
 
+  private syncTeamCountHeaderWithDerivedCount(): void {
+    if (!this.binaryData || this.binaryData.byteLength < TEAM_START_OFFSET) {
+      return;
+    }
+
+    const derivedTeamCount = this.getDerivedTeamCount(this.binaryData.byteLength);
+
+    if (this.teamCountHeaderOffset === null) {
+      this.teamCountHeaderOffset = this.detectTeamCountHeaderOffset(derivedTeamCount);
+    }
+
+    if (this.teamCountHeaderOffset === null) {
+      return;
+    }
+
+    const view = this.getView();
+    view.setUint32(this.teamCountHeaderOffset, derivedTeamCount, true);
+  }
+
+  private detectTeamCountHeaderOffset(derivedTeamCount: number): number | null {
+    const view = this.getView();
+    const candidates: Array<{ offset: number; value: number }> = [];
+
+    for (let offset = 0; offset <= TEAM_START_OFFSET - HEADER_FIELD_SIZE; offset += HEADER_FIELD_SIZE) {
+      const value = view.getUint32(offset, true);
+
+      if (value <= MAX_REASONABLE_TEAM_COUNT) {
+        candidates.push({ offset, value });
+      }
+    }
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const exactMatch = candidates.find((candidate) => candidate.value === derivedTeamCount);
+
+    if (exactMatch) {
+      return exactMatch.offset;
+    }
+
+    if (candidates.length === 1) {
+      return candidates[0].offset;
+    }
+
+    candidates.sort((left, right) => {
+      const distanceDiff = Math.abs(left.value - derivedTeamCount) - Math.abs(right.value - derivedTeamCount);
+
+      if (distanceDiff !== 0) {
+        return distanceDiff;
+      }
+
+      return left.offset - right.offset;
+    });
+
+    return candidates[0].offset;
+  }
+
+  private getDerivedTeamCount(byteLength: number): number {
+    if (byteLength < TEAM_START_OFFSET) {
+      return 0;
+    }
+
+    return Math.floor((byteLength - TEAM_START_OFFSET) / TEAM_STRIDE);
+  }
+
   private isCompressed(data: Uint8Array): boolean {
     return data.length > 1 && data[0] === 0x78;
   }
@@ -601,6 +754,8 @@ export class TeamEditorService {
     if (!this.binaryData) {
       throw new Error('No team database loaded');
     }
+
+    this.syncTeamCountHeaderWithDerivedCount();
 
     const payload = this.wasCompressed ? pako.deflate(this.binaryData) : this.binaryData;
     const bytes = new Uint8Array(payload.byteLength);

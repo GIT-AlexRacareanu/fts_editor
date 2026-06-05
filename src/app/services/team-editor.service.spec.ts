@@ -55,7 +55,7 @@ describe('TeamEditorService', () => {
     expect(updatedTeam?.slots[1].isEmpty).toBeTrue();
   });
 
-  it('adds a chosen player into the next available slot with the provided position', () => {
+  it('adds a chosen player at the end of active slots with the provided position', () => {
     const offset = seedTeamBinary(service, {
       playerCount: 2,
       playerIds: [0x0010, 0x0000, 0x0000]
@@ -64,26 +64,26 @@ describe('TeamEditorService', () => {
     const updatedTeam = service.addPlayer(offset, 0x0033, 13);
 
     expect(updatedTeam).not.toBeNull();
-    expect(updatedTeam?.playerCount).toBe(2);
-    expect(updatedTeam?.slots[1].playerId).toBe(0x0033);
-    expect(updatedTeam?.slots[1].position).toBe(13);
-    expect(updatedTeam?.slots[1].isEmpty).toBeFalse();
+    expect(updatedTeam?.playerCount).toBe(3);
+    expect(updatedTeam?.slots[1].playerId).toBe(0x0000);
+    expect(updatedTeam?.slots[2].playerId).toBe(0x0033);
+    expect(updatedTeam?.slots[2].position).toBe(13);
+    expect(updatedTeam?.slots[2].isEmpty).toBeFalse();
   });
 
-  it('clears FFFF padding when adding a player into an unused placeholder slot', () => {
+  it('does not overwrite counted placeholder slots when adding a player', () => {
     const offset = seedTeamBinary(service, {
       playerCount: 3,
       playerIds: [0x0010, 0xffff, 0x0020]
     });
 
     const updatedTeam = service.addPlayer(offset, 0x0033, 13);
-    const view = new DataView(service.binaryData!.buffer);
-    const reusedSlotOffset = offset + PLAYER_ID_OFFSET + 4;
 
     expect(updatedTeam).not.toBeNull();
-    expect(updatedTeam?.slots[1].playerId).toBe(0x0033);
-    expect(view.getUint16(reusedSlotOffset, true)).toBe(0x0033);
-    expect(view.getUint16(reusedSlotOffset + 2, true)).toBe(0x0000);
+    expect(updatedTeam?.playerCount).toBe(4);
+    expect(updatedTeam?.slots[1].playerId).toBe(0xffff);
+    expect(updatedTeam?.slots[3].playerId).toBe(0x0033);
+    expect(updatedTeam?.slots[3].position).toBe(13);
   });
 
   it('compacts counted slots when deleting a player so active slots remain contiguous', () => {
@@ -179,6 +179,39 @@ describe('TeamEditorService', () => {
     expect(view.getUint8(slot11AttrOffset + 2)).toBe(0);
     expect(view.getUint8(slot11AttrOffset + 3)).toBe(0);
     expect(view.getUint16(slot0IdOffset + 2, true)).toBe(0x0000);
+  });
+
+  it('syncs detected header team count field to the derived number of teams', () => {
+    const binaryData = new Uint8Array(TEAM_START_OFFSET + TEAM_STRIDE * 2);
+    const view = new DataView(binaryData.buffer);
+
+    view.setUint32(4, 1, true);
+    view.setUint32(8, 0x7fffffff, true);
+
+    service.binaryData = binaryData;
+
+    (service as any).syncTeamCountHeaderWithDerivedCount();
+
+    expect(view.getUint32(4, true)).toBe(2);
+  });
+
+  it('keeps header unchanged when no plausible team-count field exists', () => {
+    const binaryData = new Uint8Array(TEAM_START_OFFSET + TEAM_STRIDE * 3);
+    const view = new DataView(binaryData.buffer);
+
+    view.setUint32(0, 0x9fffffff, true);
+    view.setUint32(4, 0x8fffffff, true);
+    view.setUint32(8, 0x7fffffff, true);
+    view.setUint32(12, 0x6fffffff, true);
+
+    service.binaryData = binaryData;
+
+    (service as any).syncTeamCountHeaderWithDerivedCount();
+
+    expect(view.getUint32(0, true)).toBe(0x9fffffff);
+    expect(view.getUint32(4, true)).toBe(0x8fffffff);
+    expect(view.getUint32(8, true)).toBe(0x7fffffff);
+    expect(view.getUint32(12, true)).toBe(0x6fffffff);
   });
 });
 
