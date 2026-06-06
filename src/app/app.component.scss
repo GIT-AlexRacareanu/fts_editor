@@ -215,6 +215,221 @@
   color: #90a4ae;
 }
 
+/* ── CSV Team Import panel ─────────────────────────────────── */
+
+.team-csv-import-panel {
+  margin-bottom: 12px;
+  background: var(--card) !important;
+  border: 1px solid var(--card-border) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+
+  ::ng-deep .mat-expansion-panel-header {
+    background: var(--card) !important;
+    border-radius: 10px !important;
+
+    &:hover, &.mat-expanded {
+      background: var(--input-bg) !important;
+    }
+  }
+
+  ::ng-deep .mat-expansion-panel-body {
+    background: var(--card);
+    padding: 0 16px 16px !important;
+  }
+
+  .team-csv-import-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    vertical-align: middle;
+    color: var(--accent);
+  }
+}
+
+.team-csv-target-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 14px;
+  font-size: 0.85rem;
+  color: var(--text);
+
+  strong {
+    color: var(--accent);
+  }
+
+  .team-csv-target-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: var(--accent);
+    opacity: 0.7;
+  }
+}
+
+.team-csv-target-none {
+  color: #546e7a;
+  font-style: italic;
+}
+
+.team-csv-search-wrap {
+  position: relative;
+}
+
+.team-csv-search-results {
+  border: 1px solid var(--card-border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: var(--input-bg);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: -8px;
+  margin-bottom: 12px;
+}
+
+.team-csv-search-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--card-border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: rgba(30, 136, 229, 0.15);
+    color: var(--accent);
+  }
+}
+
+.team-csv-search-option-count {
+  color: #546e7a;
+  font-size: 0.78rem;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.team-csv-search-empty {
+  padding: 10px 12px;
+  color: #546e7a;
+  font-size: 0.83rem;
+  font-style: italic;
+}
+
+.team-csv-import-field {
+  width: 100%;
+}
+
+.team-csv-import-preview {
+  margin-top: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--input-bg);
+}
+
+.team-csv-import-preview-header {
+  padding: 7px 12px;
+  background: rgba(30, 136, 229, 0.12);
+  border-bottom: 1px solid var(--card-border);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-transform: uppercase;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.team-csv-preview-base-id {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #546e7a;
+  font-size: 0.76rem;
+}
+
+.team-csv-import-preview-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.team-csv-import-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--card-border);
+  font-size: 0.82rem;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:nth-child(even) {
+    background: rgba(255,255,255,0.02);
+  }
+}
+
+.team-csv-preview-hex {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.73rem;
+  color: #546e7a;
+  min-width: 38px;
+  letter-spacing: 0.04em;
+}
+
+.team-csv-preview-name {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.team-csv-preview-pos {
+  font-size: 0.72rem;
+  color: var(--primary);
+  min-width: 36px;
+  text-align: center;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.team-csv-preview-ovr {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ffd740;
+  min-width: 28px;
+  text-align: right;
+}
+
+.team-csv-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.team-csv-import-status {
+  font-size: 0.82rem;
+  color: var(--success);
+}
+
+
 .team-results {
   display: grid;
   gap: 14px;

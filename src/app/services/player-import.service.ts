@@ -12,9 +12,11 @@ export interface ImportedPlayerRecord {
   clubPosition: string;
   nationalityName: string;
   preferredFoot: string;
+  teamName: string;
   shooting: number;
   passing: number;
   dribbling: number;
+  physical: number;
   attackingCrossing: number;
   attackingHeadingAccuracy: number;
   skillFkAccuracy: number;
@@ -139,6 +141,15 @@ export class PlayerImportService {
       });
   }
 
+  getAvailableTeamNames(players: ImportedPlayerRecord[]): string[] {
+    const teams = new Set(players.map((p) => p.teamName).filter((t) => t.length > 0));
+    return Array.from(teams).sort();
+  }
+
+  filterByTeam(players: ImportedPlayerRecord[], teamName: string): ImportedPlayerRecord[] {
+    return players.filter((p) => p.teamName === teamName);
+  }
+
   searchPlayers(players: ImportedPlayerRecord[], query: string): ImportedPlayerRecord[] {
     const normalizedQuery = this.normalizeKey(query);
 
@@ -253,48 +264,45 @@ export class PlayerImportService {
       weightKg: this.getWeightFieldByAliases(row, headerIndexes, ['weight_kg', 'weight']),
       clubPosition: this.getFieldByAliases(row, headerIndexes, ['club_position', 'position', 'best_position', 'best position']),
       nationalityName: this.getFieldByAliases(row, headerIndexes, ['nationality_name', 'nation', 'nationality', 'country region', 'country']),
+      teamName: this.getFieldByAliases(row, headerIndexes, ['team', 'club', 'club_name', 'club name', 'team name']),
+
       preferredFoot: this.getFieldByAliases(row, headerIndexes, ['preferred_foot', 'preferred foot', 'preferredfoot', 'foot']),
       shooting,
       passing,
       dribbling: this.getNumberFieldByAliases(row, headerIndexes, ['dribbling', 'dri']),
+      physical: this.getNumberFieldByAliases(row, headerIndexes, ['physical', 'phy']),
       attackingCrossing: this.getNumberFieldByAliases(row, headerIndexes, ['attacking_crossing', 'crossing']),
       attackingHeadingAccuracy: headingAccuracy,
       skillFkAccuracy: this.getNumberFieldByAliases(row, headerIndexes, ['skill_fk_accuracy', 'free_kick_accuracy', 'free kick accuracy']),
-      movementAcceleration: this.getStatWithFallbackAliases(
+      movementAcceleration: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['movement_acceleration', 'acceleration'],
-        ['pace', 'pac']
+        ['movement_acceleration', 'acceleration']
       ),
-      movementSprintSpeed: this.getStatWithFallbackAliases(
+      movementSprintSpeed: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['movement_sprint_speed', 'sprint_speed', 'sprint speed'],
-        ['pace', 'pac']
+        ['movement_sprint_speed', 'sprint_speed', 'sprint speed']
       ),
-      powerStamina: this.getStatWithFallbackAliases(
+      powerStamina: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['power_stamina', 'stamina'],
+        ['power_stamina', 'stamina']
+      ),
+      powerStrength: this.getNumberFieldByAliases(
+        row,
+        headerIndexes,
         ['physical', 'phy']
       ),
-      powerStrength: this.getStatWithFallbackAliases(
+      defendingStandingTackle: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['power_strength', 'strength'],
-        ['physical', 'phy']
+        ['defending_standing_tackle', 'standing_tackle', 'standing tackle']
       ),
-      defendingStandingTackle: this.getStatWithFallbackAliases(
+      defendingSlidingTackle: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['defending_standing_tackle', 'standing_tackle', 'standing tackle'],
-        ['defending', 'def']
-      ),
-      defendingSlidingTackle: this.getStatWithFallbackAliases(
-        row,
-        headerIndexes,
-        ['defending_sliding_tackle', 'sliding_tackle', 'sliding tackle'],
-        ['defending', 'def']
+        ['defending_sliding_tackle', 'sliding_tackle', 'sliding tackle']
       ),
       goalkeepingDiving: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_diving', 'gk_diving', 'gk diving']),
       goalkeepingHandling: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_handling', 'gk_handling', 'gk handling']),
@@ -335,21 +343,6 @@ export class PlayerImportService {
     const parsed = this.parseLooseNumber(value);
 
     return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  private getStatWithFallbackAliases(
-    row: string[],
-    headerIndexes: Map<string, number>,
-    aliases: string[],
-    fallbackAliases: string[]
-  ): number {
-    const explicitValue = this.getNumberFieldByAliases(row, headerIndexes, aliases);
-
-    if (explicitValue > 0) {
-      return explicitValue;
-    }
-
-    return this.getNumberFieldByAliases(row, headerIndexes, fallbackAliases);
   }
 
   private getHeightFieldByAliases(row: string[], headerIndexes: Map<string, number>, fieldNames: string[]): number {

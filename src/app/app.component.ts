@@ -109,6 +109,12 @@ export class AppComponent implements OnInit {
   importStatusMessage = '';
   isBulkImporting = false;
 
+  // ─── Team Import ─────────────────────────────────────────────
+  teamImportCsvTeam: string | null = null;
+  teamImportCsvTeamSearch = '';
+  isTeamImporting = false;
+  teamImportStatusMessage = '';
+
   // ─── DB Browser ──────────────────────────────────────────────
   dbSearchNameQuery = '';
   dbSearchNationalityQuery: number | null = null;
@@ -593,6 +599,157 @@ export class AppComponent implements OnInit {
       if (notify) {
         alert(message || fallbackMessage);
       }
+    }
+  }
+
+  // ─── Team Import ──────────────────────────────────────────────
+
+  csvTeamPlayerCount(teamName: string): number {
+    return this.playerImportService.filterByTeam(this.importedPlayers, teamName).length;
+  }
+
+  get selectedTeamLabel(): string {
+    if (this.selectedTeamOffset === null) {
+      return '';
+    }
+    return this.teamOptions.find((t) => t.offset === this.selectedTeamOffset)?.label ?? '';
+  }
+
+  get csvTeamOptions(): string[] {
+    return this.playerImportService.getAvailableTeamNames(this.importedPlayers);
+  }
+
+  get filteredCsvTeamOptions(): string[] {
+    const q = this.teamImportCsvTeamSearch.trim().toLowerCase();
+    if (!q) {
+      return this.csvTeamOptions;
+    }
+    return this.csvTeamOptions.filter((t) => t.toLowerCase().includes(q));
+  }
+
+  get teamImportPreviewPlayers(): ImportedPlayerRecord[] {
+    if (!this.teamImportCsvTeam) {
+      return [];
+    }
+
+    return this.playerImportService.filterByTeam(this.importedPlayers, this.teamImportCsvTeam);
+  }
+
+  get teamImportMappedPreview(): Array<{
+    shortName: string;
+    futureIndex: number;
+    futureHexId: string;
+    positionLabel: string;
+    ovr: number;
+  }> {
+    if (!this.teamImportCsvTeam || !this.fileLoaded) {
+      return [];
+    }
+
+    const csvPlayers = this.playerImportService.filterByTeam(this.importedPlayers, this.teamImportCsvTeam);
+    const cappedPlayers = csvPlayers.slice(0, 32);
+    const baseIndex = this.playerService.totalPlayers;
+    const templatePlayer = baseIndex > 0 ? this.playerService.readPlayer(0) : this.emptyPlayer();
+
+    return cappedPlayers.map((p, i) => {
+      const mapped = this.playerImportService.mapImportedPlayer(p, templatePlayer, { includeYear: false });
+      const futureIndex = baseIndex + i;
+
+      return {
+        shortName: p.shortName,
+        futureIndex,
+        futureHexId: futureIndex.toString(16).toUpperCase().padStart(4, '0'),
+        positionLabel: this.getPositionLabel(mapped.pos),
+        ovr: this.playerService.calculateOVR(mapped)
+      };
+    });
+  }
+
+  selectCsvImportTeam(teamName: string): void {
+    this.teamImportCsvTeam = teamName;
+    this.teamImportCsvTeamSearch = teamName;
+    this.teamImportStatusMessage = '';
+  }
+
+  clearCsvImportTeam(): void {
+    this.teamImportCsvTeam = null;
+    this.teamImportCsvTeamSearch = '';
+    this.teamImportStatusMessage = '';
+  }
+
+  onTeamImportCsvTeamChange(): void {
+    this.teamImportCsvTeam = null;
+    this.teamImportStatusMessage = '';
+  }
+
+  async importTeamFromCsv(): Promise<void> {
+    if (!this.fileLoaded || !this.teamFileLoaded) {
+      alert('Load PLAYERS.DAT and TEAMPLAYERLINKS first.');
+      return;
+    }
+
+    if (!this.teamImportCsvTeam) {
+      alert('Select a CSV team first.');
+      return;
+    }
+
+    if (this.selectedTeamOffset === null) {
+      alert('Select a game team in the Team Editor first.');
+      return;
+    }
+
+    if (this.isTeamImporting) {
+      return;
+    }
+
+    const csvPlayers = this.playerImportService.filterByTeam(this.importedPlayers, this.teamImportCsvTeam);
+
+    if (csvPlayers.length === 0) {
+      alert('No players found for the selected CSV team.');
+      return;
+    }
+
+    const cappedCount = Math.min(csvPlayers.length, 32);
+    const offset = this.selectedTeamOffset!;
+    const targetTeam = this.teamOptions.find((t) => t.offset === offset);
+    const targetLabel = targetTeam?.label ?? `offset ${offset}`;
+
+    if (!confirm(
+      `This will clear the "${targetLabel}" roster and append ${cappedCount} players from "${this.teamImportCsvTeam}" to PLAYERS.DAT. Continue?`
+    )) {
+      return;
+    }
+
+    this.isTeamImporting = true;
+
+    try {
+      const templatePlayer = this.playerService.totalPlayers > 0
+        ? this.playerService.readPlayer(0)
+        : this.emptyPlayer();
+      const mappedPlayers = csvPlayers.slice(0, cappedCount).map((p) =>
+        this.playerImportService.mapImportedPlayer(p, templatePlayer, { includeYear: false })
+      );
+
+      const newIndices = this.playerService.appendPlayers(mappedPlayers);
+
+      this.teamEditorService.clearTeam(offset);
+
+      for (let i = 0; i < newIndices.length; i++) {
+        this.teamEditorService.addPlayer(offset, newIndices[i], mappedPlayers[i].pos ?? 0);
+      }
+
+      this.applyPlayerFileLoaded();
+
+      if (this.selectedTeamOffset === offset) {
+        this.loadSingleTeam(offset);
+      }
+
+      this.teamImportStatusMessage = `Imported ${newIndices.length} players for "${this.teamImportCsvTeam}" into ${targetLabel}.`;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Team import failed.';
+      alert(message);
+    } finally {
+      this.isTeamImporting = false;
     }
   }
 

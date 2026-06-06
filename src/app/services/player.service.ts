@@ -28,13 +28,13 @@ export interface ReplacePlayersOptions {
 }
 
 const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
-  gk: { weights: [2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 10, 10, 10], bonus: 10 },
-  def: { weights: [5, 0, 2, 0, 3, 2, 1, 1, 5, 8, 0, 0, 0, 0], bonus: 15 },
-  mid: { weights: [5, 8, 2, 6, 15, 20, 15, 5, 0, 8, 0, 0, 0, 0], bonus: 10 },
-  att: { weights: [5, 1, 6, 2, 10, 4, 6, 20, 5, 0, 0, 0, 0, 0], bonus: 10 }
+  gk: { weights: [2, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0 },
+  def: { weights: [20, 4, 6, 1, 4, 4, 8, 1, 15, 30, 0, 0, 0, 0], bonus: 15 },
+ mid: { weights: [8, 12, 4, 3, 20, 22, 14, 5, 0, 12, 0, 0, 0, 0], bonus: 0 },
+ att: { weights: [6, 3, 10, 4, 17, 8, 7, 37, 8, 0, 0, 0, 0, 0], bonus: 0 }
 };
 
-const RATING_MULTIPLIER_BITS = 0x3f833333;
+const RATING_MULTIPLIER_BITS = 0x3f855555;
 
 function ieee754ToFloat(bits: number): number {
   const buf = new ArrayBuffer(4);
@@ -360,6 +360,44 @@ export class PlayerService {
       default:
         return this.profiles.att;
     }
+  }
+
+  appendPlayers(players: Player[]): number[] {
+    if (!this.binaryData || players.length === 0) {
+      return [];
+    }
+
+    const prevTotal = this.totalPlayers;
+    const count = Math.min(players.length, Math.max(0, 0xffff - prevTotal));
+
+    if (count === 0) {
+      return [];
+    }
+
+    const nextTotal = prevTotal + count;
+    const requiredLength = (nextTotal - 1) * this.playerStride + this.yearOffset + 2;
+    const nextBinaryData = new Uint8Array(requiredLength);
+    nextBinaryData.set(this.binaryData.subarray(0, Math.min(this.binaryData.byteLength, requiredLength)));
+    this.binaryData = nextBinaryData;
+
+    const view = new DataView(this.binaryData.buffer);
+    view.setUint16(this.totalPlayersOffset, nextTotal, true);
+
+    const templateRecord = prevTotal > 0 ? this.captureTemplateRecord(0, prevTotal) : null;
+    const newIndices: number[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const index = prevTotal + i;
+
+      if (templateRecord) {
+        this.seedPlayerRecord(index, templateRecord);
+      }
+
+      this.writePlayer(index, players[i]);
+      newIndices.push(index);
+    }
+
+    return newIndices;
   }
 
   private async hasReadPermission(fileHandle: any): Promise<boolean> {

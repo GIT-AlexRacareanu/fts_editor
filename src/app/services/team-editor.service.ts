@@ -391,6 +391,21 @@ export class TeamEditorService {
     }, nextPlayerCount);
   }
 
+  clearTeam(offset: number): TeamRecord {
+    const view = this.getView();
+    view.setUint32(offset + 4, 0, true);
+
+    for (let index = 0; index < SLOT_COUNT; index++) {
+      const attrPtr = offset + ATTRIBUTES_OFFSET + index * PLAYER_ENTRY_SIZE;
+      const idPtr = offset + PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE;
+      view.setUint32(attrPtr, 0, true);
+      view.setUint16(idPtr, UNUSED_PLAYER_ID, true);
+      view.setUint16(idPtr + 2, UNUSED_PLAYER_ID, true);
+    }
+
+    return this.getTeam(offset);
+  }
+
   addPlayer(offset: number, playerId: number, position: number): TeamRecord | null {
     const team = this.getTeam(offset);
     const insertSlot = this.findAppendSlot(team);

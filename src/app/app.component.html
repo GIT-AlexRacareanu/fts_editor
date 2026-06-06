@@ -73,6 +73,84 @@
               </mat-select>
             </mat-form-field>
 
+            <!-- CSV Team Import -->
+            <mat-expansion-panel class="team-csv-import-panel">
+              <mat-expansion-panel-header>
+                <mat-panel-title>
+                  <mat-icon class="team-csv-import-icon">upload</mat-icon>
+                  Import Team from CSV
+                </mat-panel-title>
+                <mat-panel-description *ngIf="teamImportCsvTeam">
+                  {{ teamImportPreviewPlayers.length }} players · {{ teamImportCsvTeam }}
+                </mat-panel-description>
+              </mat-expansion-panel-header>
+
+              <!-- Target team label -->
+              <div class="team-csv-target-label">
+                <mat-icon class="team-csv-target-icon">shield</mat-icon>
+                <span *ngIf="selectedTeamOffset !== null">
+                  Target: <strong>{{ selectedTeamLabel }}</strong>
+                </span>
+                <span *ngIf="selectedTeamOffset === null" class="team-csv-target-none">
+                  No team selected — pick a team above first
+                </span>
+              </div>
+
+              <!-- CSV team search -->
+              <div class="team-csv-search-wrap">
+                <mat-form-field appearance="outline" class="team-csv-import-field">
+                  <mat-label>Search CSV team</mat-label>
+                  <input matInput
+                    [(ngModel)]="teamImportCsvTeamSearch"
+                    (ngModelChange)="onTeamImportCsvTeamChange()"
+                    placeholder="e.g. Leuven, Arsenal…">
+                  <button *ngIf="teamImportCsvTeam" mat-icon-button matSuffix (click)="clearCsvImportTeam()" title="Clear selection">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </mat-form-field>
+
+                <div class="team-csv-search-results" *ngIf="teamImportCsvTeamSearch && !teamImportCsvTeam">
+                  <button
+                    class="team-csv-search-option"
+                    *ngFor="let t of filteredCsvTeamOptions"
+                    (click)="selectCsvImportTeam(t)">
+                    {{ t }}
+                    <span class="team-csv-search-option-count">({{ csvTeamPlayerCount(t) }})</span>
+                  </button>
+                  <div class="team-csv-search-empty" *ngIf="filteredCsvTeamOptions.length === 0">
+                    No matching teams
+                  </div>
+                </div>
+              </div>
+
+              <div class="team-csv-import-preview" *ngIf="teamImportMappedPreview.length > 0">
+                <div class="team-csv-import-preview-header">
+                  {{ teamImportMappedPreview.length }} players to import
+                  <span class="team-csv-preview-base-id" *ngIf="fileLoaded">· IDs starting at {{ playerService.totalPlayers.toString(16).toUpperCase().padStart(4, '0') }}</span>
+                </div>
+                <div class="team-csv-import-preview-list">
+                  <div class="team-csv-import-preview-item" *ngFor="let p of teamImportMappedPreview">
+                    <span class="team-csv-preview-hex">{{ p.futureHexId }}</span>
+                    <span class="team-csv-preview-name">{{ p.shortName }}</span>
+                    <span class="team-csv-preview-pos">{{ p.positionLabel }}</span>
+                    <span class="team-csv-preview-ovr">{{ p.ovr }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="team-csv-import-actions">
+                <button
+                  mat-raised-button
+                  color="warn"
+                  (click)="importTeamFromCsv()"
+                  [disabled]="!teamImportCsvTeam || selectedTeamOffset === null || isTeamImporting || !fileLoaded || !teamFileLoaded">
+                  <mat-icon>upload</mat-icon>
+                  {{ isTeamImporting ? 'IMPORTING...' : 'IMPORT TEAM' }}
+                </button>
+                <span class="team-csv-import-status" *ngIf="teamImportStatusMessage">{{ teamImportStatusMessage }}</span>
+              </div>
+            </mat-expansion-panel>
+
             <p class="team-empty-state" *ngIf="displayedTeams.length === 0">Select a team above to view and edit its squad.</p>
 
             <div class="team-results" *ngIf="displayedTeams.length > 0">
