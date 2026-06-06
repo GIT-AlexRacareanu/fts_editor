@@ -485,6 +485,26 @@
         </button>
       </div>
 
+      <!-- OVR Tuning -->
+      <mat-card class="section-card">
+        <mat-card-header>
+          <mat-card-title>OVR Tuning</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="stats-grid ovr-tuning-grid">
+            <mat-form-field appearance="outline" class="stat-field" *ngFor="let tuning of ovrTuningOptions">
+              <mat-label>{{ tuning.label }} Mult</mat-label>
+              <input
+                matInput
+                type="number"
+                step="0.01"
+                [ngModel]="tuning.multiplier"
+                (ngModelChange)="updateOvrMultiplier(tuning.category, $event)">
+            </mat-form-field>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
       <!-- Team Slot (only when opened from Team Editor) -->
       <mat-card class="section-card" *ngIf="popupTeamContext && popupTeamSlot as slot">
         <mat-card-header>

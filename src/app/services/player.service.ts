@@ -16,25 +16,34 @@ export const OFFSET_MAP: Record<string, number> = {
 const STAT_ORDER = ['STR', 'STA', 'SPD', 'ACC', 'CON', 'PAS', 'CRO', 'SHO', 'HEA', 'TAC', 'FK', 'GKS', 'GKH', 'GKP'] as const;
 type Stat = typeof STAT_ORDER[number];
 
-type OvrCategory = 'gk' | 'def' | 'mid' | 'att';
+export type OvrCategory = 'gk' | 'def' | 'mid' | 'att';
 
 interface OvrProfile {
   weights: number[];
   bonus: number;
+  multiplier: number;
+}
+
+export interface OvrTuningConfig {
+  category: OvrCategory;
+  label: string;
+  bonus: number;
+  multiplier: number;
 }
 
 export interface ReplacePlayersOptions {
   templatePlayerIndex?: number;
 }
 
-const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
-  gk: { weights: [2, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0 },
-  def: { weights: [20, 4, 6, 1, 4, 4, 8, 1, 15, 30, 0, 0, 0, 0], bonus: 15 },
- mid: { weights: [8, 12, 4, 3, 20, 22, 14, 5, 0, 12, 0, 0, 0, 0], bonus: 0 },
- att: { weights: [6, 3, 10, 4, 17, 8, 7, 37, 8, 0, 0, 0, 0, 0], bonus: 0 }
-};
-
 const RATING_MULTIPLIER_BITS = 0x3f855555;
+const DEFAULT_MULTIPLIER = ieee754ToFloat(RATING_MULTIPLIER_BITS);
+
+const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
+  gk: { weights: [2, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
+  def: { weights: [20, 4, 6, 1, 4, 4, 8, 1, 15, 30, 0, 0, 0, 0], bonus: 15, multiplier: DEFAULT_MULTIPLIER + 0.01 },
+ mid: { weights: [8, 12, 4, 3, 20, 22, 14, 5, 0, 12, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
+ att: { weights: [6, 3, 10, 4, 17, 8, 7, 37, 8, 0, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER }
+};
 
 function ieee754ToFloat(bits: number): number {
   const buf = new ArrayBuffer(4);
@@ -74,7 +83,6 @@ export class PlayerService {
   fileHandle: any = null;
 
   private readonly profiles: Record<OvrCategory, OvrProfile> = DEFAULT_PROFILES;
-  private readonly ratingMultiplier = ieee754ToFloat(RATING_MULTIPLIER_BITS);
 
   constructor(private readonly fileHandleStorage: FileHandleStorageService) {}
 
@@ -323,7 +331,7 @@ export class PlayerService {
 
   calculateOVR(player: Player): number {
     const posCategory = getPositionCategory(player.pos);
-    const { weights, bonus } = this.getProfileByPositionCategory(posCategory);
+    const { weights, bonus, multiplier } = this.getProfileByPositionCategory(posCategory);
 
     let weightedSum = 0;
     let totalWeight = 0;
@@ -344,9 +352,42 @@ export class PlayerService {
       return 0;
     }
 
-    const raw = Math.floor((bonus * maxStat + weightedSum) * this.ratingMultiplier / denominator);
+    const raw = Math.floor((bonus * maxStat + weightedSum) * multiplier / denominator);
 
     return Math.max(0, Math.min(100, raw));
+  }
+
+  getOvrTuningConfig(): OvrTuningConfig[] {
+    return [
+      { category: 'gk', label: 'GK', bonus: this.profiles.gk.bonus, multiplier: this.profiles.gk.multiplier },
+      { category: 'def', label: 'DEF', bonus: this.profiles.def.bonus, multiplier: this.profiles.def.multiplier },
+      { category: 'mid', label: 'MID', bonus: this.profiles.mid.bonus, multiplier: this.profiles.mid.multiplier },
+      { category: 'att', label: 'ATT', bonus: this.profiles.att.bonus, multiplier: this.profiles.att.multiplier }
+    ];
+  }
+
+  setRatingMultiplier(category: OvrCategory, multiplier: number): void {
+    if (!Number.isFinite(multiplier) || multiplier <= 0) {
+      return;
+    }
+
+    this.profiles[category].multiplier = multiplier;
+  }
+
+  setOvrProfile(category: OvrCategory, profile: Partial<Pick<OvrProfile, 'weights' | 'bonus' | 'multiplier'>>): void {
+    const currentProfile = this.profiles[category];
+
+    if (profile.weights) {
+      currentProfile.weights = [...profile.weights];
+    }
+
+    if (profile.bonus !== undefined && Number.isFinite(profile.bonus)) {
+      currentProfile.bonus = profile.bonus;
+    }
+
+    if (profile.multiplier !== undefined) {
+      this.setRatingMultiplier(category, profile.multiplier);
+    }
   }
 
   private getProfileByPositionCategory(posCategory: number): OvrProfile {
