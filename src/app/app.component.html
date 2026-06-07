@@ -85,24 +85,17 @@
                 </mat-panel-description>
               </mat-expansion-panel-header>
 
-              <!-- Target team label -->
-              <div class="team-csv-target-label">
-                <mat-icon class="team-csv-target-icon">shield</mat-icon>
-                <span *ngIf="selectedTeamOffset !== null">
-                  Target: <strong>{{ selectedTeamLabel }}</strong>
-                </span>
-                <span *ngIf="selectedTeamOffset === null" class="team-csv-target-none">
-                  No team selected — pick a team above first
-                </span>
-              </div>
-
               <!-- CSV team search -->
               <div class="team-csv-search-wrap">
                 <mat-form-field appearance="outline" class="team-csv-import-field">
                   <mat-label>Search CSV team</mat-label>
                   <input matInput
-                    [(ngModel)]="teamImportCsvTeamSearch"
-                    (ngModelChange)="onTeamImportCsvTeamChange()"
+                    [ngModel]="teamImportCsvTeamSearch"
+                    (input)="onTeamImportCsvTeamInput($event)"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    autocorrect="off"
+                    spellcheck="false"
                     placeholder="e.g. Leuven, Arsenal…">
                   <button *ngIf="teamImportCsvTeam" mat-icon-button matSuffix (click)="clearCsvImportTeam()" title="Clear selection">
                     <mat-icon>close</mat-icon>

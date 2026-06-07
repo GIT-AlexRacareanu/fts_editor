@@ -621,13 +621,6 @@ export class AppComponent implements OnInit {
     return this.playerImportService.filterByTeam(this.importedPlayers, teamName).length;
   }
 
-  get selectedTeamLabel(): string {
-    if (this.selectedTeamOffset === null) {
-      return '';
-    }
-    return this.teamOptions.find((t) => t.offset === this.selectedTeamOffset)?.label ?? '';
-  }
-
   get csvTeamOptions(): string[] {
     return this.playerImportService.getAvailableTeamNames(this.importedPlayers);
   }
@@ -693,6 +686,12 @@ export class AppComponent implements OnInit {
   onTeamImportCsvTeamChange(): void {
     this.teamImportCsvTeam = null;
     this.teamImportStatusMessage = '';
+  }
+
+  onTeamImportCsvTeamInput(event: Event): void {
+    const value = (event.target as HTMLInputElement | null)?.value ?? '';
+    this.teamImportCsvTeamSearch = value;
+    this.onTeamImportCsvTeamChange();
   }
 
   async importTeamFromCsv(): Promise<void> {
