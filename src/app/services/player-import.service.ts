@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { NATIONALITY_NAMES_BY_ID } from '../data/nationalities';
 import { Player } from '../models/player.model';
+import { calculatePlayerOvr } from './player.service';
 
 export interface ImportedPlayerRecord {
   playerId: string;
@@ -82,6 +83,10 @@ const POSITION_MAP: Record<string, number> = {
   RF: 21,
   CF: 22
 };
+
+const WIDE_IMPORT_POSITIONS = new Set(['LM', 'RM', 'LW', 'RW']);
+const LEFT_WIDE_GAME_POSITIONS = [17, 20] as const;
+const RIGHT_WIDE_GAME_POSITIONS = [16, 21] as const;
 
 const NATIONALITY_ALIASES: Record<string, string> = {
   usa: 'united states',
@@ -186,7 +191,7 @@ export class PlayerImportService {
     const passing = source.passing;
     const tackling = this.averageStats(source.defendingSlidingTackle, source.defendingStandingTackle);
 
-    return {
+    const mappedPlayer: Player = {
       ...currentPlayer,
       name: this.toGameName(source.shortName, currentPlayer.name),
       pos: this.mapPosition(source, currentPlayer.pos),
@@ -214,6 +219,10 @@ export class PlayerImportService {
       GKH: this.clampStat(source.goalkeepingHandling, currentPlayer.GKH),
       GKP: this.clampStat(source.goalkeepingPositioning, currentPlayer.GKP)
     };
+
+    mappedPlayer.pos = this.resolveBestWidePosition(source, mappedPlayer);
+
+    return mappedPlayer;
   }
 
   private toImportedPlayerRecord(row: string[], headerIndexes: Map<string, number>): ImportedPlayerRecord | null {
@@ -565,6 +574,32 @@ export class PlayerImportService {
     }
 
     return this.inferPositionFromStats(source, fallback);
+  }
+
+  private resolveBestWidePosition(source: ImportedPlayerRecord, mappedPlayer: Player): number {
+    const normalizedPosition = source.clubPosition.trim().toUpperCase();
+
+    if (!WIDE_IMPORT_POSITIONS.has(normalizedPosition)) {
+      return mappedPlayer.pos;
+    }
+
+    const candidatePositions = normalizedPosition.startsWith('L')
+      ? LEFT_WIDE_GAME_POSITIONS
+      : RIGHT_WIDE_GAME_POSITIONS;
+
+    let bestPosition = mappedPlayer.pos;
+    let bestOvr = calculatePlayerOvr(mappedPlayer);
+
+    for (const candidatePosition of candidatePositions) {
+      const candidateOvr = calculatePlayerOvr({ ...mappedPlayer, pos: candidatePosition });
+
+      if (candidateOvr > bestOvr) {
+        bestOvr = candidateOvr;
+        bestPosition = candidatePosition;
+      }
+    }
+
+    return bestPosition;
   }
 
   private inferPositionFromStats(source: ImportedPlayerRecord, fallback: number): number {

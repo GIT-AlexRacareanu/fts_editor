@@ -35,14 +35,43 @@ export interface ReplacePlayersOptions {
   templatePlayerIndex?: number;
 }
 
+export function calculatePlayerOvr(player: Player): number {
+  const posCategory = getPositionCategory(player.pos);
+  const profile = getDefaultProfileByPositionCategory(posCategory);
+  const { weights, bonus, multiplier } = profile;
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+  let maxStat = 0;
+
+  for (let i = 0; i < STAT_ORDER.length; i++) {
+    const stat = player[STAT_ORDER[i] as Stat];
+    weightedSum += weights[i] * stat;
+    totalWeight += weights[i];
+    if (stat > maxStat) {
+      maxStat = stat;
+    }
+  }
+
+  const denominator = bonus + totalWeight;
+
+  if (denominator <= 0) {
+    return 0;
+  }
+
+  const raw = Math.floor((bonus * maxStat + weightedSum) * multiplier / denominator);
+
+  return Math.max(0, Math.min(100, raw));
+}
+
 const RATING_MULTIPLIER_BITS = 0x3f855555;
 const DEFAULT_MULTIPLIER = ieee754ToFloat(RATING_MULTIPLIER_BITS);
 
 const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
   gk: { weights: [2, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
   def: { weights: [20, 4, 6, 1, 4, 4, 8, 1, 15, 30, 0, 0, 0, 0], bonus: 15, multiplier: DEFAULT_MULTIPLIER + 0.01 },
- mid: { weights: [8, 12, 4, 3, 20, 22, 14, 5, 0, 12, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
- att: { weights: [6, 3, 10, 4, 17, 8, 7, 37, 8, 0, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER }
+  mid: { weights: [8, 12, 4, 3, 20, 22, 14, 5, 0, 12, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
+  att: { weights: [6, 3, 10, 4, 17, 8, 7, 37, 8, 0, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER }
 };
 
 function ieee754ToFloat(bits: number): number {
@@ -60,11 +89,24 @@ function getPositionCategory(position: number): number {
     return 1;
   }
 
-  if ((position >= 8 && position <= 15) || position === 18) {
+  if ((position >= 8 && position <= 18)) {
     return 2;
   }
 
   return 3;
+}
+
+function getDefaultProfileByPositionCategory(posCategory: number): OvrProfile {
+  switch (posCategory) {
+    case 0:
+      return DEFAULT_PROFILES.gk;
+    case 1:
+      return DEFAULT_PROFILES.def;
+    case 2:
+      return DEFAULT_PROFILES.mid;
+    default:
+      return DEFAULT_PROFILES.att;
+  }
 }
 
 @Injectable({ providedIn: 'root' })

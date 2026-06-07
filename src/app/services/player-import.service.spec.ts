@@ -100,13 +100,13 @@ describe('PlayerImportService', () => {
     expect(parsed[0].weightKg).toBe(72);
   });
 
-  it('maps RM and LM imports to RM and LM in game', () => {
+  it('keeps RM and LM imports on a midfield wide role when that gives the best OVR', () => {
     const basePlayer = {
-      name: 'Base', pos: 11, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 11, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
-      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
-      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+      ACC: 77, SPD: 75, STA: 78, STR: 64, TAC: 63, CON: 81, SHO: 61,
+      CRO: 84, FK: 73, PAS: 80, HEA: 58, GKS: 20, GKH: 20, GKP: 20
     };
 
     const rmImported = createImportedPlayer({ clubPosition: 'RM', preferredFoot: 'Right' });
@@ -117,6 +117,46 @@ describe('PlayerImportService', () => {
 
     expect(rmMapped.pos).toBe(16);
     expect(lmMapped.pos).toBe(17);
+  });
+
+  it('moves LW and RW imports to a wide midfield role when that gives the best OVR', () => {
+    const basePlayer = {
+      name: 'Base', pos: 20, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 77, SPD: 75, STA: 78, STR: 64, TAC: 63, CON: 81, SHO: 61,
+      CRO: 84, FK: 73, PAS: 80, HEA: 58, GKS: 20, GKH: 20, GKP: 20
+    };
+
+    const rwImported = createImportedPlayer({ clubPosition: 'RW', preferredFoot: 'Right' });
+    const lwImported = createImportedPlayer({ clubPosition: 'LW', preferredFoot: 'Left' });
+
+    const rwMapped = service.mapImportedPlayer(rwImported, basePlayer);
+    const lwMapped = service.mapImportedPlayer(lwImported, basePlayer);
+
+    expect(rwMapped.pos).toBe(16);
+    expect(lwMapped.pos).toBe(17);
+  });
+
+  it('does not flip a wide import from left to right or right to left', () => {
+    const leftBasePlayer = {
+      name: 'Left Base', pos: 20, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 77, SPD: 75, STA: 78, STR: 64, TAC: 63, CON: 81, SHO: 61,
+      CRO: 84, FK: 73, PAS: 80, HEA: 58, GKS: 20, GKH: 20, GKP: 20
+    };
+    const rightBasePlayer = {
+      ...leftBasePlayer,
+      name: 'Right Base',
+      pos: 21
+    };
+
+    const lwMapped = service.mapImportedPlayer(createImportedPlayer({ clubPosition: 'LW', preferredFoot: 'Left' }), leftBasePlayer);
+    const rwMapped = service.mapImportedPlayer(createImportedPlayer({ clubPosition: 'RW', preferredFoot: 'Right' }), rightBasePlayer);
+
+    expect([17, 20]).toContain(lwMapped.pos);
+    expect([16, 21]).toContain(rwMapped.pos);
   });
 
   it('maps HEA using the import stat formula from heading accuracy', () => {

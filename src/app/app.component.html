@@ -365,7 +365,7 @@
         <mat-card class="section-card team-editor-card">
           <mat-card-content>
 
-            <div class="db-search-filters db-search-filters--3col">
+            <div class="db-search-filters db-search-filters--4col">
               <mat-form-field appearance="outline">
                 <mat-label>Filter by name or hex ID</mat-label>
                 <input matInput [(ngModel)]="dbSearchNameQuery" (ngModelChange)="resetDbBrowsePagination()">
@@ -376,6 +376,15 @@
                   <mat-option [value]="null">All nationalities</mat-option>
                   <mat-option *ngFor="let nationality of nationalities" [value]="nationality.value">
                     {{ nationality.label }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Position</mat-label>
+                <mat-select [(ngModel)]="dbSearchPositionQuery" (ngModelChange)="resetDbBrowsePagination()">
+                  <mat-option [value]="null">All positions</mat-option>
+                  <mat-option *ngFor="let position of positions" [value]="position.value">
+                    {{ position.label }}
                   </mat-option>
                 </mat-select>
               </mat-form-field>
@@ -477,26 +486,6 @@
           <mat-icon>search</mat-icon>
         </button>
       </div>
-
-      <!-- OVR Tuning -->
-      <mat-card class="section-card">
-        <mat-card-header>
-          <mat-card-title>OVR Tuning</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <div class="stats-grid ovr-tuning-grid">
-            <mat-form-field appearance="outline" class="stat-field" *ngFor="let tuning of ovrTuningOptions">
-              <mat-label>{{ tuning.label }} Mult</mat-label>
-              <input
-                matInput
-                type="number"
-                step="0.01"
-                [ngModel]="tuning.multiplier"
-                (ngModelChange)="updateOvrMultiplier(tuning.category, $event)">
-            </mat-form-field>
-          </div>
-        </mat-card-content>
-      </mat-card>
 
       <!-- Team Slot (only when opened from Team Editor) -->
       <mat-card class="section-card" *ngIf="popupTeamContext && popupTeamSlot as slot">

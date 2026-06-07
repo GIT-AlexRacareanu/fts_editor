@@ -38,6 +38,33 @@ describe('PlayerService', () => {
 
     expect(service.totalPlayers).toBe(3);
   });
+
+  it('treats LM and RM as midfielders for OVR calculation', () => {
+    const service = new PlayerService({} as any);
+    const stats = {
+      STR: 64,
+      STA: 78,
+      SPD: 75,
+      ACC: 77,
+      TAC: 63,
+      CON: 81,
+      SHO: 61,
+      CRO: 84,
+      FK: 73,
+      PAS: 80,
+      HEA: 58,
+      GKS: 20,
+      GKH: 20,
+      GKP: 20
+    };
+
+    const cmOvr = service.calculateOVR(createPlayer('CM', { pos: 11, ...stats }));
+    const rmOvr = service.calculateOVR(createPlayer('RM', { pos: 16, ...stats }));
+    const lmOvr = service.calculateOVR(createPlayer('LM', { pos: 17, ...stats }));
+
+    expect(rmOvr).toBe(cmOvr);
+    expect(lmOvr).toBe(cmOvr);
+  });
 });
 
 function seedTemplateRecord(binaryData: Uint8Array, index: number, value: number): void {
@@ -49,7 +76,7 @@ function seedTemplateRecord(binaryData: Uint8Array, index: number, value: number
   });
 }
 
-function createPlayer(name: string): Player {
+function createPlayer(name: string, overrides: Partial<Player> = {}): Player {
   return {
     name,
     pos: 0,
@@ -82,6 +109,7 @@ function createPlayer(name: string): Player {
     HEA: 0,
     GKS: 0,
     GKH: 0,
-    GKP: 0
+    GKP: 0,
+    ...overrides
   };
 }

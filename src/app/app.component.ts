@@ -5,7 +5,7 @@ import { Player } from './models/player.model';
 import { TeamRecord, TeamSlot } from './models/team-editor.model';
 import { TeamsDatRecord } from './models/teams-dat.model';
 import { ImportedPlayerRecord, PlayerImportService } from './services/player-import.service';
-import { OvrCategory, OvrTuningConfig, PlayerService } from './services/player.service';
+import { PlayerService } from './services/player.service';
 import { TeamEditorService } from './services/team-editor.service';
 import { TeamsDatService } from './services/teams-dat.service';
 
@@ -100,7 +100,6 @@ export class AppComponent implements OnInit {
   popupSearchQuery = '';
   popupPlayerHexQuery = '';
   popupTeamContext: PopupTeamContext | null = null;
-  ovrTuningConfig: OvrTuningConfig[] = [];
 
   // ─── Import ──────────────────────────────────────────────────
   importedPlayers: ImportedPlayerRecord[] = [];
@@ -119,6 +118,7 @@ export class AppComponent implements OnInit {
   // ─── DB Browser ──────────────────────────────────────────────
   dbSearchNameQuery = '';
   dbSearchNationalityQuery: number | null = null;
+  dbSearchPositionQuery: number | null = null;
   dbSearchTeamQuery: string | null = null;
   dbBrowsePage = 1;
   dbBrowsePlayers: DbBrowsePlayer[] = [];
@@ -271,10 +271,6 @@ export class AppComponent implements OnInit {
     public teamsDatService: TeamsDatService
   ) {}
 
-  get ovrTuningOptions(): OvrTuningConfig[] {
-    return this.ovrTuningConfig;
-  }
-
   ngOnInit(): void {
     void this.initializeApp();
   }
@@ -385,7 +381,6 @@ export class AppComponent implements OnInit {
     this.popupPlayerHexQuery = this.currentPopupHexId;
     this.popupSearchQuery = '';
     this.popupTeamContext = teamContext;
-    this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
     this.showImportPicker = false;
     this.importSearchQuery = '';
     this.importStatusMessage = '';
@@ -412,13 +407,6 @@ export class AppComponent implements OnInit {
     } else {
       this.popupOvrColor = '#cd7f32';
     }
-  }
-
-  updateOvrMultiplier(category: OvrCategory, value: string | number): void {
-    this.playerService.setRatingMultiplier(category, Number(value));
-    this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
-    this.refreshPlayerLinkedViews(this.popupPlayerIndex);
-    this.updatePopupOVR();
   }
 
   applyPopupChanges(): void {
@@ -835,6 +823,7 @@ export class AppComponent implements OnInit {
   get filteredDbBrowsePlayers(): DbBrowsePlayer[] {
     const normalizedNameQuery = this.dbSearchNameQuery.trim().toLowerCase();
     const nationalityQuery = this.dbSearchNationalityQuery;
+    const positionQuery = this.dbSearchPositionQuery;
     const teamQuery = this.dbSearchTeamQuery;
 
     return this.dbBrowsePlayers.filter((player) => {
@@ -845,10 +834,13 @@ export class AppComponent implements OnInit {
       const matchesNationality = nationalityQuery === null
         || player.nationalityId === nationalityQuery;
 
+      const matchesPosition = positionQuery === null
+        || player.position === positionQuery;
+
       const matchesTeam = teamQuery === null
         || player.clubs.includes(teamQuery);
 
-      return matchesName && matchesNationality && matchesTeam;
+      return matchesName && matchesNationality && matchesPosition && matchesTeam;
     });
   }
 
