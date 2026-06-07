@@ -5,7 +5,7 @@ import { Player } from './models/player.model';
 import { TeamRecord, TeamSlot } from './models/team-editor.model';
 import { TeamsDatRecord } from './models/teams-dat.model';
 import { ImportedPlayerRecord, PlayerImportService } from './services/player-import.service';
-import { PlayerService } from './services/player.service';
+import { OvrCategory, OvrTuningConfig, PlayerService } from './services/player.service';
 import { TeamEditorService } from './services/team-editor.service';
 import { TeamsDatService } from './services/teams-dat.service';
 
@@ -33,6 +33,7 @@ const FORMATION_VALUE_BY_ID: Record<number, string> = {
 };
 
 const FORMATION_BY_VALUE = new Map(FORMATION_PRESETS.map((formation) => [formation.value, formation]));
+const OVR_STAT_LABELS = ['STR', 'STA', 'SPD', 'ACC', 'CON', 'PAS', 'CRO', 'SHO', 'HEA', 'TAC', 'FK', 'GKS', 'GKH', 'GKP'] as const;
 
 interface FormationSketchPlayer {
   slotIndex: number;
@@ -100,6 +101,7 @@ export class AppComponent implements OnInit {
   popupSearchQuery = '';
   popupPlayerHexQuery = '';
   popupTeamContext: PopupTeamContext | null = null;
+  ovrTuningConfig: OvrTuningConfig[] = [];
 
   // ─── Import ──────────────────────────────────────────────────
   importedPlayers: ImportedPlayerRecord[] = [];
@@ -153,6 +155,7 @@ export class AppComponent implements OnInit {
   ];
 
   readonly formations = FORMATION_PRESETS;
+  readonly ovrStatLabels = OVR_STAT_LABELS;
   readonly formationIdOptions = Object.entries(FORMATION_VALUE_BY_ID)
     .map(([id, value]) => {
       const parsedId = Number(id);
@@ -272,6 +275,7 @@ export class AppComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
     void this.initializeApp();
   }
 
@@ -361,6 +365,10 @@ export class AppComponent implements OnInit {
     return this.playerService.formatPlayerId(this.popupPlayerIndex);
   }
 
+  get ovrTuningOptions(): OvrTuningConfig[] {
+    return this.ovrTuningConfig;
+  }
+
   get popupTeamSlot(): TeamSlot | null {
     if (!this.popupTeamContext) {
       return null;
@@ -381,6 +389,7 @@ export class AppComponent implements OnInit {
     this.popupPlayerHexQuery = this.currentPopupHexId;
     this.popupSearchQuery = '';
     this.popupTeamContext = teamContext;
+    this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
     this.showImportPicker = false;
     this.importSearchQuery = '';
     this.importStatusMessage = '';
@@ -407,6 +416,47 @@ export class AppComponent implements OnInit {
     } else {
       this.popupOvrColor = '#cd7f32';
     }
+  }
+
+  updateOvrWeight(category: OvrCategory, weightIndex: number, value: string | number): void {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    const currentConfig = this.ovrTuningConfig.find((config) => config.category === category);
+
+    if (!currentConfig) {
+      return;
+    }
+
+    const nextWeights = [...currentConfig.weights];
+    nextWeights[weightIndex] = parsed;
+    this.playerService.setOvrProfile(category, { weights: nextWeights });
+    this.refreshOvrTuningState();
+  }
+
+  updateOvrBonus(category: OvrCategory, value: string | number): void {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    this.playerService.setOvrProfile(category, { bonus: parsed });
+    this.refreshOvrTuningState();
+  }
+
+  updateOvrMultiplier(category: OvrCategory, value: string | number): void {
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    this.playerService.setRatingMultiplier(category, parsed);
+    this.refreshOvrTuningState();
   }
 
   applyPopupChanges(): void {
@@ -446,6 +496,18 @@ export class AppComponent implements OnInit {
     }
 
     this.openPlayerEditPopup(idx);
+  }
+
+  private refreshOvrTuningState(): void {
+    this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
+
+    if (this.showPlayerEditPopup) {
+      this.refreshPlayerLinkedViews(this.popupPlayerIndex);
+      this.updatePopupOVR();
+      return;
+    }
+
+    this.refreshDbBrowsePlayers();
   }
 
   // ─── Team slot editing from popup ────────────────────────────

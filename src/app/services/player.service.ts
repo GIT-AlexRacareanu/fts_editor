@@ -27,6 +27,7 @@ interface OvrProfile {
 export interface OvrTuningConfig {
   category: OvrCategory;
   label: string;
+  weights: number[];
   bonus: number;
   multiplier: number;
 }
@@ -69,9 +70,9 @@ const DEFAULT_MULTIPLIER = ieee754ToFloat(RATING_MULTIPLIER_BITS);
 
 const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
   gk: { weights: [2, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
-  def: { weights: [20, 4, 6, 1, 4, 4, 8, 1, 15, 30, 0, 0, 0, 0], bonus: 15, multiplier: DEFAULT_MULTIPLIER + 0.01 },
-  mid: { weights: [8, 12, 4, 3, 20, 22, 14, 5, 0, 12, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
-  att: { weights: [6, 3, 10, 4, 17, 8, 7, 37, 8, 0, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER }
+  def: { weights: [15, 2, 6, 2, 6, 3, 3, 1, 20, 30, 0, 0, 0, 0], bonus: 18, multiplier: DEFAULT_MULTIPLIER - 0.001 },
+  mid: { weights: [4, 6, 6, 2, 15, 20, 15, 4, 0, 8, 0, 0, 0, 0], bonus: 12, multiplier: DEFAULT_MULTIPLIER - 0.02},
+  att: { weights: [6, 2, 4, 0, 10, 3, 3, 20, 4, 0, 0, 0, 0, 0], bonus: 6, multiplier: DEFAULT_MULTIPLIER - 0.0066 }
 };
 
 function ieee754ToFloat(bits: number): number {
@@ -401,10 +402,34 @@ export class PlayerService {
 
   getOvrTuningConfig(): OvrTuningConfig[] {
     return [
-      { category: 'gk', label: 'GK', bonus: this.profiles.gk.bonus, multiplier: this.profiles.gk.multiplier },
-      { category: 'def', label: 'DEF', bonus: this.profiles.def.bonus, multiplier: this.profiles.def.multiplier },
-      { category: 'mid', label: 'MID', bonus: this.profiles.mid.bonus, multiplier: this.profiles.mid.multiplier },
-      { category: 'att', label: 'ATT', bonus: this.profiles.att.bonus, multiplier: this.profiles.att.multiplier }
+      {
+        category: 'gk',
+        label: 'GK',
+        weights: [...this.profiles.gk.weights],
+        bonus: this.profiles.gk.bonus,
+        multiplier: this.profiles.gk.multiplier
+      },
+      {
+        category: 'def',
+        label: 'DEF',
+        weights: [...this.profiles.def.weights],
+        bonus: this.profiles.def.bonus,
+        multiplier: this.profiles.def.multiplier
+      },
+      {
+        category: 'mid',
+        label: 'MID',
+        weights: [...this.profiles.mid.weights],
+        bonus: this.profiles.mid.bonus,
+        multiplier: this.profiles.mid.multiplier
+      },
+      {
+        category: 'att',
+        label: 'ATT',
+        weights: [...this.profiles.att.weights],
+        bonus: this.profiles.att.bonus,
+        multiplier: this.profiles.att.multiplier
+      }
     ];
   }
 
