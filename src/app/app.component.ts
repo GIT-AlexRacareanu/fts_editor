@@ -691,9 +691,10 @@ export class AppComponent implements OnInit {
     return this.playerImportService.filterByTeam(this.importedPlayers, this.teamImportCsvTeam);
   }
 
-  get teamImportMappedPreview(): Array<{
+  private getResolvedTeamImportPlayers(): Array<{
     shortName: string;
-    futureIndex: number;
+    playerIndex: number;
+    position: number;
     futureHexId: string;
     positionLabel: string;
     ovr: number;
@@ -702,23 +703,52 @@ export class AppComponent implements OnInit {
       return [];
     }
 
-    const csvPlayers = this.playerImportService.filterByTeam(this.importedPlayers, this.teamImportCsvTeam);
-    const cappedPlayers = csvPlayers.slice(0, 32);
-    const baseIndex = this.playerService.totalPlayers;
-    const templatePlayer = baseIndex > 0 ? this.playerService.readPlayer(0) : this.emptyPlayer();
+    const csvPlayers = this.playerImportService.filterByTeam(this.importedPlayers, this.teamImportCsvTeam).slice(0, 32);
 
-    return cappedPlayers.map((p, i) => {
-      const mapped = this.playerImportService.mapImportedPlayer(p, templatePlayer, { includeYear: false });
-      const futureIndex = baseIndex + i;
+    return csvPlayers
+      .map((sourcePlayer) => {
+        const playerIndex = this.playerService.findPlayerIndexByName(sourcePlayer.shortName);
 
-      return {
-        shortName: p.shortName,
-        futureIndex,
-        futureHexId: futureIndex.toString(16).toUpperCase().padStart(4, '0'),
-        positionLabel: this.getPositionLabel(mapped.pos),
-        ovr: this.playerService.calculateOVR(mapped)
-      };
-    });
+        if (playerIndex < 0) {
+          return null;
+        }
+
+        const currentPlayer = this.playerService.readPlayer(playerIndex);
+        const mapped = this.playerImportService.mapImportedPlayer(sourcePlayer, currentPlayer, { includeYear: false });
+
+        return {
+          shortName: sourcePlayer.shortName,
+          playerIndex,
+          position: mapped.pos,
+          futureHexId: this.playerService.formatPlayerId(playerIndex),
+          positionLabel: this.getPositionLabel(mapped.pos),
+          ovr: this.playerService.calculateOVR(currentPlayer)
+        };
+      })
+      .filter((player): player is {
+        shortName: string;
+        playerIndex: number;
+        position: number;
+        futureHexId: string;
+        positionLabel: string;
+        ovr: number;
+      } => player !== null);
+  }
+
+  get teamImportMappedPreview(): Array<{
+    shortName: string;
+    futureIndex: number;
+    futureHexId: string;
+    positionLabel: string;
+    ovr: number;
+  }> {
+    return this.getResolvedTeamImportPlayers().map((player) => ({
+      shortName: player.shortName,
+      futureIndex: player.playerIndex,
+      futureHexId: player.futureHexId,
+      positionLabel: player.positionLabel,
+      ovr: player.ovr
+    }));
   }
 
   selectCsvImportTeam(teamName: string): void {
@@ -771,13 +801,22 @@ export class AppComponent implements OnInit {
       return;
     }
 
+    const resolvedPlayers = this.getResolvedTeamImportPlayers();
     const cappedCount = Math.min(csvPlayers.length, 32);
+    const matchedCount = resolvedPlayers.length;
+    const skippedCount = cappedCount - matchedCount;
+
+    if (matchedCount === 0) {
+      alert('No matching existing players were found in PLAYERS.DAT for the selected CSV team.');
+      return;
+    }
+
     const offset = this.selectedTeamOffset!;
     const targetTeam = this.teamOptions.find((t) => t.offset === offset);
     const targetLabel = targetTeam?.label ?? `offset ${offset}`;
 
     if (!confirm(
-      `This will clear the "${targetLabel}" roster and append ${cappedCount} players from "${this.teamImportCsvTeam}" to PLAYERS.DAT. Continue?`
+      `This will clear the "${targetLabel}" roster and link ${matchedCount} existing players from "${this.teamImportCsvTeam}". ${skippedCount > 0 ? `${skippedCount} CSV players were not found and will be skipped. ` : ''}Continue?`
     )) {
       return;
     }
@@ -785,28 +824,23 @@ export class AppComponent implements OnInit {
     this.isTeamImporting = true;
 
     try {
-      const templatePlayer = this.playerService.totalPlayers > 0
-        ? this.playerService.readPlayer(0)
-        : this.emptyPlayer();
-      const mappedPlayers = csvPlayers.slice(0, cappedCount).map((p) =>
-        this.playerImportService.mapImportedPlayer(p, templatePlayer, { includeYear: false })
-      );
-
-      const newIndices = this.playerService.appendPlayers(mappedPlayers);
-
       this.teamEditorService.clearTeam(offset);
 
-      for (let i = 0; i < newIndices.length; i++) {
-        this.teamEditorService.addPlayer(offset, newIndices[i], mappedPlayers[i].pos ?? 0);
+      for (const player of resolvedPlayers) {
+        this.teamEditorService.addPlayer(offset, player.playerIndex, player.position);
       }
-
-      this.applyPlayerFileLoaded();
 
       if (this.selectedTeamOffset === offset) {
         this.loadSingleTeam(offset);
       }
 
-      this.teamImportStatusMessage = `Imported ${newIndices.length} players for "${this.teamImportCsvTeam}" into ${targetLabel}.`;
+      this.refreshDbBrowsePlayers();
+
+      this.teamImportStatusMessage = `Linked ${resolvedPlayers.length} existing players for "${this.teamImportCsvTeam}" into ${targetLabel}.`;
+
+      if (skippedCount > 0) {
+        alert(`${skippedCount} CSV players were not found in PLAYERS.DAT and were skipped.`);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Team import failed.';
       alert(message);

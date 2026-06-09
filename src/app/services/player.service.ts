@@ -133,6 +133,58 @@ export class PlayerService {
     return this.getStoredPlayerId(index).toString(16).toUpperCase().padStart(4, '0');
   }
 
+  findPlayerIndexByName(name: string): number {
+    const normalizedName = this.normalizePlayerName(name);
+
+    if (!normalizedName) {
+      return -1;
+    }
+
+    const compactName = normalizedName.replace(/\s+/g, '');
+    const total = this.totalPlayers;
+
+    for (let index = 0; index < total; index += 1) {
+      const playerName = this.normalizePlayerName(this.getPlayerNameByIndex(index) ?? '');
+
+      if (!playerName) {
+        continue;
+      }
+
+      if (playerName === normalizedName || playerName.replace(/\s+/g, '') === compactName) {
+        return index;
+      }
+    }
+
+    const normalizedTokens = normalizedName.split(' ').filter((token) => token.length > 0);
+
+    if (normalizedTokens.length < 2) {
+      return -1;
+    }
+
+    const targetLastToken = normalizedTokens[normalizedTokens.length - 1];
+    const targetInitial = normalizedTokens[0][0];
+
+    for (let index = 0; index < total; index += 1) {
+      const playerName = this.normalizePlayerName(this.getPlayerNameByIndex(index) ?? '');
+
+      if (!playerName) {
+        continue;
+      }
+
+      const playerTokens = playerName.split(' ').filter((token) => token.length > 0);
+
+      if (playerTokens.length < 2) {
+        continue;
+      }
+
+      if (playerTokens[playerTokens.length - 1] === targetLastToken && playerTokens[0][0] === targetInitial) {
+        return index;
+      }
+    }
+
+    return -1;
+  }
+
   parsePlayerId(value: string): number {
     const parsed = Number.parseInt(value.trim(), 16);
     if (Number.isNaN(parsed) || parsed < 0 || parsed > 0xffff) {
@@ -148,6 +200,16 @@ export class PlayerService {
     }
 
     return -1;
+  }
+
+  private normalizePlayerName(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
   }
 
   getPlayerNameByIndex(index: number): string | null {

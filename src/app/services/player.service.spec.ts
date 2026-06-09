@@ -65,6 +65,20 @@ describe('PlayerService', () => {
     expect(rmOvr).toBe(cmOvr);
     expect(lmOvr).toBe(cmOvr);
   });
+
+  it('finds players by normalized names and common abbreviated variants', () => {
+    const service = new PlayerService({} as any);
+    service.binaryData = new Uint8Array(234);
+
+    service.replacePlayers([
+      createPlayer('Mohamed Salah'),
+      createPlayer('Luka Modric')
+    ]);
+
+    expect(service.findPlayerIndexByName('mohamed salah')).toBe(0);
+    expect(service.findPlayerIndexByName('M. Salah')).toBe(0);
+    expect(service.findPlayerIndexByName('Luka Modric')).toBe(1);
+  });
 });
 
 function seedTemplateRecord(binaryData: Uint8Array, index: number, value: number): void {

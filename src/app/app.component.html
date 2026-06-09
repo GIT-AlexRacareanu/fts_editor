@@ -118,8 +118,8 @@
 
               <div class="team-csv-import-preview" *ngIf="teamImportMappedPreview.length > 0">
                 <div class="team-csv-import-preview-header">
-                  {{ teamImportMappedPreview.length }} players to import
-                  <span class="team-csv-preview-base-id" *ngIf="fileLoaded">· IDs starting at {{ playerService.totalPlayers.toString(16).toUpperCase().padStart(4, '0') }}</span>
+                  {{ teamImportMappedPreview.length }} matched existing players
+                  <span class="team-csv-preview-base-id">· linked to current PLAYERS.DAT entries</span>
                 </div>
                 <div class="team-csv-import-preview-list">
                   <div class="team-csv-import-preview-item" *ngFor="let p of teamImportMappedPreview">
