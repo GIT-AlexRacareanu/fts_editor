@@ -41,7 +41,7 @@ describe('PlayerImportService bulk import mapping', () => {
     expect(parsed[0].goalkeepingReflexes).toBe(73);
   });
 
-  it('uses diving and reflexes together for the imported GKS value', () => {
+  it('maps reflexes to GKS, handling to GKH, and diving to GKP', () => {
     const service = new PlayerImportService();
     const basePlayer: Player = {
       name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 1998,
@@ -62,9 +62,28 @@ describe('PlayerImportService bulk import mapping', () => {
     const mapped = service.mapImportedPlayer(imported, basePlayer, { includeYear: false });
 
     expect(mapped.FK).toBe(57);
-    expect(mapped.GKS).toBe(75);
+    expect(mapped.GKS).toBe(70);
     expect(mapped.GKH).toBe(76);
-    expect(mapped.GKP).toBe(74);
+    expect(mapped.GKP).toBe(80);
+  });
+
+  it('maps heading accuracy to HEA', () => {
+    const service = new PlayerImportService();
+    const basePlayer: Player = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 1998,
+      skin: 2, skin_tone: 1, head_type: 3, hair_type: 4, hair: 5, beard_type: 6,
+      boots: 7, mangas: 8, guantes: 9,
+      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
+      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+    const imported = createImportedPlayer({
+      attackingHeadingAccuracy: 83,
+      jumping: 91
+    });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer, { includeYear: false });
+
+    expect(mapped.HEA).toBe(83);
   });
 });
 

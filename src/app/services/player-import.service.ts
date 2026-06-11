@@ -245,7 +245,6 @@ export class PlayerImportService {
     const heading = source.attackingHeadingAccuracy;
     const passing = source.passing;
     const tackling = this.averageStats(source.defending, source.defendingSlidingTackle, source.defendingStandingTackle);
-    const goalkeepingShotStop = this.averageStats(source.goalkeepingDiving, source.goalkeepingReflexes, source.goalkeepingReflexes);
 
     const mappedPlayer: Player = {
       ...currentPlayer,
@@ -271,9 +270,9 @@ export class PlayerImportService {
       FK: this.clampStat(freeKick, currentPlayer.FK),
       PAS: this.clampStat(passing, currentPlayer.PAS),
       HEA: this.clampStat(heading, currentPlayer.HEA),
-      GKS: this.clampStat(goalkeepingShotStop, currentPlayer.GKS),
+      GKS: this.clampStat(source.goalkeepingReflexes, currentPlayer.GKS),
       GKH: this.clampStat(source.goalkeepingHandling, currentPlayer.GKH),
-      GKP: this.clampStat(source.goalkeepingPositioning, currentPlayer.GKP)
+      GKP: this.clampStat(source.goalkeepingDiving, currentPlayer.GKP)
     };
 
     mappedPlayer.pos = this.resolveBestWidePosition(source, mappedPlayer);
