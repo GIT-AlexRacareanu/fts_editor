@@ -71,7 +71,7 @@ const DEFAULT_MULTIPLIER = ieee754ToFloat(RATING_MULTIPLIER_BITS);
 const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
   gk: { weights: [2, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
   def: { weights: [15, 2, 6, 2, 6, 3, 3, 1, 20, 30, 0, 0, 0, 0], bonus: 18, multiplier: DEFAULT_MULTIPLIER - 0.001 },
-  mid: { weights: [4, 6, 6, 2, 15, 20, 15, 4, 0, 8, 0, 0, 0, 0], bonus: 12, multiplier: DEFAULT_MULTIPLIER - 0.02},
+  mid: { weights: [3, 6, 6, 2, 15, 20, 15, 4, 0, 4, 0, 0, 0, 0], bonus: 12, multiplier: DEFAULT_MULTIPLIER - 0.02},
   att: { weights: [6, 2, 4, 0, 10, 3, 3, 20, 4, 0, 0, 0, 0, 0], bonus: 6, multiplier: DEFAULT_MULTIPLIER - 0.0066 }
 };
 
@@ -86,11 +86,11 @@ function getPositionCategory(position: number): number {
     return 0;
   }
 
-  if (position >= 1 && position <= 7) {
+  if (position >= 1 && position <= 10) {
     return 1;
   }
 
-  if ((position >= 8 && position <= 18)) {
+  if (position >= 11 && position <= 18) {
     return 2;
   }
 

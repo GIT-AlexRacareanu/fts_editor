@@ -620,7 +620,13 @@ export class AppComponent implements OnInit {
   }
 
   importSelectedPlayer(record: ImportedPlayerRecord): void {
-    this.popupPlayer = this.playerImportService.mapImportedPlayer(record, this.popupPlayer);
+    const currentPosition = this.popupPlayer.pos;
+    const importedPlayer = this.playerImportService.mapImportedPlayer(record, this.popupPlayer);
+
+    this.popupPlayer = {
+      ...importedPlayer,
+      pos: currentPosition
+    };
     this.updatePopupOVR();
     this.importSearchQuery = '';
     this.showImportPicker = false;

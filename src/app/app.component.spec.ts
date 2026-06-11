@@ -118,6 +118,29 @@ describe('AppComponent team CSV import preview', () => {
     expect(component.teamImportMappedPreview[0].ovr).toBe(91);
   });
 
+  it('preserves the current popup position when importing a single player', () => {
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      readPlayer: () => ({ name: 'Base Player', pos: 11, nat: 0 }),
+      formatPlayerId: () => '0001',
+      calculateOVR: (player: { pos: number }) => player.pos,
+      binaryData: new Uint8Array(1)
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: () => ({ name: 'Imported Player', pos: 19, nat: 0 })
+    };
+    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+
+    component.popupPlayerIndex = 1;
+    component.popupPlayer = { name: 'Current Player', pos: 11, nat: 0 } as any;
+
+    component.importSelectedPlayer({ shortName: 'Imported Player' } as any);
+
+    expect(component.popupPlayer.name).toBe('Imported Player');
+    expect(component.popupPlayer.pos).toBe(11);
+  });
+
   it('caches formation sketches for the same displayed team object', () => {
     const readPlayerSpy = jasmine.createSpy('readPlayer').and.returnValue({
       name: 'Player A',

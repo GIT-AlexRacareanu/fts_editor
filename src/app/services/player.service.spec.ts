@@ -65,6 +65,37 @@ describe('PlayerService', () => {
     expect(lmOvr).toBe(cmOvr);
   });
 
+  it('treats CDM, LDM, and RDM as defenders for OVR calculation', () => {
+    const service = new PlayerService({} as any);
+    const stats = {
+      STR: 74,
+      STA: 71,
+      SPD: 68,
+      ACC: 67,
+      TAC: 83,
+      CON: 69,
+      SHO: 48,
+      CRO: 58,
+      FK: 45,
+      PAS: 64,
+      HEA: 76,
+      GKS: 20,
+      GKH: 20,
+      GKP: 20
+    };
+
+    const cbOvr = service.calculateOVR(createPlayer('CB', { pos: 6, ...stats }));
+    const cmOvr = service.calculateOVR(createPlayer('CM', { pos: 11, ...stats }));
+    const cdmOvr = service.calculateOVR(createPlayer('CDM', { pos: 8, ...stats }));
+    const rdmOvr = service.calculateOVR(createPlayer('RDM', { pos: 9, ...stats }));
+    const ldmOvr = service.calculateOVR(createPlayer('LDM', { pos: 10, ...stats }));
+
+    expect(cdmOvr).toBe(cbOvr);
+    expect(rdmOvr).toBe(cbOvr);
+    expect(ldmOvr).toBe(cbOvr);
+    expect(cdmOvr).not.toBe(cmOvr);
+  });
+
   it('finds players by normalized names and common abbreviated variants', () => {
     const service = new PlayerService({} as any);
     service.binaryData = new Uint8Array(234);
