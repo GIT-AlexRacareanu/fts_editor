@@ -112,6 +112,54 @@ describe('PlayerImportService', () => {
     expect(parsed[0].teamName).toBe('Manchester City');
   });
 
+  it('parses knownus as the short name alias', () => {
+    const csv = [
+      'knownus,overallrating,sho,pas,dri,def,phy,sprintspeed,stamina,freekickaccuracy,headingaccuracy,crossing,nation',
+      'Alias Player,80,70,71,72,73,74,75,76,67,68,69,Portugal'
+    ].join('\n');
+
+    const parsed = service.parseCsv(csv);
+
+    expect(parsed.length).toBe(1);
+    expect(parsed[0].shortName).toBe('Alias Player');
+    expect(parsed[0].overall).toBe(80);
+  });
+
+  it('uses the original import row index as fallback player id when no id column exists', () => {
+    const csv = [
+      'knownus,overallrating,club',
+      'First Row,70,Arsenal',
+      'Second Row,90,Arsenal'
+    ].join('\n');
+
+    const parsed = service.parseCsv(csv);
+
+    expect(parsed.length).toBe(2);
+    expect(parsed[0].shortName).toBe('Second Row');
+    expect(parsed[0].playerId).toBe('1');
+    expect(parsed[0].sourceRowIndex).toBe(1);
+    expect(parsed[1].shortName).toBe('First Row');
+    expect(parsed[1].playerId).toBe('0');
+    expect(parsed[1].sourceRowIndex).toBe(0);
+  });
+
+  it('maps numeric import position codes from position_1 using the configured importer mapper', () => {
+    const csv = [
+      'knownas,overallrating,club,position_1',
+      'Target Striker,90,Arsenal,25',
+      'Wide Creator,88,Arsenal,27',
+      'Anchor Midfielder,86,Arsenal,10'
+    ].join('\n');
+
+    const parsed = service.parseCsv(csv);
+
+    expect(parsed.length).toBe(3);
+    expect(parsed[0].shortName).toBe('Target Striker');
+    expect(parsed[0].clubPosition).toBe('ST');
+    expect(parsed[1].clubPosition).toBe('LW');
+    expect(parsed[2].clubPosition).toBe('CDM');
+  });
+
   it('parses imperial-first height and weight formats', () => {
     const csv = [
       'Name,Height,Weight,Position,Preferred foot,Nation',
@@ -186,7 +234,7 @@ describe('PlayerImportService', () => {
 
   it('maps HEA using the import stat formula from heading accuracy', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -202,7 +250,7 @@ describe('PlayerImportService', () => {
 
   it('maps imported gameplay attributes using the import stat formula', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -246,7 +294,7 @@ describe('PlayerImportService', () => {
 
   it('maps full names to initial plus surname format', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -262,7 +310,7 @@ describe('PlayerImportService', () => {
 
   it('maps multipart surnames by abbreviating only the first name', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -278,7 +326,7 @@ describe('PlayerImportService', () => {
 
   it('replaces special characters with Latin base letters during import name mapping', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -294,7 +342,7 @@ describe('PlayerImportService', () => {
 
   it('strips Romanian diacritics to ASCII during import name mapping', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -310,7 +358,7 @@ describe('PlayerImportService', () => {
 
   it('keeps mapped game names within 16 characters including spaces', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -326,7 +374,7 @@ describe('PlayerImportService', () => {
 
   it('maps Holland and The Netherlands to Netherlands nationality', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 84, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 84, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -345,7 +393,7 @@ describe('PlayerImportService', () => {
 
   it('keeps imported gameplay attributes at minimum 1', () => {
     const basePlayer = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 2000,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -423,9 +471,11 @@ function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): Im
     clubPosition: 'CM',
     nationalityName: 'Portugal',
     preferredFoot: 'Right',
+    teamName: 'Test Club',
     shooting: 60,
     passing: 65,
     dribbling: 68,
+    physical: 66,
     attackingCrossing: 55,
     attackingHeadingAccuracy: 52,
     skillFkAccuracy: 58,

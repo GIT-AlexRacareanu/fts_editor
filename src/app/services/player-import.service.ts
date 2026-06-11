@@ -5,6 +5,7 @@ import { calculatePlayerOvr } from './player.service';
 
 export interface ImportedPlayerRecord {
   playerId: string;
+  sourceRowIndex?: number;
   shortName: string;
   overall: number;
   age: number;
@@ -53,41 +54,94 @@ export interface ImportPlayerMapOptions {
   includeYear?: boolean;
 }
 
+const IMPORT_POSITION_LABEL_BY_CODE: Record<number, string> = {
+  0: 'GK',
+  1: 'SW',
+  2: 'RWB',
+  3: 'RB',
+  4: 'RCB',
+  5: 'CB',
+  6: 'LCB',
+  7: 'LB',
+  8: 'LWB',
+  9: 'RDM',
+  10: 'CDM',
+  11: 'LDM',
+  12: 'RM',
+  13: 'RCM',
+  14: 'CM',
+  15: 'LCM',
+  16: 'LM',
+  17: 'RAM',
+  18: 'CAM',
+  19: 'LAM',
+  20: 'RF',
+  21: 'CF',
+  22: 'LF',
+  23: 'RW',
+  24: 'RS',
+  25: 'ST',
+  26: 'LS',
+  27: 'LW'
+};
+
 const POSITION_MAP: Record<string, number> = {
   GK: 0,
-  LB: 1,
-  LWB: 1,
-  RB: 2,
-  RWB: 2,
+  SW: 6,
   LSW: 3,
   RSW: 4,
-  LCB: 5,
-  CB: 6,
+  RWB: 2,
+  RB: 2,
   RCB: 7,
-  CDM: 8,
+  CB: 6,
+  LCB: 5,
+  LB: 1,
+  LWB: 1,
   RDM: 9,
+  CDM: 8,
   LDM: 10,
+  RM: 16,
+  RCM: 13,
   CM: 11,
   LCM: 12,
-  RCM: 13,
-  LAM: 14,
-  RAM: 15,
-  RM: 16,
   LM: 17,
+  RAM: 15,
   CAM: 18,
-  ST: 19,
-  LS: 19,
-  RS: 19,
-  LW: 20,
+  LAM: 14,
+  RF: 21,
+  CF: 22,
   LF: 20,
   RW: 21,
-  RF: 21,
-  CF: 22
+  RS: 19,
+  ST: 19,
+  LS: 19,
+  LW: 20
 };
 
 const WIDE_IMPORT_POSITIONS = new Set(['LM', 'RM', 'LW', 'RW']);
 const LEFT_WIDE_GAME_POSITIONS = [17, 20] as const;
 const RIGHT_WIDE_GAME_POSITIONS = [16, 21] as const;
+
+const FK_FIELD_ALIASES = [
+  'skill_fk_accuracy', 'free_kick_accuracy', 'free kick accuracy', 'freekickaccuracy', 'freekick acc',
+  'free kick', 'freekick', 'fkaccuracy', 'fk accuracy', 'fk'
+] as const;
+
+const GK_DIVING_FIELD_ALIASES = [
+  'goalkeeping_diving', 'goalkeeping diving', 'gk_diving', 'gk diving', 'gkdiving', 'gkdiv', 'diving'
+] as const;
+
+const GK_HANDLING_FIELD_ALIASES = [
+  'goalkeeping_handling', 'goalkeeping handling', 'gk_handling', 'gk handling', 'gkhandling', 'gkhand', 'handling'
+] as const;
+
+const GK_POSITIONING_FIELD_ALIASES = [
+  'goalkeeping_positioning', 'goalkeeping positioning', 'gk_positioning', 'gk positioning', 'gkpositioning', 'gkpos', 'positioning_gk'
+] as const;
+
+const GK_REFLEXES_FIELD_ALIASES = [
+  'goalkeeping_reflexes', 'goalkeeping reflexes', 'gk_reflexes', 'gk reflexes', 'gkreflexes', 'gkref', 'reflexes_gk'
+] as const;
 
 const NATIONALITY_ALIASES: Record<string, string> = {
   usa: 'united states',
@@ -136,7 +190,7 @@ export class PlayerImportService {
 
     return dataRows
       .filter((row) => row.some((value) => value.trim().length > 0))
-      .map((row) => this.toImportedPlayerRecord(row, headerIndexes))
+      .map((row, rowIndex) => this.toImportedPlayerRecord(row, headerIndexes, rowIndex))
       .filter((player): player is ImportedPlayerRecord => player !== null)
       .sort((left, right) => {
         if (right.overall !== left.overall) {
@@ -191,6 +245,7 @@ export class PlayerImportService {
     const heading = source.attackingHeadingAccuracy;
     const passing = source.passing;
     const tackling = this.averageStats(source.defending, source.defendingSlidingTackle, source.defendingStandingTackle);
+    const goalkeepingShotStop = this.averageStats(source.goalkeepingDiving, source.goalkeepingReflexes, source.goalkeepingReflexes);
 
     const mappedPlayer: Player = {
       ...currentPlayer,
@@ -216,7 +271,7 @@ export class PlayerImportService {
       FK: this.clampStat(freeKick, currentPlayer.FK),
       PAS: this.clampStat(passing, currentPlayer.PAS),
       HEA: this.clampStat(heading, currentPlayer.HEA),
-      GKS: this.clampStat(source.goalkeepingReflexes, currentPlayer.GKS),
+      GKS: this.clampStat(goalkeepingShotStop, currentPlayer.GKS),
       GKH: this.clampStat(source.goalkeepingHandling, currentPlayer.GKH),
       GKP: this.clampStat(source.goalkeepingPositioning, currentPlayer.GKP)
     };
@@ -226,8 +281,8 @@ export class PlayerImportService {
     return mappedPlayer;
   }
 
-  private toImportedPlayerRecord(row: string[], headerIndexes: Map<string, number>): ImportedPlayerRecord | null {
-    const shortName = this.getFieldByAliases(row, headerIndexes, ['short_name', 'knownas', 'name']);
+  private toImportedPlayerRecord(row: string[], headerIndexes: Map<string, number>, rowIndex: number): ImportedPlayerRecord | null {
+    const shortName = this.getFieldByAliases(row, headerIndexes, ['short_name', 'knownas', 'knownus', 'name']);
 
     if (!shortName) {
       return null;
@@ -283,13 +338,14 @@ export class PlayerImportService {
     );
 
     return {
-      playerId: this.getFieldByAliases(row, headerIndexes, ['player_id', 'id', 'playerid', 'sofifa_id']),
+      playerId: this.getFieldByAliases(row, headerIndexes, ['player_id', 'id', 'playerid', 'sofifa_id']) || String(rowIndex),
+      sourceRowIndex: rowIndex,
       shortName,
       overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall', 'overallrating', 'ovr', 'rating']),
       age: this.getNumberFieldByAliases(row, headerIndexes, ['age']),
       heightCm: this.getHeightFieldByAliases(row, headerIndexes, ['height_cm', 'height']),
       weightKg: this.getWeightFieldByAliases(row, headerIndexes, ['weight_kg', 'weight']),
-      clubPosition: this.getFieldByAliases(row, headerIndexes, ['club_position', 'position', 'best_position', 'best position']),
+      clubPosition: this.getImportPosition(row, headerIndexes),
       nationalityName: this.getFieldByAliases(row, headerIndexes, ['nationality_name', 'nation', 'nationality', 'country region', 'country']),
       teamName: this.getFieldByAliases(row, headerIndexes, ['team', 'club', 'club_name', 'club name', 'team name']),
 
@@ -300,7 +356,7 @@ export class PlayerImportService {
       physical: this.getNumberFieldByAliases(row, headerIndexes, ['physical', 'phy']),
       attackingCrossing: this.getNumberFieldByAliases(row, headerIndexes, ['attacking_crossing', 'crossing', 'cro']),
       attackingHeadingAccuracy: headingAccuracy,
-      skillFkAccuracy: this.getNumberFieldByAliases(row, headerIndexes, ['skill_fk_accuracy', 'free_kick_accuracy', 'free kick accuracy', 'freekickaccuracy', 'freekick acc', 'fk']),
+      skillFkAccuracy: this.getNumberFieldByAliases(row, headerIndexes, [...FK_FIELD_ALIASES]),
       movementAcceleration: acceleration > 0 ? acceleration : sprintSpeed,
       movementSprintSpeed: sprintSpeed,
       powerStamina: this.getNumberFieldByAliases(
@@ -323,10 +379,10 @@ export class PlayerImportService {
         headerIndexes,
         ['defending_sliding_tackle', 'sliding_tackle', 'sliding tackle', 'slidingtackle', 'def']
       ),
-      goalkeepingDiving: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_diving', 'gk_diving', 'gk diving']),
-      goalkeepingHandling: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_handling', 'gk_handling', 'gk handling']),
-      goalkeepingPositioning: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_positioning', 'gk_positioning', 'gk positioning']),
-      goalkeepingReflexes: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_reflexes', 'gk_reflexes', 'gk reflexes']),
+      goalkeepingDiving: this.getNumberFieldByAliases(row, headerIndexes, [...GK_DIVING_FIELD_ALIASES]),
+      goalkeepingHandling: this.getNumberFieldByAliases(row, headerIndexes, [...GK_HANDLING_FIELD_ALIASES]),
+      goalkeepingPositioning: this.getNumberFieldByAliases(row, headerIndexes, [...GK_POSITIONING_FIELD_ALIASES]),
+      goalkeepingReflexes: this.getNumberFieldByAliases(row, headerIndexes, [...GK_REFLEXES_FIELD_ALIASES]),
       jumping: this.getNumberFieldByAliases(row, headerIndexes, ['jumping']),
       finishing,
       shotPower,
@@ -352,6 +408,25 @@ export class PlayerImportService {
 
       if (columnIndex !== undefined) {
         return (row[columnIndex] ?? '').trim();
+      }
+    }
+
+    return '';
+  }
+
+  private getImportPosition(row: string[], headerIndexes: Map<string, number>): string {
+    const directPosition = this.getFieldByAliases(row, headerIndexes, ['club_position', 'position', 'best_position', 'best position']);
+
+    if (directPosition) {
+      return this.normalizeImportPosition(directPosition) ?? directPosition.trim();
+    }
+
+    for (const fieldName of ['position_1', 'position_2', 'position_3', 'position_4']) {
+      const codedPosition = this.getFieldByAliases(row, headerIndexes, [fieldName]);
+      const normalizedPosition = this.normalizeImportPosition(codedPosition);
+
+      if (normalizedPosition) {
+        return normalizedPosition;
       }
     }
 
@@ -577,7 +652,8 @@ export class PlayerImportService {
   }
 
   private mapPosition(source: ImportedPlayerRecord, fallback: number): number {
-    const normalizedPosition = source.clubPosition.trim().toUpperCase();
+    const normalizedPosition = this.normalizeImportPosition(source.clubPosition)?.toUpperCase()
+      ?? source.clubPosition.trim().toUpperCase();
     const mappedPosition = POSITION_MAP[normalizedPosition];
 
     if (mappedPosition !== undefined) {
@@ -666,6 +742,23 @@ export class PlayerImportService {
 
   private mapWidePositionByFoot(preferredFoot: string, leftFootPosition: number, rightFootPosition: number): number {
     return preferredFoot.trim().toLowerCase() === 'left' ? leftFootPosition : rightFootPosition;
+  }
+
+  private normalizeImportPosition(value: string): string | null {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsedCode = Number(trimmed);
+
+    if (Number.isInteger(parsedCode)) {
+      return IMPORT_POSITION_LABEL_BY_CODE[parsedCode] ?? null;
+    }
+
+    const normalizedLabel = trimmed.toUpperCase();
+    return POSITION_MAP[normalizedLabel] !== undefined ? normalizedLabel : null;
   }
 
   private mapFoot(preferredFoot: string, fallback: number): number {

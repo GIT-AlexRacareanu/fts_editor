@@ -7,7 +7,7 @@ describe('PlayerImportService bulk import mapping', () => {
   it('keeps the template year and appearance when bulk import disables year mapping', () => {
     const service = new PlayerImportService();
     const basePlayer: Player = {
-      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, year: 1998,
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 1998,
       skin: 2, skin_tone: 1, head_type: 3, hair_type: 4, hair: 5, beard_type: 6,
       boots: 7, mangas: 8, guantes: 9,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
@@ -23,6 +23,49 @@ describe('PlayerImportService bulk import mapping', () => {
     expect(mapped.name).toBe('M. Salah');
     expect(mapped.pos).toBe(imported.clubPosition === 'CM' ? 11 : mapped.pos);
   });
+
+  it('maps FK and goalkeeper stats from compact import aliases', () => {
+    const service = new PlayerImportService();
+    const csv = [
+      'knownas,club,position,freeKick,gkdiving,gkhandling,gkpositioning,gkreflexes',
+      'Shot Stopper,Test Club,GK,63,71,69,67,73'
+    ].join('\n');
+
+    const parsed = service.parseCsv(csv);
+
+    expect(parsed.length).toBe(1);
+    expect(parsed[0].skillFkAccuracy).toBe(63);
+    expect(parsed[0].goalkeepingDiving).toBe(71);
+    expect(parsed[0].goalkeepingHandling).toBe(69);
+    expect(parsed[0].goalkeepingPositioning).toBe(67);
+    expect(parsed[0].goalkeepingReflexes).toBe(73);
+  });
+
+  it('uses diving and reflexes together for the imported GKS value', () => {
+    const service = new PlayerImportService();
+    const basePlayer: Player = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 1998,
+      skin: 2, skin_tone: 1, head_type: 3, hair_type: 4, hair: 5, beard_type: 6,
+      boots: 7, mangas: 8, guantes: 9,
+      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
+      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+    const imported = createImportedPlayer({
+      clubPosition: 'GK',
+      skillFkAccuracy: 57,
+      goalkeepingDiving: 80,
+      goalkeepingHandling: 76,
+      goalkeepingPositioning: 74,
+      goalkeepingReflexes: 70
+    });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer, { includeYear: false });
+
+    expect(mapped.FK).toBe(57);
+    expect(mapped.GKS).toBe(75);
+    expect(mapped.GKH).toBe(76);
+    expect(mapped.GKP).toBe(74);
+  });
 });
 
 function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): ImportedPlayerRecord {
@@ -36,9 +79,11 @@ function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): Im
     clubPosition: 'CM',
     nationalityName: 'Portugal',
     preferredFoot: 'Right',
+    teamName: 'Test Club',
     shooting: 60,
     passing: 65,
     dribbling: 68,
+    physical: 66,
     attackingCrossing: 55,
     attackingHeadingAccuracy: 52,
     skillFkAccuracy: 58,
@@ -67,6 +112,7 @@ function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): Im
     vision: 63,
     interceptions: 49,
     defAwareness: 47,
+    defending: 50,
     ...overrides
   };
 }

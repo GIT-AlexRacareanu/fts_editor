@@ -77,6 +77,14 @@ interface PopupTeamContext {
   slotIndex: number;
 }
 
+interface TeamImportMappedPreviewItem {
+  shortName: string;
+  futureIndex: number;
+  futureHexId: string;
+  positionLabel: string;
+  ovr: number;
+}
+
 type TeamsRoleField = 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole';
 
 @Component({
@@ -116,6 +124,8 @@ export class AppComponent implements OnInit {
   teamImportCsvTeamSearch = '';
   isTeamImporting = false;
   teamImportStatusMessage = '';
+  teamImportPreviewPlayersCache: ImportedPlayerRecord[] = [];
+  teamImportMappedPreviewCache: TeamImportMappedPreviewItem[] = [];
 
   // ─── DB Browser ──────────────────────────────────────────────
   dbSearchNameQuery = '';
@@ -139,6 +149,7 @@ export class AppComponent implements OnInit {
 
   // ─── Shared ──────────────────────────────────────────────────
   private readonly teamPlayerNameCache = new Map<number, string | null>();
+  private readonly formationSketchCache = new WeakMap<TeamRecord, FormationSketch>();
   private readonly dbBrowsePageSize = 25;
   private readonly importSearchPageSize = 50;
   private readonly importSearchMinLength = 3;
@@ -651,6 +662,7 @@ export class AppComponent implements OnInit {
       this.importSourceFileName = this.importAssetUrl;
       this.importSearchQuery = '';
       this.showImportPicker = showPicker;
+      this.refreshTeamImportPreview();
 
       if (notify) {
         alert(`Loaded ${importedPlayers.length} source players from ${this.importAssetUrl}.`);
@@ -684,11 +696,11 @@ export class AppComponent implements OnInit {
   }
 
   get teamImportPreviewPlayers(): ImportedPlayerRecord[] {
-    if (!this.teamImportCsvTeam) {
-      return [];
-    }
+    return this.teamImportPreviewPlayersCache;
+  }
 
-    return this.playerImportService.filterByTeam(this.importedPlayers, this.teamImportCsvTeam);
+  get teamImportCsvPreviewPlayers(): ImportedPlayerRecord[] {
+    return this.teamImportPreviewPlayers.slice(0, 32);
   }
 
   private getResolvedTeamImportPlayers(): Array<{
@@ -707,7 +719,7 @@ export class AppComponent implements OnInit {
 
     return csvPlayers
       .map((sourcePlayer) => {
-        const playerIndex = this.playerService.findPlayerIndexByName(sourcePlayer.shortName);
+        const playerIndex = this.resolveImportedTeamPlayerIndex(sourcePlayer);
 
         if (playerIndex < 0) {
           return null;
@@ -722,7 +734,7 @@ export class AppComponent implements OnInit {
           position: mapped.pos,
           futureHexId: this.playerService.formatPlayerId(playerIndex),
           positionLabel: this.getPositionLabel(mapped.pos),
-          ovr: this.playerService.calculateOVR(currentPlayer)
+          ovr: this.playerService.calculateOVR(mapped)
         };
       })
       .filter((player): player is {
@@ -735,43 +747,62 @@ export class AppComponent implements OnInit {
       } => player !== null);
   }
 
-  get teamImportMappedPreview(): Array<{
-    shortName: string;
-    futureIndex: number;
-    futureHexId: string;
-    positionLabel: string;
-    ovr: number;
-  }> {
-    return this.getResolvedTeamImportPlayers().map((player) => ({
-      shortName: player.shortName,
-      futureIndex: player.playerIndex,
-      futureHexId: player.futureHexId,
-      positionLabel: player.positionLabel,
-      ovr: player.ovr
-    }));
+  private resolveImportedTeamPlayerIndex(sourcePlayer: ImportedPlayerRecord): number {
+    const indexedRow = sourcePlayer.sourceRowIndex;
+
+    if (Number.isFinite(indexedRow) && indexedRow !== undefined) {
+      return indexedRow >= 0 && indexedRow < this.playerService.totalPlayers ? indexedRow : -1;
+    }
+
+    const parsedPlayerId = Number.parseInt(sourcePlayer.playerId.trim(), 10);
+
+    if (!Number.isNaN(parsedPlayerId) && parsedPlayerId >= 0 && parsedPlayerId < this.playerService.totalPlayers) {
+      return parsedPlayerId;
+    }
+
+    return -1;
+  }
+
+  get teamImportMappedPreview(): TeamImportMappedPreviewItem[] {
+    return this.teamImportMappedPreviewCache;
   }
 
   selectCsvImportTeam(teamName: string): void {
     this.teamImportCsvTeam = teamName;
     this.teamImportCsvTeamSearch = teamName;
     this.teamImportStatusMessage = '';
+    this.refreshTeamImportPreview();
   }
 
   clearCsvImportTeam(): void {
     this.teamImportCsvTeam = null;
     this.teamImportCsvTeamSearch = '';
     this.teamImportStatusMessage = '';
+    this.refreshTeamImportPreview();
   }
 
   onTeamImportCsvTeamChange(): void {
     this.teamImportCsvTeam = null;
     this.teamImportStatusMessage = '';
+    this.refreshTeamImportPreview();
   }
 
-  onTeamImportCsvTeamInput(event: Event): void {
+  async onTeamImportPanelOpened(): Promise<void> {
+    if (!this.importSourceLoaded) {
+      await this.loadImportSource(false, false);
+    }
+  }
+
+  async onTeamImportCsvTeamInput(event: Event): Promise<void> {
     const value = (event.target as HTMLInputElement | null)?.value ?? '';
     this.teamImportCsvTeamSearch = value;
     this.onTeamImportCsvTeamChange();
+
+    if (!value.trim() || this.importSourceLoaded) {
+      return;
+    }
+
+    await this.loadImportSource(false, false);
   }
 
   async importTeamFromCsv(): Promise<void> {
@@ -1424,6 +1455,12 @@ export class AppComponent implements OnInit {
   }
 
   getFormationSketch(team: TeamRecord): FormationSketch {
+    const cachedSketch = this.formationSketchCache.get(team);
+
+    if (cachedSketch) {
+      return cachedSketch;
+    }
+
     const activeSlots = team.slots
       .slice(0, Math.min(team.playerCount, team.slots.length))
       .filter((slot) => !slot.isEmpty);
@@ -1436,11 +1473,15 @@ export class AppComponent implements OnInit {
       ? this.buildFormationSketch(starters, resolvedFormation.formation)
       : this.buildFirstElevenSketch(starters);
 
-    return {
+    const sketchResult = {
       ...sketch,
       reservePlayers: activeSlots.slice(11).map((player) => this.toSketchPlayer(player)),
       sourceLabel: resolvedFormation.sourceLabel
     };
+
+    this.formationSketchCache.set(team, sketchResult);
+
+    return sketchResult;
   }
 
   loadTeamsDatRecord(index: number | null): void {
@@ -1684,6 +1725,7 @@ export class AppComponent implements OnInit {
     this.refreshDbBrowsePlayers();
     this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
     this.rebuildRoleSelectOptions();
+    this.refreshTeamImportPreview();
   }
 
   private applyTeamFileLoaded(): void {
@@ -1693,6 +1735,7 @@ export class AppComponent implements OnInit {
       ? []
       : this.decorateTeamsWithPlayerNames([this.teamEditorService.getTeam(this.selectedTeamOffset)]);
     this.rebuildRoleSelectOptions();
+    this.refreshTeamImportPreview();
   }
 
   private applyTeamsDatLoaded(): void {
@@ -1763,6 +1806,30 @@ export class AppComponent implements OnInit {
 
   private decorateTeamsWithPlayerNames(teams: TeamRecord[]): TeamRecord[] {
     return teams.map((team) => this.decorateTeamWithPlayerNames(team));
+  }
+
+  private refreshTeamImportPreview(): void {
+    if (!this.teamImportCsvTeam) {
+      this.teamImportPreviewPlayersCache = [];
+      this.teamImportMappedPreviewCache = [];
+      return;
+    }
+
+    const previewPlayers = this.playerImportService.filterByTeam(this.importedPlayers, this.teamImportCsvTeam);
+    this.teamImportPreviewPlayersCache = previewPlayers;
+
+    if (!this.fileLoaded) {
+      this.teamImportMappedPreviewCache = [];
+      return;
+    }
+
+    this.teamImportMappedPreviewCache = this.getResolvedTeamImportPlayers().map((player) => ({
+      shortName: player.shortName,
+      futureIndex: player.playerIndex,
+      futureHexId: player.futureHexId,
+      positionLabel: player.positionLabel,
+      ovr: player.ovr
+    }));
   }
 
   private decorateTeamWithPlayerNames(team: TeamRecord): TeamRecord {

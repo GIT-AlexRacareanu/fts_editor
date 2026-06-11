@@ -387,8 +387,9 @@ export class PlayerService {
     const name = new TextDecoder('utf-16').decode(nameArr).replace(/\0/g, '').trim();
     const hiddenFromTransferMarket = view.getUint8(base + this.hiddenFromTransferMarketOffset);
     const isIconLegend = view.getUint8(base + this.isIconLegendOffset);
-    const birthDay = view.getUint32(base + this.birthDayOffset, true);
-    const birthMonth = view.getUint32(base + this.birthMonthOffset, true);
+    const canReadBirthFields = this.birthMonthOffset + 4 <= this.playerStride;
+    const birthDay = canReadBirthFields ? view.getUint32(base + this.birthDayOffset, true) : 1;
+    const birthMonth = canReadBirthFields ? view.getUint32(base + this.birthMonthOffset, true) : 1;
     const year = view.getUint16(base + 120, true);
     const player: any = { name, hiddenFromTransferMarket, isIconLegend, birthDay, birthMonth, year };
     for (const key of Object.keys(OFFSET_MAP)) {
@@ -410,8 +411,13 @@ export class PlayerService {
     view.setUint16(base + this.playerIdOffset, idx, true);
     view.setUint8(base + this.hiddenFromTransferMarketOffset, player.hiddenFromTransferMarket ?? 0);
     view.setUint8(base + this.isIconLegendOffset, player.isIconLegend ?? 0);
-    view.setUint32(base + this.birthDayOffset, player.birthDay, true);
-    view.setUint32(base + this.birthMonthOffset, player.birthMonth, true);
+    const canWriteBirthFields = this.birthMonthOffset + 4 <= this.playerStride;
+
+    if (canWriteBirthFields) {
+      view.setUint32(base + this.birthDayOffset, player.birthDay, true);
+      view.setUint32(base + this.birthMonthOffset, player.birthMonth, true);
+    }
+
     for (const key of Object.keys(OFFSET_MAP)) {
       view.setUint8(base + OFFSET_MAP[key], (player as any)[key]);
     }

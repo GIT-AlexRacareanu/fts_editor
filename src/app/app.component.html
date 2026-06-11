@@ -74,7 +74,7 @@
             </mat-form-field>
 
             <!-- CSV Team Import -->
-            <mat-expansion-panel class="team-csv-import-panel">
+            <mat-expansion-panel class="team-csv-import-panel" (opened)="onTeamImportPanelOpened()">
               <mat-expansion-panel-header>
                 <mat-panel-title>
                   <mat-icon class="team-csv-import-icon">upload</mat-icon>
@@ -129,6 +129,10 @@
                     <span class="team-csv-preview-ovr">{{ p.ovr }}</span>
                   </div>
                 </div>
+              </div>
+
+              <div class="team-csv-search-empty" *ngIf="teamImportCsvTeam && teamImportPreviewPlayers.length > 0 && teamImportMappedPreview.length === 0">
+                CSV team loaded, but no matching existing PLAYERS.DAT names were found yet.
               </div>
 
               <div class="team-csv-import-actions">

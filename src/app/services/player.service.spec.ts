@@ -25,7 +25,6 @@ describe('PlayerService', () => {
     expect(binaryData[159]).toBe(0x11);
     expect(binaryData[192]).toBe(0x11);
     expect(binaryData[221]).toBe(0x11);
-    expect(binaryData[223]).toBe(0x11);
   });
 
   it('derives player count from the file length when more records exist than the header says', () => {
@@ -78,6 +77,56 @@ describe('PlayerService', () => {
     expect(service.findPlayerIndexByName('mohamed salah')).toBe(0);
     expect(service.findPlayerIndexByName('M. Salah')).toBe(0);
     expect(service.findPlayerIndexByName('Luka Modric')).toBe(1);
+  });
+
+  it('keeps header count aligned with byte length after bulk replacement', () => {
+    const service = new PlayerService({} as any);
+    service.binaryData = new Uint8Array(234);
+
+    const replacement: Player[] = [
+      createPlayer('Imported One'),
+      createPlayer('Imported Two'),
+      createPlayer('Imported Three')
+    ];
+
+    const result = service.replacePlayers(replacement);
+    const view = new DataView(service.binaryData!.buffer);
+    const headerTotal = view.getUint16(8, true);
+    const expectedLength = (result.nextTotal - 1) * 112 + 122;
+
+    expect(result.nextTotal).toBe(3);
+    expect(headerTotal).toBe(3);
+    expect(service.binaryData!.byteLength).toBe(expectedLength);
+    expect(service.totalPlayers).toBe(3);
+  });
+
+  it('can reopen the replaced binary payload through the same inflate/decode path', async () => {
+    const service = new PlayerService({ saveFileHandle: async () => {} } as any);
+    service.binaryData = new Uint8Array(234);
+    service.replacePlayers([
+      createPlayer('Imported A', { pos: 11 }),
+      createPlayer('Imported B', { pos: 19 })
+    ]);
+
+    const reopenedPayload = new Uint8Array(service.binaryData!);
+    (globalThis as any).pako = {
+      deflate: (input: Uint8Array) => input,
+      inflate: (input: Uint8Array) => input
+    };
+
+    const fakeHandle = {
+      getFile: async () => ({
+        name: 'players.dat',
+        arrayBuffer: async () => reopenedPayload.buffer.slice(0)
+      })
+    };
+
+    const reopened = new PlayerService({ saveFileHandle: async () => {} } as any);
+    await reopened.loadFile(fakeHandle);
+
+    expect(reopened.totalPlayers).toBe(2);
+    expect(reopened.readPlayer(0).name).toContain('Imported A');
+    expect(reopened.readPlayer(1).name).toContain('Imported B');
   });
 });
 
