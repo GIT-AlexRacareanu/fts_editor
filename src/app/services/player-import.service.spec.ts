@@ -98,6 +98,7 @@ describe('PlayerImportService', () => {
     expect(parsed.length).toBe(1);
     expect(parsed[0].shortName).toBe('Erling Haaland');
     expect(parsed[0].overall).toBe(91);
+    expect(parsed[0].movementAcceleration).toBe(92);
     expect(parsed[0].movementSprintSpeed).toBe(92);
     expect(parsed[0].skillFkAccuracy).toBe(62);
     expect(parsed[0].attackingHeadingAccuracy).toBe(85);
@@ -106,7 +107,8 @@ describe('PlayerImportService', () => {
     expect(parsed[0].shotPower).toBe(94);
     expect(parsed[0].defendingStandingTackle).toBe(47);
     expect(parsed[0].defendingSlidingTackle).toBe(29);
-    expect(parsed[0].powerStrength).toBe(93);
+    expect(parsed[0].powerStrength).toBe(88);
+    expect(parsed[0].defending).toBe(49);
     expect(parsed[0].teamName).toBe('Manchester City');
   });
 
@@ -452,6 +454,7 @@ function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): Im
     vision: 63,
     interceptions: 49,
     defAwareness: 47,
+    defending: 50,
     ...overrides
   };
 }
