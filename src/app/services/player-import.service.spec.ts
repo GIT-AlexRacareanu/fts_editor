@@ -87,6 +87,29 @@ describe('PlayerImportService', () => {
     expect(parsed[0].nationalityName).toBe('Portugal');
   });
 
+  it('parses import_2 compact headers including knownas and overallrating', () => {
+    const csv = [
+      'knownas,age,height,weight,overallrating,agility,balance,ballcontrol,crossing,curve,dribbling,finishing,freekickaccuracy,headingaccuracy,interceptions,longpassing,longshots,penalties,reactions,shortpassing,shotpower,slidingtackle,sprintspeed,stamina,standingtackle,strength,vision,volleys,sho,pas,dri,def,phy,nation,club',
+      'Erling Haaland,24,195,94,91,71,69,83,58,77,79,96,62,85,43,66,83,90,95,78,94,29,92,78,47,93,75,90,91,69,80,49,88,Norway,Manchester City'
+    ].join('\n');
+
+    const parsed = service.parseCsv(csv);
+
+    expect(parsed.length).toBe(1);
+    expect(parsed[0].shortName).toBe('Erling Haaland');
+    expect(parsed[0].overall).toBe(91);
+    expect(parsed[0].movementSprintSpeed).toBe(92);
+    expect(parsed[0].skillFkAccuracy).toBe(62);
+    expect(parsed[0].attackingHeadingAccuracy).toBe(85);
+    expect(parsed[0].shortPassing).toBe(78);
+    expect(parsed[0].longPassing).toBe(66);
+    expect(parsed[0].shotPower).toBe(94);
+    expect(parsed[0].defendingStandingTackle).toBe(47);
+    expect(parsed[0].defendingSlidingTackle).toBe(29);
+    expect(parsed[0].powerStrength).toBe(93);
+    expect(parsed[0].teamName).toBe('Manchester City');
+  });
+
   it('parses imperial-first height and weight formats', () => {
     const csv = [
       'Name,Height,Weight,Position,Preferred foot,Nation',

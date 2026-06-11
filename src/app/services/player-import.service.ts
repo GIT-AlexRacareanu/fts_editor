@@ -226,15 +226,15 @@ export class PlayerImportService {
   }
 
   private toImportedPlayerRecord(row: string[], headerIndexes: Map<string, number>): ImportedPlayerRecord | null {
-    const shortName = this.getFieldByAliases(row, headerIndexes, ['short_name', 'name']);
+    const shortName = this.getFieldByAliases(row, headerIndexes, ['short_name', 'knownas', 'name']);
 
     if (!shortName) {
       return null;
     }
 
     const finishing = this.getNumberFieldByAliases(row, headerIndexes, ['finishing']);
-    const shotPower = this.getNumberFieldByAliases(row, headerIndexes, ['shot_power', 'shot power']);
-    const longShots = this.getNumberFieldByAliases(row, headerIndexes, ['long_shots', 'long shots']);
+    const shotPower = this.getNumberFieldByAliases(row, headerIndexes, ['shot_power', 'shot power', 'shotpower']);
+    const longShots = this.getNumberFieldByAliases(row, headerIndexes, ['long_shots', 'long shots', 'longshots']);
     const volleys = this.getNumberFieldByAliases(row, headerIndexes, ['volleys']);
     const penalties = this.getNumberFieldByAliases(row, headerIndexes, ['penalties']);
     const shooting = this.averageNonZero([
@@ -246,8 +246,8 @@ export class PlayerImportService {
       penalties
     ]);
 
-    const shortPassing = this.getNumberFieldByAliases(row, headerIndexes, ['short_passing', 'short passing']);
-    const longPassing = this.getNumberFieldByAliases(row, headerIndexes, ['long_passing', 'long passing']);
+    const shortPassing = this.getNumberFieldByAliases(row, headerIndexes, ['short_passing', 'short passing', 'shortpassing']);
+    const longPassing = this.getNumberFieldByAliases(row, headerIndexes, ['long_passing', 'long passing', 'longpassing']);
     const vision = this.getNumberFieldByAliases(row, headerIndexes, ['vision']);
     const passing = this.averageNonZero([
       this.getNumberFieldByAliases(row, headerIndexes, ['passing', 'pas']),
@@ -256,18 +256,18 @@ export class PlayerImportService {
       vision
     ]);
 
-    const headingAccuracy = this.getNumberFieldByAliases(row, headerIndexes, ['attacking_heading_accuracy', 'heading_accuracy', 'heading accuracy']);
+    const headingAccuracy = this.getNumberFieldByAliases(row, headerIndexes, ['attacking_heading_accuracy', 'heading_accuracy', 'heading accuracy', 'headingaccuracy']);
     const curve = this.getNumberFieldByAliases(row, headerIndexes, ['curve']);
     const agility = this.getNumberFieldByAliases(row, headerIndexes, ['agility']);
     const balance = this.getNumberFieldByAliases(row, headerIndexes, ['balance']);
-    const ballControl = this.getNumberFieldByAliases(row, headerIndexes, ['ball_control', 'ball control']);
+    const ballControl = this.getNumberFieldByAliases(row, headerIndexes, ['ball_control', 'ball control', 'ballcontrol']);
     const interceptions = this.getNumberFieldByAliases(row, headerIndexes, ['interceptions']);
     const defAwareness = this.getNumberFieldByAliases(row, headerIndexes, ['def_awareness', 'def awareness']);
 
     return {
       playerId: this.getFieldByAliases(row, headerIndexes, ['player_id', 'id', 'playerid', 'sofifa_id']),
       shortName,
-      overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall', 'ovr', 'rating']),
+      overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall', 'overallrating', 'ovr', 'rating']),
       age: this.getNumberFieldByAliases(row, headerIndexes, ['age']),
       heightCm: this.getHeightFieldByAliases(row, headerIndexes, ['height_cm', 'height']),
       weightKg: this.getWeightFieldByAliases(row, headerIndexes, ['weight_kg', 'weight']),
@@ -282,7 +282,7 @@ export class PlayerImportService {
       physical: this.getNumberFieldByAliases(row, headerIndexes, ['physical', 'phy']),
       attackingCrossing: this.getNumberFieldByAliases(row, headerIndexes, ['attacking_crossing', 'crossing']),
       attackingHeadingAccuracy: headingAccuracy,
-      skillFkAccuracy: this.getNumberFieldByAliases(row, headerIndexes, ['skill_fk_accuracy', 'free_kick_accuracy', 'free kick accuracy']),
+      skillFkAccuracy: this.getNumberFieldByAliases(row, headerIndexes, ['skill_fk_accuracy', 'free_kick_accuracy', 'free kick accuracy', 'freekickaccuracy']),
       movementAcceleration: this.getNumberFieldByAliases(
         row,
         headerIndexes,
@@ -291,7 +291,7 @@ export class PlayerImportService {
       movementSprintSpeed: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['movement_sprint_speed', 'sprint_speed', 'sprint speed']
+        ['movement_sprint_speed', 'sprint_speed', 'sprint speed', 'sprintspeed']
       ),
       powerStamina: this.getNumberFieldByAliases(
         row,
@@ -301,17 +301,17 @@ export class PlayerImportService {
       powerStrength: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['physical', 'phy']
+        ['power_strength', 'strength', 'physical', 'phy']
       ),
       defendingStandingTackle: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['defending_standing_tackle', 'standing_tackle', 'standing tackle']
+        ['defending_standing_tackle', 'standing_tackle', 'standing tackle', 'standingtackle']
       ),
       defendingSlidingTackle: this.getNumberFieldByAliases(
         row,
         headerIndexes,
-        ['defending_sliding_tackle', 'sliding_tackle', 'sliding tackle']
+        ['defending_sliding_tackle', 'sliding_tackle', 'sliding tackle', 'slidingtackle']
       ),
       goalkeepingDiving: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_diving', 'gk_diving', 'gk diving']),
       goalkeepingHandling: this.getNumberFieldByAliases(row, headerIndexes, ['goalkeeping_handling', 'gk_handling', 'gk handling']),

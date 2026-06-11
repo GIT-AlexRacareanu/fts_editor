@@ -86,7 +86,7 @@ type TeamsRoleField = 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'pe
 export class AppComponent implements OnInit {
   @ViewChild('popupNameInput') popupNameInput?: ElementRef<HTMLInputElement>;
 
-  private readonly importAssetUrl = 'assets/import/fc-player-import.csv';
+  private readonly importAssetUrl = 'assets/import/import_2.csv';
 
   // ─── App flow ────────────────────────────────────────────────
   showInitPage = true;
