@@ -647,6 +647,10 @@ export class PlayerImportService {
       return this.trimToGameNameLength(normalized);
     }
 
+    if (normalized.length <= 10) {
+      return this.trimToGameNameLength(normalized);
+    }
+
     const firstName = parts[0];
     const surname = parts.slice(1).join(' ');
 

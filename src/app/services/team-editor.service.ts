@@ -472,7 +472,7 @@ export class TeamEditorService {
       for (let index = 0; index < SLOT_COUNT; index++) {
         const attrPtr = offset + ATTRIBUTES_OFFSET + index * PLAYER_ENTRY_SIZE;
         const idPtr = offset + PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE;
-        const playerId = index + 1;
+        const playerId = index;
 
         if (index < ACTIVE_SLOTS) {
           view.setUint16(idPtr, playerId, true);

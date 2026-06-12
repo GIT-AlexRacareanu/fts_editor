@@ -213,6 +213,24 @@ describe('TeamEditorService', () => {
     expect(view.getUint32(8, true)).toBe(0x7fffffff);
     expect(view.getUint32(12, true)).toBe(0x6fffffff);
   });
+
+  it('resets clean-start active slots to player ids 0 through 17', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 32,
+      playerIds: Array.from({ length: 32 }, (_, index) => 0x0100 + index)
+    });
+    (service as any).teamOptions = [{ offset, label: 'Test Team' }];
+
+    service.clearAllTeams();
+
+    const updatedTeam = service.getTeam(offset);
+
+    expect(updatedTeam.playerCount).toBe(18);
+    expect(updatedTeam.slots[0].playerId).toBe(0x0000);
+    expect(updatedTeam.slots[1].playerId).toBe(0x0001);
+    expect(updatedTeam.slots[17].playerId).toBe(0x0011);
+    expect(updatedTeam.slots[18].playerId).toBe(0xffff);
+  });
 });
 
 function seedTeamBinary(

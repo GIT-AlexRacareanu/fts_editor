@@ -95,6 +95,7 @@ export class AppComponent implements OnInit {
   @ViewChild('popupNameInput') popupNameInput?: ElementRef<HTMLInputElement>;
 
   private readonly importAssetUrl = 'assets/import/import_2.csv';
+  private readonly bulkImportDummyPlayerCount = 18;
 
   // ─── App flow ────────────────────────────────────────────────
   showInitPage = true;
@@ -923,9 +924,13 @@ export class AppComponent implements OnInit {
       const mappedPlayers = sourcePlayers.map((sourcePlayer) =>
         this.playerImportService.mapImportedPlayer(sourcePlayer, templatePlayer, { includeYear: false })
       );
+      const playersToWrite = [
+        ...this.createBulkImportDummyPlayers(templatePlayer),
+        ...mappedPlayers
+      ];
 
       const result = this.playerService.replacePlayers(
-        mappedPlayers,
+        playersToWrite,
         hasTemplatePlayer ? { templatePlayerIndex: 0 } : {}
       );
       this.applyPlayerFileLoaded();
@@ -933,9 +938,9 @@ export class AppComponent implements OnInit {
 
       this.showImportPicker = false;
       this.importSearchQuery = '';
-      this.importStatusMessage = `Bulk replace complete: roster replaced with ${result.replaced} imported players (${result.previousTotal} -> ${result.nextTotal}) and downloaded players.dat.`;
+      this.importStatusMessage = `Bulk replace complete: inserted ${this.bulkImportDummyPlayerCount} dummy players, then ${sourcePlayers.length} imported players (${result.previousTotal} -> ${result.nextTotal}) and downloaded players.dat.`;
 
-      if (mappedPlayers.length > result.replaced) {
+      if (playersToWrite.length > result.replaced) {
         alert(`Only ${result.replaced} players were kept because players.dat supports a maximum of 65535 players.`);
       }
     } catch (err: unknown) {
@@ -1106,7 +1111,7 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    if (!confirm('This will reset all team rosters: slots 0–17 set to players 0x0001..0x0012, slots 18–31 set to 0xFFFF, and all captain/set-piece roles cleared to 0xFFFFFFFF. Continue?')) {
+    if (!confirm('This will reset all team rosters: slots 0–17 set to players 0x0000..0x0011, slots 18–31 set to 0xFFFF, and all captain/set-piece roles cleared to 0xFFFFFFFF. Continue?')) {
       return;
     }
 
@@ -1977,7 +1982,7 @@ export class AppComponent implements OnInit {
       return reservePositionsByPlayerId;
     }
 
-    for (let playerId = 1; playerId <= 18; playerId += 1) {
+    for (let playerId = 0; playerId < this.bulkImportDummyPlayerCount; playerId += 1) {
       if (playerId >= this.playerService.totalPlayers) {
         continue;
       }
@@ -2155,5 +2160,26 @@ export class AppComponent implements OnInit {
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
       CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
     };
+  }
+
+  private createBulkImportDummyPlayers(templatePlayer: Player): Player[] {
+    return Array.from({ length: this.bulkImportDummyPlayerCount }, (_, index) => ({
+      ...templatePlayer,
+      name: `dummy${index + 1}`,
+      ACC: 40,
+      SPD: 40,
+      STA: 40,
+      STR: 40,
+      TAC: 40,
+      CON: 40,
+      SHO: 40,
+      CRO: 40,
+      FK: 40,
+      PAS: 40,
+      HEA: 40,
+      GKS: 40,
+      GKH: 40,
+      GKP: 40
+    }));
   }
 }

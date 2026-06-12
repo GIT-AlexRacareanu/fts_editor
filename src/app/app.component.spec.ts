@@ -176,6 +176,50 @@ describe('AppComponent team CSV import preview', () => {
     expect(component.popupPlayer.pos).toBe(11);
   });
 
+  it('prepends 18 dummy players before real players during bulk replace import', async () => {
+    const replacePlayers = jasmine.createSpy('replacePlayers').and.returnValue({ replaced: 20, previousTotal: 4, nextTotal: 20 });
+    const downloadFile = jasmine.createSpy('downloadFile').and.resolveTo();
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      readPlayer: () => ({ name: 'Template', pos: 11, nat: 0, foot: 0, estatura: 180, peso: 75, hiddenFromTransferMarket: 0, isIconLegend: 0, birthDay: 1, birthMonth: 1, year: 2000, skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0, boots: 0, mangas: 0, guantes: 0, ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0, CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0 }),
+      formatPlayerId: (index: number) => index.toString(16).toUpperCase().padStart(4, '0'),
+      calculateOVR: () => 70,
+      replacePlayers,
+      downloadFile,
+      binaryData: new Uint8Array(1),
+      totalPlayers: 4
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: (source: { shortName: string }) => ({ name: source.shortName, pos: 11, nat: 0, foot: 0, estatura: 180, peso: 75, hiddenFromTransferMarket: 0, isIconLegend: 0, birthDay: 1, birthMonth: 1, year: 2000, skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0, boots: 0, mangas: 0, guantes: 0, ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0, CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0 })
+    };
+    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const confirmSpy = spyOn(window, 'confirm').and.returnValue(true);
+
+    component.importedPlayers = [
+      { shortName: 'Real One' },
+      { shortName: 'Real Two' }
+    ] as any;
+
+    await component.bulkReplaceAllPlayersAndDownload();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(replacePlayers).toHaveBeenCalled();
+
+    const [playersArg, optionsArg] = replacePlayers.calls.mostRecent().args as [Array<{ name: string; ACC: number; GKP: number }>, { templatePlayerIndex: number }];
+
+    expect(playersArg.length).toBe(20);
+    expect(playersArg[0].name).toBe('dummy1');
+    expect(playersArg[17].name).toBe('dummy18');
+    expect(playersArg[0].ACC).toBe(40);
+    expect(playersArg[0].GKP).toBe(40);
+    expect(playersArg[18].name).toBe('Real One');
+    expect(playersArg[19].name).toBe('Real Two');
+    expect(optionsArg).toEqual({ templatePlayerIndex: 0 });
+    expect(downloadFile).toHaveBeenCalled();
+    expect(component.importStatusMessage).toContain('inserted 18 dummy players, then 2 imported players');
+  });
+
   it('caches formation sketches for the same displayed team object', () => {
     const readPlayerSpy = jasmine.createSpy('readPlayer').and.returnValue({
       name: 'Player A',
