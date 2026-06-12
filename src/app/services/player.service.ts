@@ -69,10 +69,10 @@ const RATING_MULTIPLIER_BITS = 0x3f855555;
 const DEFAULT_MULTIPLIER = ieee754ToFloat(RATING_MULTIPLIER_BITS);
 
 const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
-  gk: { weights: [2, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
-  def: { weights: [15, 2, 6, 2, 6, 3, 3, 1, 20, 30, 0, 0, 0, 0], bonus: 18, multiplier: DEFAULT_MULTIPLIER - 0.001 },
-  mid: { weights: [3, 6, 6, 2, 15, 20, 15, 4, 0, 4, 0, 0, 0, 0], bonus: 12, multiplier: DEFAULT_MULTIPLIER - 0.02},
-  att: { weights: [6, 2, 4, 0, 10, 3, 3, 20, 4, 0, 0, 0, 0, 0], bonus: 6, multiplier: DEFAULT_MULTIPLIER - 0.0066 }
+  gk: { weights: [2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 15, 15, 15], bonus: 0, multiplier: DEFAULT_MULTIPLIER - 0.02 },
+  def: { weights: [10, 4, 4, 0, 4, 2, 2, 2, 10, 30, 0, 0, 0, 0], bonus: 10, multiplier: DEFAULT_MULTIPLIER },
+  mid: { weights: [4, 4, 6, 4, 30, 30, 10, 4, 0, 2, 0, 0, 0, 0], bonus: 6, multiplier: DEFAULT_MULTIPLIER - 0.015},
+  att: { weights: [4, 2, 8, 2, 20, 4, 2, 25, 4, 0, 0, 0, 0, 0], bonus: 6, multiplier: DEFAULT_MULTIPLIER - 0.02 }
 };
 
 function ieee754ToFloat(bits: number): number {

@@ -754,16 +754,18 @@ export class AppComponent implements OnInit {
   }
 
   private resolveImportedTeamPlayerIndex(sourcePlayer: ImportedPlayerRecord): number {
-    const indexedRow = sourcePlayer.sourceRowIndex;
+    if (sourcePlayer.hasExplicitPlayerId) {
+      const parsedPlayerId = this.playerService.parsePlayerId(sourcePlayer.playerId);
 
-    if (Number.isFinite(indexedRow) && indexedRow !== undefined) {
-      return indexedRow >= 0 && indexedRow < this.playerService.totalPlayers ? indexedRow : -1;
+      if (parsedPlayerId >= 0) {
+        return parsedPlayerId;
+      }
     }
 
-    const parsedPlayerId = Number.parseInt(sourcePlayer.playerId.trim(), 10);
+    const matchedByName = this.playerService.findPlayerIndexByName(sourcePlayer.shortName);
 
-    if (!Number.isNaN(parsedPlayerId) && parsedPlayerId >= 0 && parsedPlayerId < this.playerService.totalPlayers) {
-      return parsedPlayerId;
+    if (matchedByName >= 0) {
+      return matchedByName;
     }
 
     return -1;

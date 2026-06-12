@@ -5,6 +5,7 @@ import { calculatePlayerOvr } from './player.service';
 
 export interface ImportedPlayerRecord {
   playerId: string;
+  hasExplicitPlayerId?: boolean;
   sourceRowIndex?: number;
   shortName: string;
   overall: number;
@@ -335,9 +336,11 @@ export class PlayerImportService {
       headerIndexes,
       ['movement_acceleration', 'acceleration', 'acc']
     );
+    const explicitPlayerId = this.getFieldByAliases(row, headerIndexes, ['player_id', 'id', 'playerid', 'sofifa_id']);
 
     return {
-      playerId: this.getFieldByAliases(row, headerIndexes, ['player_id', 'id', 'playerid', 'sofifa_id']) || String(rowIndex),
+      playerId: explicitPlayerId || String(rowIndex),
+      hasExplicitPlayerId: explicitPlayerId.length > 0,
       sourceRowIndex: rowIndex,
       shortName,
       overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall', 'overallrating', 'ovr', 'rating']),

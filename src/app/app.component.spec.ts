@@ -24,6 +24,7 @@ describe('AppComponent team CSV import preview', () => {
       getOvrTuningConfig: () => [],
       readPlayer: () => ({ pos: 11 }),
       findPlayerIndexByName: () => -1,
+      parsePlayerId: () => -1,
       formatPlayerId: () => '0001',
       calculateOVR: () => 70,
       binaryData: null
@@ -66,10 +67,12 @@ describe('AppComponent team CSV import preview', () => {
     expect(component.teamImportCsvPreviewPlayers[0].shortName).toBe('Player A');
   });
 
-  it('maps selected CSV team players by import row index instead of name matching', () => {
+  it('maps selected CSV team players by name matching instead of import row index', () => {
     const playerService = {
       getOvrTuningConfig: () => [],
       readPlayer: (index: number) => ({ name: `Player ${index}`, pos: 11, nat: 0 }),
+      findPlayerIndexByName: (name: string) => name === 'Matches DB Name' ? 7 : -1,
+      parsePlayerId: () => -1,
       formatPlayerId: (index: number) => index.toString(16).toUpperCase().padStart(4, '0'),
       calculateOVR: () => 70,
       totalPlayers: 10,
@@ -82,20 +85,50 @@ describe('AppComponent team CSV import preview', () => {
     const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
-      { shortName: 'Does Not Match DB Name', teamName: 'Arsenal', clubPosition: 'CM', overall: 80, sourceRowIndex: 3, playerId: '3' }
+      { shortName: 'Matches DB Name', teamName: 'Arsenal', clubPosition: 'CM', overall: 80, sourceRowIndex: 3, playerId: '3' }
     ] as any;
 
     component.selectCsvImportTeam('Arsenal');
 
     expect(component.teamImportMappedPreview.length).toBe(1);
-    expect(component.teamImportMappedPreview[0].futureIndex).toBe(3);
-    expect(component.teamImportMappedPreview[0].futureHexId).toBe('0003');
+    expect(component.teamImportMappedPreview[0].futureIndex).toBe(7);
+    expect(component.teamImportMappedPreview[0].futureHexId).toBe('0007');
+  });
+
+  it('uses an explicit imported player id before falling back to name matching', () => {
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      readPlayer: (index: number) => ({ name: `Player ${index}`, pos: 11, nat: 0 }),
+      findPlayerIndexByName: () => 7,
+      parsePlayerId: (value: string) => value === '00AF' ? 4 : -1,
+      formatPlayerId: (index: number) => index.toString(16).toUpperCase().padStart(4, '0'),
+      calculateOVR: () => 70,
+      totalPlayers: 10,
+      binaryData: new Uint8Array(1)
+    };
+    const playerImportService = {
+      filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+
+    component.importedPlayers = [
+      { shortName: 'Matches DB Name', teamName: 'Arsenal', clubPosition: 'CM', overall: 80, playerId: '00AF', hasExplicitPlayerId: true }
+    ] as any;
+
+    component.selectCsvImportTeam('Arsenal');
+
+    expect(component.teamImportMappedPreview.length).toBe(1);
+    expect(component.teamImportMappedPreview[0].futureIndex).toBe(4);
+    expect(component.teamImportMappedPreview[0].futureHexId).toBe('0004');
   });
 
   it('uses the mapped player when calculating preview OVR and position', () => {
     const playerService = {
       getOvrTuningConfig: () => [],
       readPlayer: () => ({ name: 'Base Player', pos: 11, nat: 0 }),
+      findPlayerIndexByName: () => 3,
+      parsePlayerId: () => -1,
       formatPlayerId: (index: number) => index.toString(16).toUpperCase().padStart(4, '0'),
       calculateOVR: (player: { pos: number }) => player.pos === 19 ? 91 : 70,
       totalPlayers: 10,
@@ -122,6 +155,8 @@ describe('AppComponent team CSV import preview', () => {
     const playerService = {
       getOvrTuningConfig: () => [],
       readPlayer: () => ({ name: 'Base Player', pos: 11, nat: 0 }),
+      findPlayerIndexByName: () => -1,
+      parsePlayerId: () => -1,
       formatPlayerId: () => '0001',
       calculateOVR: (player: { pos: number }) => player.pos,
       binaryData: new Uint8Array(1)
@@ -151,6 +186,8 @@ describe('AppComponent team CSV import preview', () => {
     const playerService = {
       getOvrTuningConfig: () => [],
       readPlayer: readPlayerSpy,
+      findPlayerIndexByName: () => -1,
+      parsePlayerId: () => -1,
       calculateOVR: calculateOvrSpy,
       binaryData: new Uint8Array(1)
     };
