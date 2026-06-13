@@ -583,4 +583,50 @@ describe('AppComponent team CSV import preview', () => {
       defenseOvr: 75
     });
   });
+
+  it('creates a new DB Browser player by appending to PLAYERS.DAT and opening it', () => {
+    const appendPlayers = jasmine.createSpy('appendPlayers').and.returnValue([24]);
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      readPlayer: (index: number) => ({ name: `Player ${index}`, pos: 11, nat: 0 }),
+      calculateOVR: () => 70,
+      appendPlayers,
+      totalPlayers: 0,
+      binaryData: new Uint8Array(1)
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const teamEditorService = { hasData: false };
+    const teamsDatService = { hasData: false };
+    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const applyPlayerFileLoadedSpy = spyOn<any>(component, 'applyPlayerFileLoaded').and.stub();
+    const openPlayerEditPopupSpy = spyOn(component, 'openPlayerEditPopup').and.stub();
+
+    component.createDbBrowsePlayer();
+
+    expect(appendPlayers).toHaveBeenCalledTimes(1);
+    expect(appendPlayers.calls.mostRecent().args[0].length).toBe(1);
+    expect(appendPlayers.calls.mostRecent().args[0][0]).toEqual(jasmine.objectContaining({
+      name: '',
+      pos: 0,
+      ACC: 40,
+      SPD: 40,
+      STA: 40,
+      STR: 40,
+      TAC: 40,
+      CON: 40,
+      SHO: 40,
+      CRO: 40,
+      FK: 40,
+      PAS: 40,
+      HEA: 40,
+      GKS: 40,
+      GKH: 40,
+      GKP: 40
+    }));
+    expect(applyPlayerFileLoadedSpy).toHaveBeenCalled();
+    expect(openPlayerEditPopupSpy).toHaveBeenCalledOnceWith(24);
+  });
 });

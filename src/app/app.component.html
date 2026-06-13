@@ -457,6 +457,10 @@
                     | {{ dbBrowseRangeStart }}–{{ dbBrowseRangeEnd }}
                   </ng-container>
                 </span>
+                <button mat-stroked-button color="accent" (click)="createDbBrowsePlayer()" [disabled]="!fileLoaded">
+                  <mat-icon>person_add</mat-icon>
+                  NEW PLAYER
+                </button>
               </div>
 
               <div class="db-search-pagination" *ngIf="filteredDbBrowsePlayers.length > 0">

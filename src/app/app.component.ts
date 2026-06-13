@@ -1216,6 +1216,24 @@ export class AppComponent implements OnInit {
     this.openPlayerEditPopup(index);
   }
 
+  createDbBrowsePlayer(): void {
+    if (!this.fileLoaded) {
+      alert('Load PLAYERS.DAT first.');
+      return;
+    }
+
+    const newPlayerIndexes = this.playerService.appendPlayers([this.createNewPlayerDraft()]);
+    const newPlayerIndex = newPlayerIndexes[0];
+
+    if (newPlayerIndex === undefined) {
+      alert('Unable to append a new player to PLAYERS.DAT.');
+      return;
+    }
+
+    this.applyPlayerFileLoaded();
+    this.openPlayerEditPopup(newPlayerIndex);
+  }
+
   resetDbBrowsePagination(): void {
     this.dbBrowsePage = 1;
   }
@@ -2449,6 +2467,26 @@ export class AppComponent implements OnInit {
       boots: 0, mangas: 255, guantes: 5,
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
       CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+  }
+
+  private createNewPlayerDraft(): Player {
+    return {
+      ...this.emptyPlayer(),
+      ACC: 40,
+      SPD: 40,
+      STA: 40,
+      STR: 40,
+      TAC: 40,
+      CON: 40,
+      SHO: 40,
+      CRO: 40,
+      FK: 40,
+      PAS: 40,
+      HEA: 40,
+      GKS: 40,
+      GKH: 40,
+      GKP: 40
     };
   }
 
