@@ -110,6 +110,32 @@ describe('PlayerService', () => {
     expect(service.findPlayerIndexByName('Luka Modric')).toBe(1);
   });
 
+  it('finds a unique player by a single-token surname', () => {
+    const service = new PlayerService({} as any);
+    service.binaryData = new Uint8Array(346);
+
+    service.replacePlayers([
+      createPlayer('M. Zubimendi'),
+      createPlayer('K. Arrizabalaga')
+    ]);
+
+    expect(service.findPlayerIndexByName('Zubimendi')).toBe(0);
+    expect(service.findPlayerIndexByName('Arrizabalaga')).toBe(1);
+  });
+
+  it('finds a single-token in-game surname from a longer imported full name', () => {
+    const service = new PlayerService({} as any);
+    service.binaryData = new Uint8Array(346);
+
+    service.replacePlayers([
+      createPlayer('Martinelli'),
+      createPlayer('Havertz')
+    ]);
+
+    expect(service.findPlayerIndexByName('Gabriel Martinelli')).toBe(0);
+    expect(service.findPlayerIndexByName('Kai Havertz')).toBe(1);
+  });
+
   it('keeps header count aligned with byte length after bulk replacement', () => {
     const service = new PlayerService({} as any);
     service.binaryData = new Uint8Array(234);

@@ -91,6 +91,7 @@ function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): Im
   return {
     playerId: '1000',
     shortName: 'Test Player',
+    lastName: '',
     overall: 70,
     age: 24,
     heightCm: 180,

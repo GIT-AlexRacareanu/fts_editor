@@ -89,8 +89,8 @@ describe('PlayerImportService', () => {
 
   it('parses import_2 compact headers including knownas and overallrating', () => {
     const csv = [
-      'knownas,age,height,weight,overallrating,agility,balance,ballcontrol,crossing,curve,dribbling,finishing,freekickaccuracy,headingaccuracy,interceptions,longpassing,longshots,penalties,reactions,shortpassing,shotpower,slidingtackle,sprintspeed,stamina,standingtackle,strength,vision,volleys,sho,pas,dri,def,phy,nation,club',
-      'Erling Haaland,24,195,94,91,71,69,83,58,77,79,96,62,85,43,66,83,90,95,78,94,29,92,78,47,93,75,90,91,69,80,49,88,Norway,Manchester City'
+      'knownas,age,height,weight,overallrating,agility,balance,ballcontrol,crossing,curve,dribbling,finishing,freekickaccuracy,headingaccuracy,interceptions,longpassing,longshots,penalties,reactions,shortpassing,shotpower,slidingtackle,sprintspeed,stamina,standingtackle,strength,vision,volleys,sho,pas,dri,def,phy,nation,club,national_team,loanedto_club',
+      'Erling Haaland,24,195,94,91,71,69,83,58,77,79,96,62,85,43,66,83,90,95,78,94,29,92,78,47,93,75,90,91,69,80,49,88,Norway,Manchester City,Norway,'
     ].join('\n');
 
     const parsed = service.parseCsv(csv);
@@ -110,6 +110,37 @@ describe('PlayerImportService', () => {
     expect(parsed[0].powerStrength).toBe(88);
     expect(parsed[0].defending).toBe(49);
     expect(parsed[0].teamName).toBe('Manchester City');
+    expect(parsed[0].nationalTeamName).toBe('Norway');
+    expect(parsed[0].loanedToTeamName).toBe('');
+  });
+
+  it('includes club, national team, and loan destination names in the import team options', () => {
+    const teamNames = service.getAvailableTeamNames([
+      createImportedPlayer({ teamName: 'Arsenal', nationalTeamName: 'England', loanedToTeamName: 'Sunderland' }),
+      createImportedPlayer({ teamName: 'Chelsea', nationalTeamName: 'England' })
+    ]);
+
+    expect(teamNames).toEqual(['Arsenal', 'Chelsea', 'England', 'Sunderland']);
+  });
+
+  it('filters club imports to active squad plus inbound loans, excluding outbound loans', () => {
+    const matches = service.filterByTeam([
+      createImportedPlayer({ shortName: 'Home Squad', teamName: 'Arsenal' }),
+      createImportedPlayer({ shortName: 'Loaned Out', teamName: 'Arsenal', loanedToTeamName: 'Sunderland' }),
+      createImportedPlayer({ shortName: 'Loaned In', teamName: 'Chelsea', loanedToTeamName: 'Arsenal' })
+    ], 'Arsenal');
+
+    expect(matches.map((player) => player.shortName)).toEqual(['Home Squad', 'Loaned In']);
+  });
+
+  it('filters national team imports from the dedicated national team column', () => {
+    const matches = service.filterByTeam([
+      createImportedPlayer({ shortName: 'International One', teamName: 'Arsenal', nationalTeamName: 'England' }),
+      createImportedPlayer({ shortName: 'International Two', teamName: 'Chelsea', nationalTeamName: 'England' }),
+      createImportedPlayer({ shortName: 'Club Only', teamName: 'England FC' })
+    ], 'England');
+
+    expect(matches.map((player) => player.shortName)).toEqual(['International One', 'International Two']);
   });
 
   it('parses knownus as the short name alias', () => {
@@ -480,6 +511,7 @@ function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): Im
   return {
     playerId: '1000',
     shortName: 'Test Player',
+    lastName: '',
     overall: 70,
     age: 24,
     heightCm: 180,
@@ -488,6 +520,8 @@ function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): Im
     nationalityName: 'Portugal',
     preferredFoot: 'Right',
     teamName: 'Test Club',
+    nationalTeamName: '',
+    loanedToTeamName: '',
     shooting: 60,
     passing: 65,
     dribbling: 68,

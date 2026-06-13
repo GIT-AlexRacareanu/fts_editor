@@ -157,12 +157,63 @@ export class PlayerService {
 
     const normalizedTokens = normalizedName.split(' ').filter((token) => token.length > 0);
 
+    if (normalizedTokens.length === 1) {
+      let matchedIndex = -1;
+
+      for (let index = 0; index < total; index += 1) {
+        const playerName = this.normalizePlayerName(this.getPlayerNameByIndex(index) ?? '');
+
+        if (!playerName) {
+          continue;
+        }
+
+        const playerTokens = playerName.split(' ').filter((token) => token.length > 0);
+
+        if (!playerTokens.includes(normalizedTokens[0])) {
+          continue;
+        }
+
+        if (matchedIndex !== -1) {
+          return -1;
+        }
+
+        matchedIndex = index;
+      }
+
+      return matchedIndex;
+    }
+
     if (normalizedTokens.length < 2) {
       return -1;
     }
 
     const targetLastToken = normalizedTokens[normalizedTokens.length - 1];
     const targetInitial = normalizedTokens[0][0];
+
+    let surnameOnlyMatch = -1;
+
+    for (let index = 0; index < total; index += 1) {
+      const playerName = this.normalizePlayerName(this.getPlayerNameByIndex(index) ?? '');
+
+      if (!playerName) {
+        continue;
+      }
+
+      if (playerName !== targetLastToken) {
+        continue;
+      }
+
+      if (surnameOnlyMatch !== -1) {
+        surnameOnlyMatch = -1;
+        break;
+      }
+
+      surnameOnlyMatch = index;
+    }
+
+    if (surnameOnlyMatch !== -1) {
+      return surnameOnlyMatch;
+    }
 
     for (let index = 0; index < total; index += 1) {
       const playerName = this.normalizePlayerName(this.getPlayerNameByIndex(index) ?? '');

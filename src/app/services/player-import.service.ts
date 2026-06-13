@@ -8,6 +8,7 @@ export interface ImportedPlayerRecord {
   hasExplicitPlayerId?: boolean;
   sourceRowIndex?: number;
   shortName: string;
+  lastName?: string;
   overall: number;
   age: number;
   heightCm: number;
@@ -16,6 +17,8 @@ export interface ImportedPlayerRecord {
   nationalityName: string;
   preferredFoot: string;
   teamName: string;
+  nationalTeamName?: string;
+  loanedToTeamName?: string;
   shooting: number;
   passing: number;
   dribbling: number;
@@ -203,12 +206,35 @@ export class PlayerImportService {
   }
 
   getAvailableTeamNames(players: ImportedPlayerRecord[]): string[] {
-    const teams = new Set(players.map((p) => p.teamName).filter((t) => t.length > 0));
+    const teams = new Set<string>();
+
+    for (const player of players) {
+      for (const teamName of [player.teamName, player.nationalTeamName, player.loanedToTeamName]) {
+        if ((teamName ?? '').length > 0) {
+          teams.add(teamName!);
+        }
+      }
+    }
+
     return Array.from(teams).sort();
   }
 
   filterByTeam(players: ImportedPlayerRecord[], teamName: string): ImportedPlayerRecord[] {
-    return players.filter((p) => p.teamName === teamName);
+    return players.filter((player) => {
+      const clubTeamName = player.teamName.trim();
+      const nationalTeamName = (player.nationalTeamName ?? '').trim();
+      const loanedToTeamName = (player.loanedToTeamName ?? '').trim();
+
+      if (nationalTeamName === teamName) {
+        return true;
+      }
+
+      if (loanedToTeamName === teamName) {
+        return true;
+      }
+
+      return clubTeamName === teamName && loanedToTeamName.length === 0;
+    });
   }
 
   searchPlayers(players: ImportedPlayerRecord[], query: string): ImportedPlayerRecord[] {
@@ -283,6 +309,7 @@ export class PlayerImportService {
 
   private toImportedPlayerRecord(row: string[], headerIndexes: Map<string, number>, rowIndex: number): ImportedPlayerRecord | null {
     const shortName = this.getFieldByAliases(row, headerIndexes, ['short_name', 'knownas', 'knownus', 'name']);
+    const lastName = this.getFieldByAliases(row, headerIndexes, ['lastname', 'last_name', 'surname', 'last name']);
 
     if (!shortName) {
       return null;
@@ -343,6 +370,7 @@ export class PlayerImportService {
       hasExplicitPlayerId: explicitPlayerId.length > 0,
       sourceRowIndex: rowIndex,
       shortName,
+      lastName,
       overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall', 'overallrating', 'ovr', 'rating']),
       age: this.getNumberFieldByAliases(row, headerIndexes, ['age']),
       heightCm: this.getHeightFieldByAliases(row, headerIndexes, ['height_cm', 'height']),
@@ -350,6 +378,8 @@ export class PlayerImportService {
       clubPosition: this.getImportPosition(row, headerIndexes),
       nationalityName: this.getFieldByAliases(row, headerIndexes, ['nationality_name', 'nation', 'nationality', 'country region', 'country']),
       teamName: this.getFieldByAliases(row, headerIndexes, ['team', 'club', 'club_name', 'club name', 'team name']),
+      nationalTeamName: this.getFieldByAliases(row, headerIndexes, ['national_team', 'national team']),
+      loanedToTeamName: this.getFieldByAliases(row, headerIndexes, ['loanedto_club', 'loaned_to_club', 'loaned club', 'loan club', 'loaned to club']),
 
       preferredFoot: this.getFieldByAliases(row, headerIndexes, ['preferred_foot', 'preferred foot', 'preferredfoot', 'foot']),
       shooting,
