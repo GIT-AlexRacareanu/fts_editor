@@ -1,3 +1,22 @@
+export interface TeamsDatKitColor {
+  colorIndex: number;
+  label: string;
+  byteOffset: number;
+  fileOffset: number;
+  hex: string;
+  rawHex: string;
+}
+
+export interface TeamsDatKit {
+  kitIndex: number;
+  label: string;
+  styleId: number;
+  styleLabel: string;
+  styleByteOffset: number;
+  styleFileOffset: number;
+  colors: TeamsDatKitColor[];
+}
+
 export interface TeamsDatRecord {
   index: number;
   blockStart: number;
@@ -16,4 +35,8 @@ export interface TeamsDatRecord {
   freeKickRole: number;
   region: string;
   stadiumName: string;
+  sponsorType: number;
+  kitManufacturer: number;
+  europeanCompetition: number;
+  kits: TeamsDatKit[];
 }

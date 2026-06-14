@@ -191,6 +191,38 @@ describe('AppComponent team CSV import preview', () => {
     expect(component.teamImportMappedPreview[1].futureIndex).toBe(19);
   });
 
+  it('prefers a direct PLAYERS.DAT name match over bulk-layout row fallback', () => {
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      readPlayer: (index: number) => ({
+        name: index < 18 ? `dummy${index + 1}` : `Player ${index}`,
+        pos: 11,
+        nat: 0
+      }),
+      findPlayerIndexByName: (name: string) => name === 'Exact Arsenal Match' ? 30 : -1,
+      parsePlayerId: () => -1,
+      formatPlayerId: (index: number) => index.toString(16).toUpperCase().padStart(4, '0'),
+      calculateOVR: () => 70,
+      totalPlayers: 50,
+      binaryData: new Uint8Array(1)
+    };
+    const playerImportService = {
+      filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+
+    component.importedPlayers = [
+      { shortName: 'Exact Arsenal Match', teamName: 'Arsenal', clubPosition: 'CM', overall: 92, sourceRowIndex: 0, playerId: '0' }
+    ] as any;
+
+    component.selectCsvImportTeam('Arsenal');
+
+    expect(component.teamImportMappedPreview.length).toBe(1);
+    expect(component.teamImportMappedPreview[0].futureIndex).toBe(30);
+    expect(component.teamImportMappedPreview[0].futureHexId).toBe('001E');
+  });
+
   it('uses an explicit imported player id before falling back to name matching', () => {
     const playerService = {
       getOvrTuningConfig: () => [],
@@ -628,5 +660,183 @@ describe('AppComponent team CSV import preview', () => {
     }));
     expect(applyPlayerFileLoadedSpy).toHaveBeenCalled();
     expect(openPlayerEditPopupSpy).toHaveBeenCalledOnceWith(24);
+  });
+
+  it('downloads raw teams.dat bytes from the Team Editor actions', () => {
+    const exportUncompressedFile = jasmine.createSpy('exportUncompressedFile');
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      binaryData: null
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const teamEditorService = { hasData: false };
+    const teamsDatService = { hasData: true, exportUncompressedFile };
+    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+
+    component.downloadTeamsDatUncompressed();
+
+    expect(exportUncompressedFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the team kit dialog and updates shared/team-specific kit values through the active record index', () => {
+    const updateKitColor = jasmine.createSpy('updateKitColor');
+    const updateKitStyle = jasmine.createSpy('updateKitStyle');
+    const updateRecord = jasmine.createSpy('updateRecord');
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      binaryData: null
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const teamEditorService = { hasData: true };
+    const teamsDatService = {
+      hasData: true,
+      records: [
+        { index: 7, teamId: 99, teamLabel: 'Test FC', kits: [], sponsorType: 1, kitManufacturer: 2 }
+      ],
+      updateKitColor,
+      updateKitStyle,
+      updateRecord
+    };
+    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+
+    component.openTeamKitDialog({ teamId: 99 } as any);
+    component.updateActiveTeamKitDialogColor(2, 4, '#112233');
+    component.updateActiveTeamKitDialogStyle(2, 5);
+    component.updateActiveTeamKitDialogNumberField('sponsorType', 44);
+    component.updateActiveTeamKitDialogNumberField('kitManufacturer', 55);
+
+    expect(component.showTeamKitDialog).toBeTrue();
+    expect(component.teamKitDialogRecordIndex).toBe(7);
+    expect(updateKitColor).toHaveBeenCalledOnceWith(7, 2, 4, '#112233');
+    expect(updateKitStyle).toHaveBeenCalledOnceWith(7, 2, 5);
+    expect(updateRecord).toHaveBeenCalledWith(7, { sponsorType: 44 });
+    expect(updateRecord).toHaveBeenCalledWith(7, { kitManufacturer: 55 });
+  });
+
+  it('filters the team browser by league, sorts by average ovr, and opens the matching team in Team Editor', () => {
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      binaryData: null
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const loadSingleTeam = jasmine.createSpy('loadSingleTeam');
+    const teamEditorService = {
+      hasData: true,
+      teamOptions: [{ offset: 10, label: 'Arsenal' }, { offset: 20, label: 'Chelsea' }],
+      getTeam: (offset: number) => ({ teamId: offset === 10 ? 100 : 200 })
+    };
+    const teamsDatService = {
+      hasData: true,
+      records: [
+        { index: 0, teamId: 100, teamLabel: 'Arsenal', leagueId: 0, rivalId: 200, stadiumName: 'Emirates', europeanCompetition: 1, attackOvr: 88, midfieldOvr: 86, defenseOvr: 84 },
+        { index: 1, teamId: 200, teamLabel: 'Chelsea', leagueId: 0, rivalId: 100, stadiumName: 'Bridge', europeanCompetition: 0, attackOvr: 82, midfieldOvr: 81, defenseOvr: 80 },
+        { index: 2, teamId: 300, teamLabel: 'Bologna', leagueId: 0, rivalId: 100, stadiumName: 'Dall Ara', europeanCompetition: 2, attackOvr: 92, midfieldOvr: 90, defenseOvr: 91 }
+      ],
+      kitStyleOptions: [],
+      sponsorTypeOptions: [],
+      europeanCompetitionOptions: [{ value: 0, label: '0. None' }, { value: 1, label: '1. UCL' }, { value: 2, label: '2. UEL' }]
+    };
+    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    spyOn(component, 'loadSingleTeam').and.callFake(loadSingleTeam as any);
+
+    component.teamBrowseLeagueQuery = 0;
+
+    expect(component.filteredTeamBrowseItems.map((team) => team.teamLabel)).toEqual(['Bologna', 'Arsenal', 'Chelsea']);
+    expect(component.filteredTeamBrowseItems[1]).toEqual(jasmine.objectContaining({
+      attackOvr: 88,
+      midfieldOvr: 86,
+      defenseOvr: 84
+    }));
+
+    component.openTeamFromBrowser(component.filteredTeamBrowseItems[1]);
+
+    expect(component.selectedTeamOffset).toBe(10);
+    expect(component.activeMainTab).toBe(0);
+    expect(component.loadSingleTeam).toHaveBeenCalledOnceWith(10);
+  });
+
+  it('syncs teams.dat attack, midfield, and defense ovrs for all teams before save', async () => {
+    const alertSpy = spyOn(window, 'alert');
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      binaryData: new Uint8Array(1),
+      totalPlayers: 500,
+      saveCurrentToSameFile: jasmine.createSpy('saveCurrentToSameFile').and.resolveTo()
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const teamEditorService = {
+      hasData: true,
+      teamOptions: [{ offset: 10, label: 'Arsenal' }, { offset: 20, label: 'Chelsea' }],
+      getTeam: (offset: number) => offset === 10
+        ? { offset: 10, teamId: 100, teamLabel: 'Arsenal', playerCount: 3, slots: [] }
+        : { offset: 20, teamId: 200, teamLabel: 'Chelsea', playerCount: 3, slots: [] },
+      normalizeActiveSlotAttributes: () => 0,
+      validatePlayerReferences: () => [],
+      saveToSameFile: jasmine.createSpy('saveToSameFile').and.resolveTo()
+    };
+    const updateRecord = jasmine.createSpy('updateRecord').and.callFake((index: number, changes: Record<string, number>) => ({
+      index,
+      teamId: index === 0 ? 100 : 200,
+      formationId: 0,
+      attackOvr: changes['attackOvr'] ?? 0,
+      midfieldOvr: changes['midfieldOvr'] ?? 0,
+      defenseOvr: changes['defenseOvr'] ?? 0
+    }));
+    const teamsDatService = {
+      hasData: true,
+      records: [
+        { index: 0, teamId: 100, formationId: 0, attackOvr: 0, midfieldOvr: 0, defenseOvr: 0 },
+        { index: 1, teamId: 200, formationId: 0, attackOvr: 0, midfieldOvr: 0, defenseOvr: 0 }
+      ],
+      saveToSameFile: jasmine.createSpy('saveToSameFile').and.resolveTo(),
+      updateRecord
+    };
+    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+
+    spyOn<any>(component, 'syncAllTeamsDatRolesWithCurrentRosters').and.returnValue(0);
+    spyOn<any>(component, 'getFormationSketch').and.callFake((team: { teamId: number }) => ({
+      slots: team.teamId === 100
+        ? [
+          { targetPosition: 19, player: { ovr: 90 } },
+          { targetPosition: 11, player: { ovr: 80 } },
+          { targetPosition: 6, player: { ovr: 70 } }
+        ]
+        : [
+          { targetPosition: 20, player: { ovr: 87 } },
+          { targetPosition: 12, player: { ovr: 77 } },
+          { targetPosition: 5, player: { ovr: 67 } }
+        ],
+      reservePlayers: []
+    }));
+
+    await component.saveAllFiles();
+
+    expect(updateRecord).toHaveBeenCalledWith(0, {
+      attackOvr: 90,
+      midfieldOvr: 80,
+      defenseOvr: 70
+    });
+    expect(updateRecord).toHaveBeenCalledWith(1, {
+      attackOvr: 87,
+      midfieldOvr: 77,
+      defenseOvr: 67
+    });
+    expect(playerService.saveCurrentToSameFile).toHaveBeenCalledTimes(1);
+    expect(teamEditorService.saveToSameFile).toHaveBeenCalledTimes(1);
+    expect(teamsDatService.saveToSameFile).toHaveBeenCalledTimes(1);
+    expect(alertSpy).toHaveBeenCalledWith('Synced ATT/MID/DEF OVR values in TEAMS.DAT for 2 teams before save.');
+    expect(alertSpy).toHaveBeenCalledWith('Files overwritten successfully.');
   });
 });

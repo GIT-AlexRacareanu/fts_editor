@@ -1,12 +1,80 @@
 import { Injectable } from '@angular/core';
 
 import { TEAM_NAMES_BY_ID } from '../data/team-names';
-import { TeamsDatRecord } from '../models/teams-dat.model';
+import { TeamsDatKit, TeamsDatKitColor, TeamsDatRecord } from '../models/teams-dat.model';
 import { FileHandleStorageService } from './file-handle-storage.service';
 
 const FILE_HEADER_SIZE = 12;
 const TEAM_BLOCK_SIZE = 4356;
 const FORMATION_OFFSET = 0xB8;
+const SPONSOR_TYPE_OFFSET = 0x100;
+const KIT_MANUFACTURER_OFFSET = 0x104;
+const EUROPEAN_COMPETITION_OFFSET = 0x124;
+const KIT_COLOR_START_OFFSET = 0x18;
+const KIT_COUNT = 4;
+const COLORS_PER_KIT = 10;
+const KIT_COLOR_STRIDE = 4;
+const KIT_STYLE_GAP_SIZE = 4;
+const KIT_STYLE_START_OFFSET = KIT_COLOR_START_OFFSET + (KIT_COUNT * COLORS_PER_KIT * KIT_COLOR_STRIDE) + KIT_STYLE_GAP_SIZE;
+const KIT_STYLE_STRIDE = 4;
+const KIT_LABELS = ['Home', 'Away', 'GK Home', 'GK Away'] as const;
+const KIT_COLOR_LABELS = [
+  'Primary',
+  'Secondary',
+  'Sponsor',
+  'Shirt Nr',
+  'Short Primary',
+  'Short Secondary',
+  'Short Nr',
+  'Socks',
+  'Manufacturer',
+  'Socks Lines'
+] as const;
+const KIT_STYLE_LABELS = [
+  'Vertical Stripes',
+  'Horizontal Stripes',
+  'Symmetrical',
+  'Checks',
+  'Plain',
+  'Horizontal Band',
+  'Vertical Band',
+  'Side Panels',
+  'Quartered',
+  'Sleeves',
+  'Diagonal Stripe',
+  'Diagonal',
+  'Upper Diagonal',
+  'Gradient A',
+  'Gradient B',
+  'Shoulder-Chest Trapezoid'
+] as const;
+const SPONSOR_TYPE_LABELS = [
+  'Emirates',
+  'Spotify',
+  'Etihad Airways',
+  'T-Mobile',
+  'Standard Chartered',
+  'Snapdragon',
+  'AIA',
+  'Jeep',
+  'Qatar Airways',
+  'Riyadh Air',
+  'Red Bull',
+  'HP',
+  'Betano',
+  'TeamViewer',
+  'MSC Cruises',
+  'Visit Rwanda',
+  'Mediacom',
+  'Mapei',
+  'Stake',
+  'Standard'
+] as const;
+const EUROPEAN_COMPETITION_LABELS = [
+  'None',
+  'UCL',
+  'UEL'
+] as const;
 
 @Injectable({ providedIn: 'root' })
 export class TeamsDatService {
@@ -17,6 +85,7 @@ export class TeamsDatService {
   teamDataBytes: Uint8Array | null = null;
   records: TeamsDatRecord[] = [];
   teamOptions: { value: number; label: string }[] = [];
+  hasPendingChanges = false;
   private formationIdByTeamId = new Map<number, number>();
   private wasZlib = false;
 
@@ -103,6 +172,7 @@ export class TeamsDatService {
       label: r.teamLabel + (r.stadiumName ? ` | ${r.stadiumName}` : '')
     }));
     this.formationIdByTeamId = this.buildFormationIdMap(nextRecords);
+    this.hasPendingChanges = false;
     console.log('[TeamsDat] load complete —', nextRecords.length, 'teams.');
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
@@ -124,6 +194,7 @@ export class TeamsDatService {
       this.fileHeaderBytes = null;
       this.teamDataBytes = null;
       this.records = [];
+      this.hasPendingChanges = false;
       this.formationIdByTeamId.clear();
       await this.fileHandleStorage.deleteFileHandle(this.storageKey);
       return null;
@@ -138,6 +209,7 @@ export class TeamsDatService {
     const writable = await this.fileHandle.createWritable();
     await writable.write(this.getSerializedData());
     await writable.close();
+    this.hasPendingChanges = false;
   }
 
   exportFile(fileName = 'teams_export.dat'): void {
@@ -146,6 +218,23 @@ export class TeamsDatService {
     }
 
     const blob = new Blob([this.getSerializedData()], { type: 'application/octet-stream' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  exportUncompressedFile(fileName = 'teams_raw.dat'): void {
+    if (!this.fileHeaderBytes || !this.teamDataBytes) {
+      return;
+    }
+
+    const merged = new Uint8Array(this.fileHeaderBytes.byteLength + this.teamDataBytes.byteLength);
+    merged.set(this.fileHeaderBytes, 0);
+    merged.set(this.teamDataBytes, this.fileHeaderBytes.byteLength);
+
+    const blob = new Blob([merged.buffer], { type: 'application/octet-stream' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = fileName;
@@ -169,6 +258,72 @@ export class TeamsDatService {
     return this.formationIdByTeamId.get(teamId) ?? null;
   }
 
+  get kitStyleOptions(): Array<{ value: number; label: string }> {
+    return KIT_STYLE_LABELS.map((label, index) => ({ value: index, label: `${index}. ${label}` }));
+  }
+
+  get sponsorTypeOptions(): Array<{ value: number; label: string }> {
+    return SPONSOR_TYPE_LABELS.map((label, index) => ({ value: index, label: `${index}. ${label}` }));
+  }
+
+  get europeanCompetitionOptions(): Array<{ value: number; label: string }> {
+    return EUROPEAN_COMPETITION_LABELS.map((label, index) => ({ value: index, label: `${index}. ${label}` }));
+  }
+
+  updateKitColor(index: number, kitIndex: number, colorIndex: number, hexColor: string): TeamsDatRecord {
+    if (!this.hasData) {
+      throw new Error('No teams.dat loaded');
+    }
+
+    const normalizedHex = this.normalizeHexColor(hexColor);
+
+    if (!normalizedHex) {
+      throw new Error(`Invalid color value: ${hexColor}`);
+    }
+
+    if (kitIndex < 0 || kitIndex >= KIT_COUNT || colorIndex < 0 || colorIndex >= COLORS_PER_KIT) {
+      throw new Error('Kit color index out of range.');
+    }
+
+    const bytes = this.getTeamDataOrThrow();
+    const offset = this.getKitColorOffset(this.getBlockStart(index), kitIndex, colorIndex);
+    const [red, green, blue] = this.hexColorToRgb(normalizedHex);
+
+    bytes[offset] = blue;
+    bytes[offset + 1] = green;
+    bytes[offset + 2] = red;
+
+    const updatedRecord = this.parseRecord(index);
+    this.records[index] = updatedRecord;
+    this.hasPendingChanges = true;
+    return updatedRecord;
+  }
+
+  updateKitStyle(index: number, kitIndex: number, styleId: number): TeamsDatRecord {
+    if (!this.hasData) {
+      throw new Error('No teams.dat loaded');
+    }
+
+    if (kitIndex < 0 || kitIndex >= KIT_COUNT) {
+      throw new Error('Kit style index out of range.');
+    }
+
+    const normalizedStyleId = Number.isFinite(styleId) ? Math.trunc(styleId) : -1;
+
+    if (normalizedStyleId < 0 || normalizedStyleId >= KIT_STYLE_LABELS.length) {
+      throw new Error(`Invalid kit style id: ${styleId}`);
+    }
+
+    const view = this.getView();
+    const offset = this.getKitStyleOffset(this.getBlockStart(index), kitIndex);
+    view.setUint32(offset, normalizedStyleId, true);
+
+    const updatedRecord = this.parseRecord(index);
+    this.records[index] = updatedRecord;
+    this.hasPendingChanges = true;
+    return updatedRecord;
+  }
+
   resetAllTeamRoles(playerId = 0): void {
     if (!this.hasData) {
       throw new Error('No teams.dat loaded');
@@ -187,12 +342,14 @@ export class TeamsDatService {
       view.setUint32(blockStart + 0xDC, nextRolePlayerId, true);
       this.records[index] = this.parseRecord(index, view, bytes);
     }
+
+    this.hasPendingChanges = true;
   }
 
   updateRecord(index: number, changes: Partial<Pick<TeamsDatRecord,
     'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' |
     'formationId' | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' |
-    'freeKickRole' | 'region' | 'stadiumName'
+    'freeKickRole' | 'region' | 'stadiumName' | 'sponsorType' | 'kitManufacturer' | 'europeanCompetition'
   >>): TeamsDatRecord {
     const view = this.getView();
     const blockStart = this.getBlockStart(index);
@@ -233,6 +390,15 @@ export class TeamsDatService {
     if (changes.freeKickRole !== undefined) {
       view.setUint32(blockStart + 0xDC, this.clamp(changes.freeKickRole, 0, 0xffffffff), true);
     }
+    if (changes.sponsorType !== undefined) {
+      view.setUint32(blockStart + SPONSOR_TYPE_OFFSET, this.clamp(changes.sponsorType, 0, 0xffffffff), true);
+    }
+    if (changes.kitManufacturer !== undefined) {
+      view.setUint32(blockStart + KIT_MANUFACTURER_OFFSET, this.clamp(changes.kitManufacturer, 0, 0xffffffff), true);
+    }
+    if (changes.europeanCompetition !== undefined) {
+      view.setUint32(blockStart + EUROPEAN_COMPETITION_OFFSET, this.clamp(changes.europeanCompetition, 0, 0xffffffff), true);
+    }
 
     if (changes.region !== undefined) {
       const normalizedRegion = changes.region.toUpperCase().padEnd(2, ' ');
@@ -254,6 +420,7 @@ export class TeamsDatService {
       label: recordItem.teamLabel + (recordItem.stadiumName ? ` | ${recordItem.stadiumName}` : '')
     }));
     this.formationIdByTeamId = this.buildFormationIdMap(this.records);
+    this.hasPendingChanges = true;
     return updatedRecord;
   }
 
@@ -292,8 +459,58 @@ export class TeamsDatService {
       penaltyRole: safeView.getUint32(blockStart + 0xD8, true),
       freeKickRole: safeView.getUint32(blockStart + 0xDC, true),
       region: this.extractUtf16String(safeBytes, blockStart + 0xF8, 4),
-      stadiumName: this.extractUtf16String(safeBytes, blockStart + 0x128, 60)
+      stadiumName: this.extractUtf16String(safeBytes, blockStart + 0x128, 60),
+      sponsorType: safeView.getUint32(blockStart + SPONSOR_TYPE_OFFSET, true),
+      kitManufacturer: safeView.getUint32(blockStart + KIT_MANUFACTURER_OFFSET, true),
+      europeanCompetition: safeView.getUint32(blockStart + EUROPEAN_COMPETITION_OFFSET, true),
+      kits: this.readKits(safeBytes, blockStart)
     };
+  }
+
+  private readKits(bytes: Uint8Array, blockStart: number): TeamsDatKit[] {
+    return Array.from({ length: KIT_COUNT }, (_, kitIndex) => ({
+      kitIndex,
+      label: KIT_LABELS[kitIndex],
+      styleId: this.readKitStyleId(bytes, blockStart, kitIndex),
+      styleLabel: this.getKitStyleLabel(this.readKitStyleId(bytes, blockStart, kitIndex)),
+      styleByteOffset: this.getKitStyleOffset(blockStart, kitIndex),
+      styleFileOffset: FILE_HEADER_SIZE + this.getKitStyleOffset(blockStart, kitIndex),
+      colors: Array.from({ length: COLORS_PER_KIT }, (_, colorIndex) => this.readKitColor(bytes, blockStart, kitIndex, colorIndex))
+    }));
+  }
+
+  private readKitColor(bytes: Uint8Array, blockStart: number, kitIndex: number, colorIndex: number): TeamsDatKitColor {
+    const byteOffset = this.getKitColorOffset(blockStart, kitIndex, colorIndex);
+    const colorBytes = bytes.subarray(byteOffset, byteOffset + KIT_COLOR_STRIDE);
+    const blue = colorBytes[0] ?? 0;
+    const green = colorBytes[1] ?? 0;
+    const red = colorBytes[2] ?? 0;
+
+    return {
+      colorIndex,
+      label: KIT_COLOR_LABELS[colorIndex] ?? `Color ${colorIndex + 1}`,
+      byteOffset,
+      fileOffset: FILE_HEADER_SIZE + byteOffset,
+      hex: this.rgbToHexColor(red, green, blue),
+      rawHex: Array.from(colorBytes, (value) => value.toString(16).toUpperCase().padStart(2, '0')).join('')
+    };
+  }
+
+  private getKitColorOffset(blockStart: number, kitIndex: number, colorIndex: number): number {
+    return blockStart + KIT_COLOR_START_OFFSET + ((kitIndex * COLORS_PER_KIT) + colorIndex) * KIT_COLOR_STRIDE;
+  }
+
+  private getKitStyleOffset(blockStart: number, kitIndex: number): number {
+    return blockStart + KIT_STYLE_START_OFFSET + kitIndex * KIT_STYLE_STRIDE;
+  }
+
+  private readKitStyleId(bytes: Uint8Array, blockStart: number, kitIndex: number): number {
+    const view = this.getView(bytes);
+    return view.getUint32(this.getKitStyleOffset(blockStart, kitIndex), true);
+  }
+
+  private getKitStyleLabel(styleId: number): string {
+    return KIT_STYLE_LABELS[styleId] ?? `Unknown (${styleId})`;
   }
 
   private getBlockStart(index: number): number {
@@ -368,6 +585,25 @@ export class TeamsDatService {
 
   private clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
+  }
+
+  private normalizeHexColor(value: string): string | null {
+    const trimmedValue = value.trim();
+    const normalizedValue = trimmedValue.startsWith('#') ? trimmedValue : `#${trimmedValue}`;
+
+    return /^#[0-9A-Fa-f]{6}$/.test(normalizedValue) ? normalizedValue.toUpperCase() : null;
+  }
+
+  private hexColorToRgb(value: string): [number, number, number] {
+    return [
+      Number.parseInt(value.slice(1, 3), 16),
+      Number.parseInt(value.slice(3, 5), 16),
+      Number.parseInt(value.slice(5, 7), 16)
+    ];
+  }
+
+  private rgbToHexColor(red: number, green: number, blue: number): string {
+    return `#${red.toString(16).toUpperCase().padStart(2, '0')}${green.toString(16).toUpperCase().padStart(2, '0')}${blue.toString(16).toUpperCase().padStart(2, '0')}`;
   }
 
   private async hasReadPermission(fileHandle: any): Promise<boolean> {

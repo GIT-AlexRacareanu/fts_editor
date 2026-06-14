@@ -72,6 +72,19 @@ interface DbBrowsePlayer {
   clubs: string[];
 }
 
+interface TeamBrowseItem {
+  index: number;
+  teamId: number;
+  teamLabel: string;
+  leagueId: number;
+  rivalId: number;
+  stadiumName: string;
+  europeanCompetition: number;
+  attackOvr: number;
+  midfieldOvr: number;
+  defenseOvr: number;
+}
+
 interface PopupTeamContext {
   teamOffset: number;
   slotIndex: number;
@@ -145,6 +158,7 @@ export class AppComponent implements OnInit {
   dbSearchTeamQuery: string | null = null;
   dbBrowsePage = 1;
   dbBrowsePlayers: DbBrowsePlayer[] = [];
+  teamBrowseLeagueQuery: number | null = null;
 
   // ─── Team Editor ─────────────────────────────────────────────
   teamSearchQuery = '';
@@ -157,6 +171,9 @@ export class AppComponent implements OnInit {
   selectedTeamEditorOffset: number | null = null;
   selectedTeamEditorSlotIndex: number | null = null;
   swapModeActive = false;
+  showTeamKitDialog = false;
+  teamKitDialogRecordIndex: number | null = null;
+  teamKitDialogTabIndex = 0;
 
   // ─── Shared ──────────────────────────────────────────────────
   private readonly teamPlayerNameCache = new Map<number, string | null>();
@@ -288,6 +305,9 @@ export class AppComponent implements OnInit {
   ];
 
   readonly nationalities = NATIONALITY_OPTIONS;
+  readonly kitStyleOptions = this.teamsDatService.kitStyleOptions;
+  readonly sponsorTypeOptions = this.teamsDatService.sponsorTypeOptions;
+  readonly europeanCompetitionOptions = this.teamsDatService.europeanCompetitionOptions;
 
   constructor(
     public playerService: PlayerService,
@@ -364,6 +384,14 @@ export class AppComponent implements OnInit {
       penaltyRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'penaltyRole'),
       freeKickRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'freeKickRole')
     };
+  }
+
+  get activeTeamKitRecord(): TeamsDatRecord | null {
+    if (!this.teamsDatLoaded || this.teamKitDialogRecordIndex === null) {
+      return null;
+    }
+
+    return this.teamsDatService.records[this.teamKitDialogRecordIndex] ?? null;
   }
 
   get teamsDatOptions(): { value: number; label: string }[] {
@@ -774,18 +802,18 @@ export class AppComponent implements OnInit {
       }
     }
 
-    const csvRowMappedIndex = this.resolveImportedPlayerIndexFromCsvRow(sourcePlayer);
-
-    if (csvRowMappedIndex >= 0) {
-      return csvRowMappedIndex;
-    }
-
     for (const candidateName of this.getImportedPlayerNameCandidates(sourcePlayer)) {
       const matchedByName = this.playerService.findPlayerIndexByName(candidateName);
 
       if (matchedByName >= 0) {
         return matchedByName;
       }
+    }
+
+    const csvRowMappedIndex = this.resolveImportedPlayerIndexFromCsvRow(sourcePlayer);
+
+    if (csvRowMappedIndex >= 0) {
+      return csvRowMappedIndex;
     }
 
     return -1;
@@ -1191,6 +1219,39 @@ export class AppComponent implements OnInit {
     });
   }
 
+  get filteredTeamBrowseItems(): TeamBrowseItem[] {
+    if (!this.teamsDatLoaded) {
+      return [];
+    }
+
+    const leagueQuery = this.teamBrowseLeagueQuery;
+
+    return this.teamsDatService.records
+      .filter((record) => leagueQuery === null || record.leagueId === leagueQuery)
+      .map((record) => ({
+        index: record.index,
+        teamId: record.teamId,
+        teamLabel: record.teamLabel,
+        leagueId: record.leagueId,
+        rivalId: record.rivalId,
+        stadiumName: record.stadiumName,
+        europeanCompetition: record.europeanCompetition,
+        attackOvr: record.attackOvr,
+        midfieldOvr: record.midfieldOvr,
+        defenseOvr: record.defenseOvr
+      }))
+      .sort((left, right) => {
+        const leftAverageOvr = (left.attackOvr + left.midfieldOvr + left.defenseOvr) / 3;
+        const rightAverageOvr = (right.attackOvr + right.midfieldOvr + right.defenseOvr) / 3;
+
+        if (rightAverageOvr !== leftAverageOvr) {
+          return rightAverageOvr - leftAverageOvr;
+        }
+
+        return left.teamLabel.localeCompare(right.teamLabel);
+      });
+  }
+
   get pagedDbBrowsePlayers(): DbBrowsePlayer[] {
     const startIndex = (this.dbBrowsePage - 1) * this.dbBrowsePageSize;
     return this.filteredDbBrowsePlayers.slice(startIndex, startIndex + this.dbBrowsePageSize);
@@ -1214,6 +1275,43 @@ export class AppComponent implements OnInit {
 
   openDbBrowsePlayer(index: number): void {
     this.openPlayerEditPopup(index);
+  }
+
+  openTeamFromBrowser(team: TeamBrowseItem): void {
+    if (!this.teamFileLoaded) {
+      alert('Load TEAMPLAYERLINKS file first.');
+      return;
+    }
+
+    const matchingOption = this.teamEditorService.teamOptions.find(({ offset }) => this.teamEditorService.getTeam(offset).teamId === team.teamId);
+
+    if (!matchingOption) {
+      alert('No matching TEAMPLAYERLINKS entry was found for this team.');
+      return;
+    }
+
+    this.selectedTeamOffset = matchingOption.offset;
+    this.loadSingleTeam(matchingOption.offset);
+    this.activeMainTab = 0;
+  }
+
+  getLeagueLabel(leagueId: number): string {
+    return this.leagueOptions.find((league) => league.value === leagueId)?.label ?? `League ${leagueId}`;
+  }
+
+  getEuropeanCompetitionLabel(value: number): string {
+    return this.europeanCompetitionOptions.find((competition) => competition.value === value)?.label ?? `Competition ${value}`;
+  }
+
+  getEuropeanCompetitionBadgeLabel(value: number): string {
+    switch (value) {
+      case 1:
+        return 'UCL';
+      case 2:
+        return 'UEL';
+      default:
+        return 'NONE';
+    }
   }
 
   createDbBrowsePlayer(): void {
@@ -1355,9 +1453,14 @@ export class AppComponent implements OnInit {
     }
 
     const syncedRoles = this.syncAllTeamsDatRolesWithCurrentRosters(true, true);
+    const syncedRatings = this.syncAllTeamsDatRatingsWithCurrentRosters();
 
     if (syncedRoles > 0) {
       alert(`Synced captain/corner/penalty/free-kick roles for ${syncedRoles} teams across TEAMPLAYERLINKS and TEAMS.DAT (first active player receives all roles).`);
+    }
+
+    if (syncedRatings > 0) {
+      alert(`Synced ATT/MID/DEF OVR values in TEAMS.DAT for ${syncedRatings} teams before save.`);
     }
 
     const normalizedSlots = this.teamEditorService.normalizeActiveSlotAttributes();
@@ -1406,6 +1509,24 @@ export class AppComponent implements OnInit {
       const team = this.teamEditorService.getTeam(offset);
 
       if (this.syncTeamsDatRolesForTeam(team, syncTeamPlayerLinks, forceFirstPlayerAllRoles)) {
+        syncedTeams += 1;
+      }
+    });
+
+    return syncedTeams;
+  }
+
+  private syncAllTeamsDatRatingsWithCurrentRosters(): number {
+    if (!this.teamEditorService.hasData || !this.teamsDatService.hasData || !this.fileLoaded) {
+      return 0;
+    }
+
+    let syncedTeams = 0;
+
+    this.teamEditorService.teamOptions.forEach(({ offset }) => {
+      const team = this.teamEditorService.getTeam(offset);
+
+      if (this.syncTeamsDatRatingsForTeam(team)) {
         syncedTeams += 1;
       }
     });
@@ -1658,6 +1779,15 @@ export class AppComponent implements OnInit {
     this.teamEditorService.exportUncompressedFile();
   }
 
+  downloadTeamsDatUncompressed(): void {
+    if (!this.teamsDatLoaded) {
+      alert('Load TEAMS.DAT first.');
+      return;
+    }
+
+    this.teamsDatService.exportUncompressedFile();
+  }
+
   // ─── Team Editor ──────────────────────────────────────────────
 
   get filteredTeamAddPlayers(): DbBrowsePlayer[] {
@@ -1807,11 +1937,11 @@ export class AppComponent implements OnInit {
 
   updateTeamsDatNumberField(
     record: TeamsDatRecord,
-    field: 'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr',
+    field: 'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' | 'sponsorType' | 'kitManufacturer' | 'europeanCompetition',
     value: string | number
   ): void {
     const changes: Partial<Pick<TeamsDatRecord,
-      'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr'
+      'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' | 'sponsorType' | 'kitManufacturer' | 'europeanCompetition'
     >> = {};
 
     changes[field] = Number(value);
@@ -1838,6 +1968,60 @@ export class AppComponent implements OnInit {
     this.teamsDatService.updateRecord(record.index, { stadiumName: value });
   }
 
+  updateTeamsDatKitColor(record: TeamsDatRecord, kitIndex: number, colorIndex: number, value: string): void {
+    this.teamsDatService.updateKitColor(record.index, kitIndex, colorIndex, value);
+  }
+
+  updateTeamsDatKitStyle(record: TeamsDatRecord, kitIndex: number, value: string | number): void {
+    this.teamsDatService.updateKitStyle(record.index, kitIndex, Number(value));
+  }
+
+  openTeamKitDialog(team: TeamRecord): void {
+    const record = this.teamsDatService.records.find((entry) => entry.teamId === team.teamId);
+
+    if (!record) {
+      alert('No matching TEAMS.DAT record was found for this team.');
+      return;
+    }
+
+    this.teamKitDialogRecordIndex = record.index;
+    this.teamKitDialogTabIndex = 0;
+    this.showTeamKitDialog = true;
+  }
+
+  closeTeamKitDialog(): void {
+    this.showTeamKitDialog = false;
+    this.teamKitDialogRecordIndex = null;
+    this.teamKitDialogTabIndex = 0;
+  }
+
+  updateActiveTeamKitDialogColor(kitIndex: number, colorIndex: number, value: string): void {
+    if (this.teamKitDialogRecordIndex === null) {
+      return;
+    }
+
+    this.teamsDatService.updateKitColor(this.teamKitDialogRecordIndex, kitIndex, colorIndex, value);
+  }
+
+  updateActiveTeamKitDialogStyle(kitIndex: number, value: string | number): void {
+    if (this.teamKitDialogRecordIndex === null) {
+      return;
+    }
+
+    this.teamsDatService.updateKitStyle(this.teamKitDialogRecordIndex, kitIndex, Number(value));
+  }
+
+  updateActiveTeamKitDialogNumberField(
+    field: 'sponsorType' | 'kitManufacturer',
+    value: string | number
+  ): void {
+    if (this.teamKitDialogRecordIndex === null) {
+      return;
+    }
+
+    this.teamsDatService.updateRecord(this.teamKitDialogRecordIndex, { [field]: Number(value) });
+  }
+
   updateTeamsDatRoleField(
     record: TeamsDatRecord,
     field: TeamsRoleField,
@@ -1861,6 +2045,10 @@ export class AppComponent implements OnInit {
 
   formatHexRoleValue(value: number): string {
     return value.toString(16).toUpperCase().padStart(4, '0');
+  }
+
+  formatTeamsDatOffset(value: number): string {
+    return `0x${value.toString(16).toUpperCase()}`;
   }
 
   // ─── Tactics section helpers ────────────────────────────────

@@ -554,6 +554,16 @@
   }
 }
 
+.team-db-toolbar-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+
+  @media (max-width: 599px) {
+    width: 100%;
+  }
+}
+
 /* ── Formation sketch ──────────────────────────────────────── */
 
 .team-formation {
@@ -948,6 +958,12 @@
   max-width: 280px;
 }
 
+.teams-dat-inline-field--numeric {
+  flex: 0 1 140px;
+  min-width: 120px;
+  max-width: 160px;
+}
+
 .team-db-header-formation-field {
   flex: 0 1 180px;
   min-width: 140px;
@@ -979,6 +995,196 @@
   margin-top: 16px;
 }
 
+.kit-dialog-panel {
+  max-width: 920px;
+}
+
+.kit-dialog-body {
+  padding-top: 0;
+}
+
+.kit-dialog-shared-fields {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+
+  @media (min-width: 700px) {
+    grid-template-columns: repeat(2, minmax(0, 160px)) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.kit-dialog-shared-hint {
+  color: #90a4ae;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  padding-top: 6px;
+}
+
+.kit-dialog-tabs {
+  ::ng-deep .mat-tab-header {
+    border-bottom: 1px solid var(--card-border);
+    margin: 0 -12px 14px;
+
+    @media (min-width: 600px) {
+      margin: 0 -16px 14px;
+    }
+  }
+
+  ::ng-deep .mat-tab-body-content {
+    padding: 0 2px 2px;
+  }
+
+  ::ng-deep .mat-tab-label {
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+}
+
+.teams-dat-kits {
+  display: grid;
+  gap: 14px;
+}
+
+.teams-dat-kit-card {
+  border: 1px solid rgba(46, 74, 41, 0.9);
+  border-radius: 12px;
+  background: rgba(10, 23, 15, 0.82);
+  padding: 14px;
+}
+
+.teams-dat-kit-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.teams-dat-kit-title {
+  color: #efffe7;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.teams-dat-kit-subtitle {
+  color: #90a4ae;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.teams-dat-kit-grid {
+  display: grid;
+  gap: 10px;
+
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (min-width: 960px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.teams-dat-kit-style-row {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+
+  @media (min-width: 600px) {
+    grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.teams-dat-kit-style-field {
+  width: 100%;
+}
+
+.teams-dat-kit-style-meta {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(232, 247, 225, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.teams-dat-kit-style-label {
+  color: #eff7eb;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.teams-dat-kit-style-offset {
+  color: #90a4ae;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.teams-dat-kit-color {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(232, 247, 225, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.teams-dat-kit-color-name {
+  color: #eff7eb;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.teams-dat-kit-color-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.teams-dat-kit-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(232, 247, 225, 0.26);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  flex-shrink: 0;
+}
+
+.teams-dat-kit-picker {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.teams-dat-kit-color-hex {
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.teams-dat-kit-color-raw {
+  color: #90a4ae;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 /* ── DB Search ─────────────────────────────────────────────── */
 
 .db-search-filters {
@@ -1006,6 +1212,94 @@
 .db-search-results {
   display: grid;
   gap: 12px;
+}
+
+.team-browser-filters {
+  align-items: end;
+}
+
+.team-browser-summary {
+  color: #90a4ae;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding-bottom: 12px;
+}
+
+.team-browser-card-header {
+  align-items: center;
+}
+
+.team-browser-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.team-browser-competition-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.team-browser-competition-badge--ucl {
+  background: linear-gradient(135deg, rgba(24, 66, 163, 0.95), rgba(64, 124, 255, 0.76));
+  color: #f5f9ff;
+}
+
+.team-browser-competition-badge--uel {
+  background: linear-gradient(135deg, rgba(156, 66, 8, 0.95), rgba(255, 141, 36, 0.8));
+  color: #fff5e8;
+}
+
+.team-browser-competition-badge--none {
+  background: rgba(128, 144, 164, 0.18);
+  color: #b8c7d3;
+}
+
+.team-browser-ovrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.team-browser-ovr-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.team-browser-ovr-pill--attack {
+  background: rgba(187, 64, 64, 0.2);
+  color: #ffb1b1;
+}
+
+.team-browser-ovr-pill--midfield {
+  background: rgba(182, 136, 24, 0.2);
+  color: #ffe091;
+}
+
+.team-browser-ovr-pill--defense {
+  background: rgba(44, 132, 96, 0.22);
+  color: #9ff1cb;
 }
 
 .db-search-summary {

@@ -52,11 +52,15 @@
             <div class="team-actions">
               <button mat-raised-button color="primary" class="team-action-btn" (click)="saveAllFiles()">
                 <mat-icon>save</mat-icon>
-                SAVE
+                {{ teamsDatService.hasPendingChanges ? 'SAVE KIT CHANGES' : 'SAVE' }}
               </button>
               <button mat-stroked-button color="primary" class="team-action-btn" (click)="downloadTeamPlayerLinksUncompressed()" title="Download TEAMPLAYERLINKS as raw uncompressed bytes">
                 <mat-icon>download</mat-icon>
                 TEAMPLAYERLINKS RAW
+              </button>
+              <button mat-stroked-button color="primary" class="team-action-btn" (click)="downloadTeamsDatUncompressed()" title="Download TEAMS.DAT as raw uncompressed bytes">
+                <mat-icon>download</mat-icon>
+                TEAMS RAW
               </button>
               <button mat-stroked-button color="warn" class="team-action-btn" (click)="clearTeamPlayerLinks()" title="Reset all team rosters to clean state">
                 <mat-icon>delete_sweep</mat-icon>
@@ -185,7 +189,13 @@
                           <mat-select [ngModel]="record.formationId" (ngModelChange)="updateTeamsDatFormation(record, $event)">
                             <mat-option *ngFor="let f of formationIdOptions" [value]="f.id">{{ getFormationString(f.id) }}</mat-option>
                           </mat-select>
-                        </mat-form-field>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric">
+                        <mat-label>European Competition</mat-label>
+                        <mat-select [ngModel]="record.europeanCompetition" (ngModelChange)="updateTeamsDatNumberField(record, 'europeanCompetition', $event)">
+                          <mat-option *ngFor="let competition of europeanCompetitionOptions" [value]="competition.value">{{ competition.label }}</mat-option>
+                        </mat-select>
+                      </mat-form-field>
                     </div>
                   </div>
                     <div class="team-db-header-dat" *ngIf="selectedTeamsDatRecord as record">
@@ -213,10 +223,16 @@
                       <span>Players Count</span>
                       <input type="number" [ngModel]="team.playerCount" (ngModelChange)="updateTeamPlayerCount(team, $event)">
                     </label>
-                    <button mat-stroked-button color="accent" class="team-slot-action-btn" (click)="toggleTeamAddPicker(team)">
-                      <mat-icon>add</mat-icon>
-                      ADD PLAYER
-                    </button>
+                    <div class="team-db-toolbar-actions">
+                      <button mat-stroked-button color="primary" class="team-slot-action-btn" (click)="openTeamKitDialog(team)">
+                        <mat-icon>checkroom</mat-icon>
+                        KIT
+                      </button>
+                      <button mat-stroked-button color="accent" class="team-slot-action-btn" (click)="toggleTeamAddPicker(team)">
+                        <mat-icon>add</mat-icon>
+                        ADD PLAYER
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Add player picker -->
@@ -356,6 +372,7 @@
                   </mat-select>
                 </mat-form-field>
               </div>
+
             </section>
 
           </mat-card-content>
@@ -363,60 +380,16 @@
       </div>
     </mat-tab>
 
-    <!-- ═══ TAB 1 — DB BROWSER ════════════════════════════════ -->
-    <mat-tab label="DB Browser">
+    <!-- ═══ TAB 1 — PLAYER BROWSER ════════════════════════════ -->
+    <mat-tab label="Player Browser">
       <div class="editor-tab-content">
         <mat-card class="section-card team-editor-card">
           <mat-card-content>
-
             <mat-card class="section-card">
               <mat-card-header>
-                <mat-card-title>OVR Tuning</mat-card-title>
+                <mat-card-title>Player Browser</mat-card-title>
               </mat-card-header>
               <mat-card-content>
-                <div class="ovr-tuning-table">
-                  <div class="ovr-tuning-row ovr-tuning-row--header">
-                    <div class="ovr-tuning-role">Role</div>
-                    <div class="ovr-tuning-col" *ngFor="let statLabel of ovrStatLabels">{{ statLabel }}</div>
-                    <div class="ovr-tuning-col">Bonus</div>
-                  </div>
-
-                  <div class="ovr-tuning-row" *ngFor="let tuning of ovrTuningOptions">
-                    <div class="ovr-tuning-role">{{ tuning.label }}</div>
-                    <input
-                      #weightInput
-                      class="ovr-mini-input"
-                      *ngFor="let weight of tuning.weights; let weightIndex = index"
-                      type="number"
-                      [value]="weight"
-                      (blur)="updateOvrWeight(tuning.category, weightIndex, weightInput.value)"
-                      (keyup.enter)="updateOvrWeight(tuning.category, weightIndex, weightInput.value)">
-                    <input
-                      #bonusInput
-                      class="ovr-mini-input"
-                      type="number"
-                      [value]="tuning.bonus"
-                      (blur)="updateOvrBonus(tuning.category, bonusInput.value)"
-                      (keyup.enter)="updateOvrBonus(tuning.category, bonusInput.value)">
-                  </div>
-                </div>
-
-                <div class="ovr-tuning-footer">
-                  <label class="ovr-multiplier-field" *ngFor="let tuning of ovrTuningOptions">
-                    <span>{{ tuning.label }} Multiplier</span>
-                    <input
-                      #multiplierInput
-                      class="ovr-mini-input"
-                      type="number"
-                      step="0.01"
-                      [value]="tuning.multiplier"
-                      (blur)="updateOvrMultiplier(tuning.category, multiplierInput.value)"
-                      (keyup.enter)="updateOvrMultiplier(tuning.category, multiplierInput.value)">
-                  </label>
-                </div>
-              </mat-card-content>
-            </mat-card>
-
             <div class="db-search-filters db-search-filters--4col">
               <mat-form-field appearance="outline">
                 <mat-label>Filter by name or hex ID</mat-label>
@@ -494,12 +467,152 @@
               </ng-template>
             </div>
 
+              </mat-card-content>
+            </mat-card>
+
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
+    <!-- ═══ TAB 2 — TEAM BROWSER ══════════════════════════════ -->
+    <mat-tab label="Team Browser">
+      <div class="editor-tab-content">
+        <mat-card class="section-card team-editor-card">
+          <mat-card-content>
+            <mat-card class="section-card">
+              <mat-card-header>
+                <mat-card-title>Team Browser</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="db-search-filters db-search-filters--3col team-browser-filters">
+                  <mat-form-field appearance="outline">
+                    <mat-label>League</mat-label>
+                    <mat-select [(ngModel)]="teamBrowseLeagueQuery">
+                      <mat-option [value]="null">All leagues</mat-option>
+                      <mat-option *ngFor="let league of leagueOptions" [value]="league.value">{{ league.label }}</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                  <div class="team-browser-summary">
+                    {{ filteredTeamBrowseItems.length }} teams
+                  </div>
+                </div>
+
+                <div class="db-search-list" *ngIf="filteredTeamBrowseItems.length > 0; else noTeamBrowseMatches">
+                  <article class="db-search-card" *ngFor="let team of filteredTeamBrowseItems">
+                    <div class="db-search-card-header team-browser-card-header">
+                      <div class="team-browser-title-row">
+                        <div class="db-search-player-name">{{ team.teamLabel }}</div>
+                        <span
+                          class="team-browser-competition-badge"
+                          [ngClass]="{
+                            'team-browser-competition-badge--ucl': team.europeanCompetition === 1,
+                            'team-browser-competition-badge--uel': team.europeanCompetition === 2,
+                            'team-browser-competition-badge--none': team.europeanCompetition !== 1 && team.europeanCompetition !== 2
+                          }">
+                          {{ getEuropeanCompetitionBadgeLabel(team.europeanCompetition) }}
+                        </span>
+                      </div>
+                      <button mat-stroked-button color="primary" (click)="openTeamFromBrowser(team)">Edit</button>
+                    </div>
+                    <div class="team-browser-ovrs">
+                      <span class="team-browser-ovr-pill team-browser-ovr-pill--attack">ATT {{ team.attackOvr }}</span>
+                      <span class="team-browser-ovr-pill team-browser-ovr-pill--midfield">MID {{ team.midfieldOvr }}</span>
+                      <span class="team-browser-ovr-pill team-browser-ovr-pill--defense">DEF {{ team.defenseOvr }}</span>
+                    </div>
+                  </article>
+                </div>
+
+                <ng-template #noTeamBrowseMatches>
+                  <p class="team-empty-state">No teams match the current league filter.</p>
+                </ng-template>
+              </mat-card-content>
+            </mat-card>
           </mat-card-content>
         </mat-card>
       </div>
     </mat-tab>
 
   </mat-tab-group>
+</div>
+
+<!-- ─── TEAM KIT DIALOG ─────────────────────────────────────── -->
+<div class="popup-overlay" *ngIf="showTeamKitDialog && activeTeamKitRecord as record" (click)="closeTeamKitDialog()">
+  <div class="popup-panel kit-dialog-panel" (click)="$event.stopPropagation()">
+    <div class="popup-header">
+      <div class="popup-header-info">
+        <div class="popup-player-name">{{ record.teamLabel }} Kits</div>
+        <div class="popup-player-meta">4 kits · 10 colors each · 4 bytes per color</div>
+      </div>
+      <button mat-icon-button (click)="closeTeamKitDialog()">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <div class="popup-body kit-dialog-body">
+      <div class="kit-dialog-shared-fields">
+        <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric">
+          <mat-label>Sponsor Type</mat-label>
+          <mat-select [ngModel]="record.sponsorType" (ngModelChange)="updateActiveTeamKitDialogNumberField('sponsorType', $event)">
+            <mat-option *ngFor="let sponsor of sponsorTypeOptions" [value]="sponsor.value">{{ sponsor.label }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric">
+          <mat-label>Kit Manufacturer</mat-label>
+          <input
+            matInput
+            type="number"
+            [ngModel]="record.kitManufacturer"
+            (ngModelChange)="updateActiveTeamKitDialogNumberField('kitManufacturer', $event)">
+        </mat-form-field>
+        <div class="kit-dialog-shared-hint">
+          Shared team metadata applied across home, away, GK home, and GK away kits.
+        </div>
+      </div>
+
+      <mat-tab-group class="kit-dialog-tabs" [(selectedIndex)]="teamKitDialogTabIndex" animationDuration="0ms">
+        <mat-tab *ngFor="let kit of record.kits" [label]="kit.label">
+          <div class="teams-dat-kits">
+            <article class="teams-dat-kit-card">
+              <header class="teams-dat-kit-header">
+                <div class="teams-dat-kit-title">{{ kit.label }}</div>
+                <div class="teams-dat-kit-subtitle">10 colors · 4 bytes each</div>
+              </header>
+
+              <div class="teams-dat-kit-style-row">
+                <mat-form-field appearance="outline" class="teams-dat-kit-style-field">
+                  <mat-label>Style</mat-label>
+                  <mat-select [ngModel]="kit.styleId" (ngModelChange)="updateActiveTeamKitDialogStyle(kit.kitIndex, $event)">
+                    <mat-option *ngFor="let style of kitStyleOptions" [value]="style.value">{{ style.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <div class="teams-dat-kit-style-meta">
+                  <span class="teams-dat-kit-style-label">{{ kit.styleLabel }}</span>
+                  <span class="teams-dat-kit-style-offset">{{ formatTeamsDatOffset(kit.styleFileOffset) }}</span>
+                </div>
+              </div>
+
+              <div class="teams-dat-kit-grid">
+                <label class="teams-dat-kit-color" *ngFor="let color of kit.colors">
+                  <span class="teams-dat-kit-color-name">{{ color.colorIndex + 1 }}. {{ color.label }}</span>
+                  <div class="teams-dat-kit-color-control">
+                    <span class="teams-dat-kit-swatch" [style.background]="color.hex"></span>
+                    <input
+                      class="teams-dat-kit-picker"
+                      type="color"
+                      [value]="color.hex"
+                      (input)="updateActiveTeamKitDialogColor(kit.kitIndex, color.colorIndex, $any($event.target).value)">
+                  </div>
+                  <span class="teams-dat-kit-color-hex">{{ color.hex }}</span>
+                  <span class="teams-dat-kit-color-raw">{{ color.rawHex }} · {{ formatTeamsDatOffset(color.fileOffset) }}</span>
+                </label>
+              </div>
+            </article>
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </div>
+  </div>
 </div>
 
 <!-- ─── PLAYER EDIT POPUP ─────────────────────────────────────── -->
