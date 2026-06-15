@@ -223,12 +223,11 @@ describe('AppComponent team CSV import preview', () => {
     expect(component.teamImportMappedPreview[0].futureHexId).toBe('001E');
   });
 
-  it('uses an explicit imported player id before falling back to name matching', () => {
+  it('does not map imported players until the bulk-import row layout exists', () => {
     const playerService = {
       getOvrTuningConfig: () => [],
       readPlayer: (index: number) => ({ name: `Player ${index}`, pos: 11, nat: 0 }),
       findPlayerIndexByName: () => 7,
-      parsePlayerId: (value: string) => value === '00AF' ? 4 : -1,
       formatPlayerId: (index: number) => index.toString(16).toUpperCase().padStart(4, '0'),
       calculateOVR: () => 70,
       totalPlayers: 10,
@@ -241,14 +240,12 @@ describe('AppComponent team CSV import preview', () => {
     const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
-      { shortName: 'Matches DB Name', teamName: 'Arsenal', clubPosition: 'CM', overall: 80, playerId: '00AF', hasExplicitPlayerId: true }
+      { shortName: 'Matches DB Name', teamName: 'Arsenal', clubPosition: 'CM', overall: 80, sourceRowIndex: 0 }
     ] as any;
 
     component.selectCsvImportTeam('Arsenal');
 
-    expect(component.teamImportMappedPreview.length).toBe(1);
-    expect(component.teamImportMappedPreview[0].futureIndex).toBe(4);
-    expect(component.teamImportMappedPreview[0].futureHexId).toBe('0004');
+    expect(component.teamImportMappedPreview.length).toBe(0);
   });
 
   it('uses the mapped player when calculating preview OVR and position', () => {

@@ -89,7 +89,6 @@ describe('PlayerImportService bulk import mapping', () => {
 
 function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): ImportedPlayerRecord {
   return {
-    playerId: '1000',
     shortName: 'Test Player',
     lastName: '',
     overall: 70,

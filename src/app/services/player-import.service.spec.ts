@@ -30,13 +30,13 @@ describe('PlayerImportService', () => {
     expect(matches[0].shortName).toBe('Luka Modric');
   });
 
-  it('matches by imported player id as a fallback', () => {
+  it('matches by imported player overall as a fallback', () => {
     const players = [
-      createImportedPlayer({ playerId: '9001', shortName: 'Player A' }),
-      createImportedPlayer({ playerId: '9123', shortName: 'Player B' })
+      createImportedPlayer({ shortName: 'Player A', overall: 81 }),
+      createImportedPlayer({ shortName: 'Player B', overall: 85 })
     ];
 
-    const matches = service.searchPlayers(players, '9123');
+    const matches = service.searchPlayers(players, '85');
 
     expect(matches.length).toBe(1);
     expect(matches[0].shortName).toBe('Player B');
@@ -156,7 +156,7 @@ describe('PlayerImportService', () => {
     expect(parsed[0].overall).toBe(80);
   });
 
-  it('uses the original import row index as fallback player id when no id column exists', () => {
+  it('keeps the original import row index when no id column exists', () => {
     const csv = [
       'knownus,overallrating,club',
       'First Row,70,Arsenal',
@@ -167,10 +167,8 @@ describe('PlayerImportService', () => {
 
     expect(parsed.length).toBe(2);
     expect(parsed[0].shortName).toBe('Second Row');
-    expect(parsed[0].playerId).toBe('1');
     expect(parsed[0].sourceRowIndex).toBe(1);
     expect(parsed[1].shortName).toBe('First Row');
-    expect(parsed[1].playerId).toBe('0');
     expect(parsed[1].sourceRowIndex).toBe(0);
   });
 
@@ -509,7 +507,6 @@ describe('PlayerImportService', () => {
 
 function createImportedPlayer(overrides: Partial<ImportedPlayerRecord> = {}): ImportedPlayerRecord {
   return {
-    playerId: '1000',
     shortName: 'Test Player',
     lastName: '',
     overall: 70,

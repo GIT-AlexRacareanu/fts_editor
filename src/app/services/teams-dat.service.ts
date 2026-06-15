@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 
-import { TEAM_NAMES_BY_ID } from '../data/team-names';
 import { TeamsDatKit, TeamsDatKitColor, TeamsDatRecord } from '../models/teams-dat.model';
 import { FileHandleStorageService } from './file-handle-storage.service';
 
@@ -567,8 +566,7 @@ export class TeamsDatService {
   }
 
   private formatTeamLabel(teamId: number): string {
-    const teamName = TEAM_NAMES_BY_ID[teamId];
-    return teamName ? `${teamName} (ID ${teamId})` : `Team ${teamId}`;
+    return `Team ${teamId}`;
   }
 
   private buildFormationIdMap(records: TeamsDatRecord[]): Map<number, number> {

@@ -1,7 +1,7 @@
 <mat-toolbar color="primary" class="app-toolbar">
   <span>FTS 15 EDITOR PRO</span>
   <span class="toolbar-spacer"></span>
-  <button mat-icon-button *ngIf="!showInitPage" (click)="goToInitPage()" title="Manage Files">
+  <button mat-icon-button *ngIf="!showInitPage && canEnterEditor" (click)="goToInitPage()" title="Manage Files">
     <mat-icon>folder_open</mat-icon>
   </button>
 </mat-toolbar>
@@ -31,7 +31,20 @@
       <div class="init-file-name">TEAMS.DAT</div>
     </div>
 
-    <button mat-raised-button color="primary" class="init-continue-btn" [disabled]="!allFilesLoaded" (click)="enterMainApp()">
+    <div class="init-file-row" [class.init-file-row--loaded]="xlcLoaded">
+      <mat-icon class="init-file-icon">{{ xlcLoaded ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+      <div class="init-file-name">{{ xlcFileName || 'ftsteamnames.xlc' }}</div>
+    </div>
+
+    <div class="init-file-row" [class.init-file-row--loaded]="pakLoaded">
+      <mat-icon class="init-file-icon">{{ pakLoaded ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+      <div>
+        <div class="init-file-name">{{ pakFileName || 'teams.pak' }}</div>
+        <div class="init-file-caption">Required archive</div>
+      </div>
+    </div>
+
+    <button mat-raised-button color="primary" class="init-continue-btn" [disabled]="!canEnterEditor" (click)="enterMainApp()">
       <mat-icon>play_arrow</mat-icon>
       CONTINUE
     </button>
@@ -39,11 +52,11 @@
 </div>
 
 <!-- ─── MAIN APP ──────────────────────────────────────────────── -->
-<div class="app-container" *ngIf="!showInitPage && allFilesLoaded">
+<div class="app-container" *ngIf="!showInitPage && canEnterEditor">
   <mat-tab-group class="editor-tabs" [(selectedIndex)]="activeMainTab" animationDuration="0ms">
 
     <!-- ═══ TAB 0 — TEAM EDITOR ════════════════════════════════ -->
-    <mat-tab label="Team Editor">
+    <mat-tab *ngIf="allFilesLoaded" label="Team Editor">
       <div class="editor-tab-content">
         <mat-card class="section-card team-editor-card">
           <mat-card-content>
@@ -52,7 +65,7 @@
             <div class="team-actions">
               <button mat-raised-button color="primary" class="team-action-btn" (click)="saveAllFiles()">
                 <mat-icon>save</mat-icon>
-                {{ teamsDatService.hasPendingChanges ? 'SAVE KIT CHANGES' : 'SAVE' }}
+                SAVE
               </button>
               <button mat-stroked-button color="primary" class="team-action-btn" (click)="downloadTeamPlayerLinksUncompressed()" title="Download TEAMPLAYERLINKS as raw uncompressed bytes">
                 <mat-icon>download</mat-icon>
@@ -67,6 +80,8 @@
                 CLEAN START
               </button>
             </div>
+
+            <input #teamLogoFileInput type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden (change)="onTeamLogoFileSelected($event)">
 
             <!-- Team selector -->
             <mat-form-field appearance="outline" class="full-width-field team-jump-field">
@@ -136,7 +151,7 @@
               </div>
 
               <div class="team-csv-search-empty" *ngIf="teamImportCsvTeam && teamImportPreviewPlayers.length > 0 && teamImportMappedPreview.length === 0">
-                CSV team loaded, but no matching existing PLAYERS.DAT names were found yet.
+                CSV team loaded, but no row-based PLAYERS.DAT matches were found yet. Bulk replace PLAYERS.DAT from this CSV first.
               </div>
 
               <div class="team-csv-import-actions">
@@ -157,8 +172,30 @@
             <div class="team-results" *ngIf="displayedTeams.length > 0">
               <section class="team-db-card" *ngFor="let team of displayedTeams">
                 <div class="team-db-header">
+                  <div class="team-logo-panel" *ngIf="getTeamLogoEntry(team.teamId, 'main') as teamLogoEntry">
+                    <div class="team-logo-frame" *ngIf="getPakEntryPreviewUrl(teamLogoEntry) as previewUrl">
+                      <img [src]="previewUrl" [alt]="team.teamLabel + ' logo'" class="team-logo-image">
+                    </div>
+                    <div class="team-logo-actions">
+                      <button mat-stroked-button color="accent" (click)="openTeamLogoPicker(team)">
+                        <mat-icon>image</mat-icon>
+                        CHANGE LOGO
+                      </button>
+                    </div>
+                  </div>
                   <div class="team-db-header-main">
-                    <div class="team-db-title">{{ team.teamLabel }}</div>
+                    <div class="team-db-title">{{ team.teamLongName || team.teamLabel }}</div>
+                    <div class="teams-dat-fields-row team-name-fields">
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--stadium">
+                        <mat-label>Long Name</mat-label>
+                        <input matInput [ngModel]="team.teamLongName || ''" (change)="commitTeamLongName(team, $event)" [disabled]="!xlcLoaded">
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field">
+                        <mat-label>Short Name</mat-label>
+                        <input matInput [ngModel]="team.teamShortName || ''" (change)="commitTeamShortName(team, $event)" [disabled]="!xlcLoaded">
+                      </mat-form-field>
+                    </div>
+                    <p class="team-empty-state" *ngIf="!xlcLoaded">Load the team names XLC file to edit long and short names.</p>
                     <div class="teams-dat-fields-row team-db-header-fields" *ngIf="selectedTeamsDatRecord as record">
                       <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--id">
                         <mat-label>Team ID</mat-label>
@@ -381,157 +418,184 @@
     </mat-tab>
 
     <!-- ═══ TAB 1 — PLAYER BROWSER ════════════════════════════ -->
-    <mat-tab label="Player Browser">
-      <div class="editor-tab-content">
-        <mat-card class="section-card team-editor-card">
-          <mat-card-content>
-            <mat-card class="section-card">
-              <mat-card-header>
-                <mat-card-title>Player Browser</mat-card-title>
-              </mat-card-header>
-              <mat-card-content>
-            <div class="db-search-filters db-search-filters--4col">
-              <mat-form-field appearance="outline">
-                <mat-label>Filter by name or hex ID</mat-label>
-                <input matInput [(ngModel)]="dbSearchNameQuery" (ngModelChange)="resetDbBrowsePagination()">
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Nationality</mat-label>
-                <mat-select [(ngModel)]="dbSearchNationalityQuery" (ngModelChange)="resetDbBrowsePagination()">
-                  <mat-option [value]="null">All nationalities</mat-option>
-                  <mat-option *ngFor="let nationality of nationalities" [value]="nationality.value">
-                    {{ nationality.label }}
-                  </mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Position</mat-label>
-                <mat-select [(ngModel)]="dbSearchPositionQuery" (ngModelChange)="resetDbBrowsePagination()">
-                  <mat-option [value]="null">All positions</mat-option>
-                  <mat-option *ngFor="let position of positions" [value]="position.value">
-                    {{ position.label }}
-                  </mat-option>
-                </mat-select>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Team</mat-label>
-                <mat-select [(ngModel)]="dbSearchTeamQuery" (ngModelChange)="resetDbBrowsePagination()">
-                  <mat-option [value]="null">All teams</mat-option>
-                  <mat-option *ngFor="let team of teamOptions" [value]="team.label">{{ team.label }}</mat-option>
-                </mat-select>
-              </mat-form-field>
-            </div>
-
-            <div class="db-search-results">
-              <div class="db-search-summary">
-                <span>
-                  {{ filteredDbBrowsePlayers.length }} players
-                  <ng-container *ngIf="filteredDbBrowsePlayers.length > 0">
-                    | {{ dbBrowseRangeStart }}–{{ dbBrowseRangeEnd }}
-                  </ng-container>
-                </span>
-                <button mat-stroked-button color="accent" (click)="createDbBrowsePlayer()" [disabled]="!fileLoaded">
-                  <mat-icon>person_add</mat-icon>
-                  NEW PLAYER
-                </button>
+    <mat-tab *ngIf="allFilesLoaded" label="Player Browser">
+      <ng-template matTabContent>
+        <div class="editor-tab-content">
+          <mat-card class="section-card team-editor-card">
+            <mat-card-content>
+              <mat-card class="section-card">
+                <mat-card-header>
+                  <mat-card-title>Player Browser</mat-card-title>
+                </mat-card-header>
+                <mat-card-content>
+              <div class="db-search-filters db-search-filters--4col">
+                <mat-form-field appearance="outline">
+                  <mat-label>Filter by name or hex ID</mat-label>
+                  <input matInput [(ngModel)]="dbSearchNameQuery" (ngModelChange)="resetDbBrowsePagination()">
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Nationality</mat-label>
+                  <mat-select [(ngModel)]="dbSearchNationalityQuery" (ngModelChange)="resetDbBrowsePagination()">
+                    <mat-option [value]="null">All nationalities</mat-option>
+                    <mat-option *ngFor="let nationality of nationalities" [value]="nationality.value">
+                      {{ nationality.label }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Position</mat-label>
+                  <mat-select [(ngModel)]="dbSearchPositionQuery" (ngModelChange)="resetDbBrowsePagination()">
+                    <mat-option [value]="null">All positions</mat-option>
+                    <mat-option *ngFor="let position of positions" [value]="position.value">
+                      {{ position.label }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Team</mat-label>
+                  <mat-select [(ngModel)]="dbSearchTeamQuery" (ngModelChange)="resetDbBrowsePagination()">
+                    <mat-option [value]="null">All teams</mat-option>
+                    <mat-option *ngFor="let team of teamOptions" [value]="team.label">{{ team.label }}</mat-option>
+                  </mat-select>
+                </mat-form-field>
               </div>
 
-              <div class="db-search-pagination" *ngIf="filteredDbBrowsePlayers.length > 0">
-                <button mat-stroked-button color="primary" (click)="goToPreviousDbBrowsePage()" [disabled]="dbBrowsePage === 1">
-                  Previous
-                </button>
-                <span>Page {{ dbBrowsePage }} / {{ dbBrowseTotalPages }}</span>
-                <button mat-stroked-button color="primary" (click)="goToNextDbBrowsePage()" [disabled]="dbBrowsePage === dbBrowseTotalPages">
-                  Next
-                </button>
-              </div>
-
-              <div class="db-search-list" *ngIf="filteredDbBrowsePlayers.length > 0; else noDbSearchMatches">
-                <article class="db-search-card" *ngFor="let player of pagedDbBrowsePlayers">
-                  <div class="db-search-card-header">
-                    <div>
-                      <div class="db-search-player-name">{{ player.name || 'Unnamed Player' }}</div>
-                      <div class="db-search-player-meta">ID {{ player.hexId }} | OVR {{ player.ovr }} | {{ player.positionLabel }}</div>
-                    </div>
-                    <button mat-stroked-button color="primary" (click)="openDbBrowsePlayer(player.index)">Edit</button>
-                  </div>
-                  <div class="db-search-card-details">
-                    <span>Nationality {{ getNationalityLabel(player.nationalityId) }}</span>
-                    <span>Clubs {{ player.clubs.length > 0 ? player.clubs.join(', ') : 'None' }}</span>
-                  </div>
-                </article>
-              </div>
-
-              <ng-template #noDbSearchMatches>
-                <p class="team-empty-state">No players match the current filters.</p>
-              </ng-template>
-            </div>
-
-              </mat-card-content>
-            </mat-card>
-
-          </mat-card-content>
-        </mat-card>
-      </div>
-    </mat-tab>
-
-    <!-- ═══ TAB 2 — TEAM BROWSER ══════════════════════════════ -->
-    <mat-tab label="Team Browser">
-      <div class="editor-tab-content">
-        <mat-card class="section-card team-editor-card">
-          <mat-card-content>
-            <mat-card class="section-card">
-              <mat-card-header>
-                <mat-card-title>Team Browser</mat-card-title>
-              </mat-card-header>
-              <mat-card-content>
-                <div class="db-search-filters db-search-filters--3col team-browser-filters">
-                  <mat-form-field appearance="outline">
-                    <mat-label>League</mat-label>
-                    <mat-select [(ngModel)]="teamBrowseLeagueQuery">
-                      <mat-option [value]="null">All leagues</mat-option>
-                      <mat-option *ngFor="let league of leagueOptions" [value]="league.value">{{ league.label }}</mat-option>
-                    </mat-select>
-                  </mat-form-field>
-                  <div class="team-browser-summary">
-                    {{ filteredTeamBrowseItems.length }} teams
-                  </div>
+              <div class="db-search-results">
+                <div class="db-search-summary">
+                  <span>
+                    {{ filteredDbBrowsePlayers.length }} players
+                    <ng-container *ngIf="filteredDbBrowsePlayers.length > 0">
+                      | {{ dbBrowseRangeStart }}–{{ dbBrowseRangeEnd }}
+                    </ng-container>
+                  </span>
+                  <button mat-stroked-button color="accent" (click)="createDbBrowsePlayer()" [disabled]="!fileLoaded">
+                    <mat-icon>person_add</mat-icon>
+                    NEW PLAYER
+                  </button>
                 </div>
 
-                <div class="db-search-list" *ngIf="filteredTeamBrowseItems.length > 0; else noTeamBrowseMatches">
-                  <article class="db-search-card" *ngFor="let team of filteredTeamBrowseItems">
-                    <div class="db-search-card-header team-browser-card-header">
-                      <div class="team-browser-title-row">
-                        <div class="db-search-player-name">{{ team.teamLabel }}</div>
-                        <span
-                          class="team-browser-competition-badge"
-                          [ngClass]="{
-                            'team-browser-competition-badge--ucl': team.europeanCompetition === 1,
-                            'team-browser-competition-badge--uel': team.europeanCompetition === 2,
-                            'team-browser-competition-badge--none': team.europeanCompetition !== 1 && team.europeanCompetition !== 2
-                          }">
-                          {{ getEuropeanCompetitionBadgeLabel(team.europeanCompetition) }}
-                        </span>
+                <div class="db-search-pagination" *ngIf="filteredDbBrowsePlayers.length > 0">
+                  <button mat-stroked-button color="primary" (click)="goToPreviousDbBrowsePage()" [disabled]="dbBrowsePage === 1">
+                    Previous
+                  </button>
+                  <span>Page {{ dbBrowsePage }} / {{ dbBrowseTotalPages }}</span>
+                  <button mat-stroked-button color="primary" (click)="goToNextDbBrowsePage()" [disabled]="dbBrowsePage === dbBrowseTotalPages">
+                    Next
+                  </button>
+                </div>
+
+                <div class="db-search-list" *ngIf="filteredDbBrowsePlayers.length > 0; else noDbSearchMatches">
+                  <article class="db-search-card" *ngFor="let player of pagedDbBrowsePlayers">
+                    <div class="db-search-card-header">
+                      <div>
+                        <div class="db-search-player-name">{{ player.name || 'Unnamed Player' }}</div>
+                        <div class="db-search-player-meta">ID {{ player.hexId }} | OVR {{ player.ovr }} | {{ player.positionLabel }}</div>
                       </div>
-                      <button mat-stroked-button color="primary" (click)="openTeamFromBrowser(team)">Edit</button>
+                      <button mat-stroked-button color="primary" (click)="openDbBrowsePlayer(player.index)">Edit</button>
                     </div>
-                    <div class="team-browser-ovrs">
-                      <span class="team-browser-ovr-pill team-browser-ovr-pill--attack">ATT {{ team.attackOvr }}</span>
-                      <span class="team-browser-ovr-pill team-browser-ovr-pill--midfield">MID {{ team.midfieldOvr }}</span>
-                      <span class="team-browser-ovr-pill team-browser-ovr-pill--defense">DEF {{ team.defenseOvr }}</span>
+                    <div class="db-search-card-details">
+                      <span>Nationality {{ getNationalityLabel(player.nationalityId) }}</span>
+                      <span>Clubs {{ player.clubs.length > 0 ? player.clubs.join(', ') : 'None' }}</span>
                     </div>
                   </article>
                 </div>
 
-                <ng-template #noTeamBrowseMatches>
-                  <p class="team-empty-state">No teams match the current league filter.</p>
+                <ng-template #noDbSearchMatches>
+                  <p class="team-empty-state">No players match the current filters.</p>
                 </ng-template>
-              </mat-card-content>
-            </mat-card>
-          </mat-card-content>
-        </mat-card>
-      </div>
+              </div>
+
+                </mat-card-content>
+              </mat-card>
+
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </ng-template>
     </mat-tab>
+
+    <!-- ═══ TAB 2 — TEAM BROWSER ══════════════════════════════ -->
+    <mat-tab *ngIf="allFilesLoaded" label="Team Browser">
+      <ng-template matTabContent>
+        <div class="editor-tab-content">
+          <mat-card class="section-card team-editor-card">
+            <mat-card-content>
+              <mat-card class="section-card">
+                <mat-card-header>
+                  <mat-card-title>Team Browser</mat-card-title>
+                </mat-card-header>
+                <mat-card-content>
+                  <div class="db-search-filters db-search-filters--3col team-browser-filters">
+                    <mat-form-field appearance="outline">
+                      <mat-label>League</mat-label>
+                      <mat-select [(ngModel)]="teamBrowseLeagueQuery" (ngModelChange)="resetTeamBrowsePagination()">
+                        <mat-option [value]="null">All leagues</mat-option>
+                        <mat-option *ngFor="let league of leagueOptions" [value]="league.value">{{ league.label }}</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                    <div class="team-browser-summary">
+                      {{ filteredTeamBrowseItems.length }} teams
+                      <ng-container *ngIf="filteredTeamBrowseItems.length > 0">
+                        | {{ teamBrowseRangeStart }}-{{ teamBrowseRangeEnd }}
+                      </ng-container>
+                    </div>
+                  </div>
+
+                  <div class="db-search-pagination" *ngIf="filteredTeamBrowseItems.length > 0">
+                    <button mat-stroked-button color="primary" (click)="goToPreviousTeamBrowsePage()" [disabled]="teamBrowseCurrentPage === 1">
+                      Previous
+                    </button>
+                    <span>Page {{ teamBrowseCurrentPage }} / {{ teamBrowseTotalPages }}</span>
+                    <button mat-stroked-button color="primary" (click)="goToNextTeamBrowsePage()" [disabled]="teamBrowseCurrentPage === teamBrowseTotalPages">
+                      Next
+                    </button>
+                  </div>
+
+                  <div class="db-search-list" *ngIf="filteredTeamBrowseItems.length > 0; else noTeamBrowseMatches">
+                    <article class="db-search-card" *ngFor="let team of pagedTeamBrowseItems">
+                      <div class="db-search-card-header team-browser-card-header">
+                        <div class="team-browser-header-main">
+                          <div class="team-browser-logo-frame" *ngIf="getTeamLogoEntry(team.teamId, 'thumb') as teamLogoEntry">
+                            <img
+                              *ngIf="getPakEntryPreviewUrl(teamLogoEntry) as previewUrl"
+                              [src]="previewUrl"
+                              [alt]="team.teamLabel + ' logo'"
+                              class="team-browser-logo-image">
+                          </div>
+                          <div class="team-browser-title-row">
+                            <div class="db-search-player-name">{{ team.teamLabel }}</div>
+                            <span
+                              class="team-browser-competition-badge"
+                              [ngClass]="{
+                                'team-browser-competition-badge--ucl': team.europeanCompetition === 1,
+                                'team-browser-competition-badge--uel': team.europeanCompetition === 2,
+                                'team-browser-competition-badge--none': team.europeanCompetition !== 1 && team.europeanCompetition !== 2
+                              }">
+                              {{ getEuropeanCompetitionBadgeLabel(team.europeanCompetition) }}
+                            </span>
+                          </div>
+                        </div>
+                        <button mat-stroked-button color="primary" (click)="openTeamFromBrowser(team)">Edit</button>
+                      </div>
+                      <div class="team-browser-ovrs">
+                        <span class="team-browser-ovr-pill team-browser-ovr-pill--attack">ATT {{ team.attackOvr }}</span>
+                        <span class="team-browser-ovr-pill team-browser-ovr-pill--midfield">MID {{ team.midfieldOvr }}</span>
+                        <span class="team-browser-ovr-pill team-browser-ovr-pill--defense">DEF {{ team.defenseOvr }}</span>
+                      </div>
+                    </article>
+                  </div>
+
+                  <ng-template #noTeamBrowseMatches>
+                    <p class="team-empty-state">No teams match the current league filter.</p>
+                  </ng-template>
+                </mat-card-content>
+              </mat-card>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </ng-template>
+    </mat-tab>
+
 
   </mat-tab-group>
 </div>

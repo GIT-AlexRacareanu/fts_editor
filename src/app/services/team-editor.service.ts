@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 
-import { TEAM_NAMES_BY_ID } from '../data/team-names';
 import { TeamOption, TeamRecord, TeamSlot } from '../models/team-editor.model';
 import { FileHandleStorageService } from './file-handle-storage.service';
 
@@ -194,7 +193,7 @@ export class TeamEditorService {
       .map(({ offset }) => this.getTeam(offset));
   }
 
-  getPlayerClubMap(): Map<number, string[]> {
+  getPlayerClubMap(labelResolver?: (teamId: number, fallbackLabel: string) => string): Map<number, string[]> {
     const playerClubMap = new Map<number, Set<string>>();
 
     if (!this.binaryData) {
@@ -203,6 +202,7 @@ export class TeamEditorService {
 
     this.teamOptions.forEach(({ offset }) => {
       const team = this.getTeam(offset);
+      const teamLabel = labelResolver ? labelResolver(team.teamId, team.teamLabel) : team.teamLabel;
 
       team.slots.forEach((slot) => {
         if (slot.isEmpty) {
@@ -213,7 +213,7 @@ export class TeamEditorService {
           playerClubMap.set(slot.playerId, new Set<string>());
         }
 
-        playerClubMap.get(slot.playerId)?.add(team.teamLabel);
+        playerClubMap.get(slot.playerId)?.add(teamLabel);
       });
     });
 
@@ -671,8 +671,7 @@ export class TeamEditorService {
       return 'Empty Team';
     }
 
-    const teamName = TEAM_NAMES_BY_ID[teamId];
-    return teamName ? `${teamName} (ID ${teamId})` : `Team ${teamId}`;
+    return `Team ${teamId}`;
   }
 
   private getView(): DataView {

@@ -242,10 +242,18 @@ export class PlayerService {
       return -1;
     }
 
+    return this.findPlayerIndexByStoredId(parsed);
+  }
+
+  findPlayerIndexByStoredId(storedId: number): number {
+    if (!Number.isFinite(storedId) || storedId < 0 || storedId > 0xffff) {
+      return -1;
+    }
+
     const total = this.totalPlayers;
 
     for (let index = 0; index < total; index += 1) {
-      if (this.getStoredPlayerId(index) === parsed) {
+      if (this.getStoredPlayerId(index) === storedId) {
         return index;
       }
     }

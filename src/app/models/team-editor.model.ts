@@ -19,6 +19,8 @@ export interface TeamRecord {
   offset: number;
   teamId: number;
   teamLabel: string;
+  teamShortName?: string;
+  teamLongName?: string;
   playerCount: number;
   slots: TeamSlot[];
 }

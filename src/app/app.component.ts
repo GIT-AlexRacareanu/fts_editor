@@ -1,13 +1,16 @@
-import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { FORMATION_PRESETS, FormationPreset } from './data/formations';
 import { NATIONALITY_NAMES_BY_ID, NATIONALITY_OPTIONS } from './data/nationalities';
 import { Player } from './models/player.model';
 import { TeamRecord, TeamSlot } from './models/team-editor.model';
 import { TeamsDatRecord } from './models/teams-dat.model';
 import { ImportedPlayerRecord, PlayerImportService } from './services/player-import.service';
+import { PakEditorService, PakEntry } from './services/pak-editor.service';
 import { OvrCategory, OvrTuningConfig, PlayerService } from './services/player.service';
 import { TeamEditorService } from './services/team-editor.service';
 import { TeamsDatService } from './services/teams-dat.service';
+import { XlcEditorService } from './services/xlc-editor.service';
 
 const FORMATION_VALUE_BY_ID: Record<number, string> = {
   0: '4-4-2',
@@ -114,11 +117,16 @@ type TeamsRoleField = 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'pe
   selector: 'app-root',
   templateUrl: './app.component.html'
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('popupNameInput') popupNameInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('teamLogoFileInput') teamLogoFileInput?: ElementRef<HTMLInputElement>;
 
   private readonly importAssetUrl = 'assets/import/import_2.csv';
   private readonly bulkImportDummyPlayerCount = 18;
+  private readonly teamLongNamePrefix = 'TXT_TEAMNAMELONG_';
+  private readonly teamMediumNamePrefix = 'TXT_TEAMNAMEMED_';
+  private readonly teamShortNamePrefix = 'TXT_TEAMNAMESHORT_';
+  private runtimeDebugHandlersRegistered = false;
 
   // ─── App flow ────────────────────────────────────────────────
   showInitPage = true;
@@ -151,6 +159,11 @@ export class AppComponent implements OnInit {
   teamImportPreviewPlayersCache: ImportedPlayerRecord[] = [];
   teamImportMappedPreviewCache: TeamImportMappedPreviewItem[] = [];
 
+  // ─── PAK ─────────────────────────────────────────────────────
+  pakFileName = '';
+  pakStatusMessage = '';
+  pendingTeamLogoImportTeamId: number | null = null;
+
   // ─── DB Browser ──────────────────────────────────────────────
   dbSearchNameQuery = '';
   dbSearchNationalityQuery: number | null = null;
@@ -159,6 +172,7 @@ export class AppComponent implements OnInit {
   dbBrowsePage = 1;
   dbBrowsePlayers: DbBrowsePlayer[] = [];
   teamBrowseLeagueQuery: number | null = null;
+  teamBrowsePage = 1;
 
   // ─── Team Editor ─────────────────────────────────────────────
   teamSearchQuery = '';
@@ -175,10 +189,17 @@ export class AppComponent implements OnInit {
   teamKitDialogRecordIndex: number | null = null;
   teamKitDialogTabIndex = 0;
 
+  // ─── XLC Names ───────────────────────────────────────────────
+  xlcFileName = '';
+  xlcStatusMessage = '';
+
   // ─── Shared ──────────────────────────────────────────────────
   private readonly teamPlayerNameCache = new Map<number, string | null>();
   private readonly formationSketchCache = new WeakMap<TeamRecord, FormationSketch>();
+  private readonly pakPreviewUrlCache = new Map<string, SafeUrl>();
+  private readonly pakPreviewObjectUrlCache = new Map<string, string>();
   private readonly dbBrowsePageSize = 25;
+  private readonly teamBrowsePageSize = 25;
   private readonly importSearchPageSize = 50;
   private readonly importSearchMinLength = 3;
 
@@ -310,35 +331,69 @@ export class AppComponent implements OnInit {
   readonly europeanCompetitionOptions = this.teamsDatService.europeanCompetitionOptions;
 
   constructor(
+    private readonly ngZone: NgZone,
+    private readonly changeDetectorRef: ChangeDetectorRef,
     public playerService: PlayerService,
     public playerImportService: PlayerImportService,
+    public pakEditorService: PakEditorService,
     public teamEditorService: TeamEditorService,
-    public teamsDatService: TeamsDatService
+    public teamsDatService: TeamsDatService,
+    public xlcEditorService: XlcEditorService,
+    private readonly domSanitizer: DomSanitizer
   ) {}
 
   ngOnInit(): void {
     this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
+    this.registerRuntimeDebugHandlers();
     void this.initializeApp();
+  }
+
+  ngOnDestroy(): void {
+    this.clearPakPreviewCache();
   }
 
   // ─── App flow ─────────────────────────────────────────────────
 
   get allFilesLoaded(): boolean {
-    return this.fileLoaded && this.teamFileLoaded && this.teamsDatLoaded;
+    return this.fileLoaded && this.teamFileLoaded && this.teamsDatLoaded && this.pakLoaded;
+  }
+
+  get canEnterEditor(): boolean {
+    return this.allFilesLoaded;
   }
 
   enterMainApp(): void {
-    this.showInitPage = false;
+    console.log('[InitLoad] enterMainApp() called. allFilesLoaded:', this.allFilesLoaded, 'showInitPage before:', this.showInitPage);
+    this.runInAngular(() => {
+      this.showInitPage = false;
+    });
+    console.log('[InitLoad] enterMainApp() completed. showInitPage now:', this.showInitPage);
   }
 
   goToInitPage(): void {
-    this.showInitPage = true;
+    this.runInAngular(() => {
+      this.showInitPage = true;
+    });
   }
 
   private checkAutoTransition(): void {
-    if (this.allFilesLoaded) {
-      this.showInitPage = false;
+    console.log('[InitLoad] checkAutoTransition() called. canEnterEditor:', this.canEnterEditor, 'showInitPage before:', this.showInitPage);
+    if (this.canEnterEditor) {
+      this.runInAngular(() => {
+        this.showInitPage = false;
+      });
+      console.log('[InitLoad] auto-transitioned to main editor. showInitPage now:', this.showInitPage);
     }
+  }
+
+  private runInAngular(action: () => void): void {
+    if (NgZone.isInAngularZone()) {
+      action();
+    } else {
+      this.ngZone.run(action);
+    }
+
+    this.changeDetectorRef.detectChanges();
   }
 
   // ─── File state getters ───────────────────────────────────────
@@ -359,6 +414,43 @@ export class AppComponent implements OnInit {
     return this.teamsDatService.hasData;
   }
 
+  get xlcLoaded(): boolean {
+    return this.xlcEditorService.hasData;
+  }
+
+  get pakLoaded(): boolean {
+    return this.pakEditorService.hasData;
+  }
+
+  getTeamLogoEntry(teamId: number, variant: 'main' | 'thumb' = 'main'): PakEntry | null {
+    return this.pakEditorService.getTeamLogoEntry(teamId, variant);
+  }
+
+  getPakEntryPreviewUrl(entry: PakEntry): SafeUrl | null {
+    if (!/\.(png|jpg|jpeg|webp|gif)$/i.test(entry.name)) {
+      return null;
+    }
+
+    const cachedUrl = this.pakPreviewUrlCache.get(entry.path);
+
+    if (cachedUrl) {
+      return cachedUrl;
+    }
+
+    try {
+      const bytes = this.pakEditorService.extractEntry(entry);
+      const blob = new Blob([bytes], { type: this.getPakImageMimeType(entry.name) });
+      const objectUrl = URL.createObjectURL(blob);
+      const safeUrl = this.domSanitizer.bypassSecurityTrustUrl(objectUrl);
+      this.pakPreviewObjectUrlCache.set(entry.path, objectUrl);
+      this.pakPreviewUrlCache.set(entry.path, safeUrl);
+      return safeUrl;
+    } catch (error) {
+      console.error('[Pak] failed to build preview URL for entry:', entry.path, error);
+      return null;
+    }
+  }
+
   get selectedTeamsDatRecord(): TeamsDatRecord | null {
     if (!this.teamsDatLoaded || this.selectedTeamsDatIndex === null) {
       return null;
@@ -373,11 +465,15 @@ export class AppComponent implements OnInit {
     const selectedTeam = this.displayedTeams.find((team) => team.teamId === baseRecord.teamId);
 
     if (!selectedTeam) {
-      return baseRecord;
+      return {
+        ...baseRecord,
+        teamLabel: this.getTeamDisplayLabel(baseRecord.teamId)
+      };
     }
 
     return {
       ...baseRecord,
+      teamLabel: selectedTeam?.teamLabel ?? this.getTeamDisplayLabel(baseRecord.teamId),
       captainRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'captainRole'),
       leftCornerRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'leftCornerRole'),
       rightCornerRole: this.resolveEffectiveRolePlayerId(selectedTeam, baseRecord, 'rightCornerRole'),
@@ -391,22 +487,35 @@ export class AppComponent implements OnInit {
       return null;
     }
 
-    return this.teamsDatService.records[this.teamKitDialogRecordIndex] ?? null;
+    const record = this.teamsDatService.records[this.teamKitDialogRecordIndex] ?? null;
+
+    return record
+      ? { ...record, teamLabel: this.getTeamDisplayLabel(record.teamId) }
+      : null;
   }
 
   get teamsDatOptions(): { value: number; label: string }[] {
     return this.teamsDatService.teamOptions;
   }
 
+  teamOptions: { label: string; offset: number }[] = [];
+
   // Stable list: rebuilt only when teams.dat data changes
   rivalOptions: { value: number; label: string }[] = [];
 
-  private rebuildRivalOptions(): void {
-    this.rivalOptions = this.teamsDatService.records.map((r) => ({ value: r.teamId, label: r.teamLabel }));
+  private rebuildTeamOptions(): void {
+    this.teamOptions = this.teamEditorService.teamOptions.map((option) => {
+      const teamId = this.teamEditorService.getTeam(option.offset).teamId;
+
+      return {
+        offset: option.offset,
+        label: this.getTeamLongSelectLabel(teamId)
+      };
+    });
   }
 
-  get teamOptions(): { label: string; offset: number }[] {
-    return this.teamEditorService.teamOptions;
+  private rebuildRivalOptions(): void {
+    this.rivalOptions = this.teamsDatService.records.map((r) => ({ value: r.teamId, label: this.getTeamSelectLabel(r.teamId) }));
   }
 
   // ─── Player Edit Popup ────────────────────────────────────────
@@ -477,12 +586,13 @@ export class AppComponent implements OnInit {
 
     const currentConfig = this.ovrTuningConfig.find((config) => config.category === category);
 
-    if (!currentConfig) {
+    if (!currentConfig || weightIndex < 0 || weightIndex >= currentConfig.weights.length) {
       return;
     }
 
     const nextWeights = [...currentConfig.weights];
     nextWeights[weightIndex] = parsed;
+
     this.playerService.setOvrProfile(category, { weights: nextWeights });
     this.refreshOvrTuningState();
   }
@@ -794,29 +904,7 @@ export class AppComponent implements OnInit {
   }
 
   private resolveImportedTeamPlayerIndex(sourcePlayer: ImportedPlayerRecord): number {
-    if (sourcePlayer.hasExplicitPlayerId) {
-      const parsedPlayerId = this.playerService.parsePlayerId(sourcePlayer.playerId);
-
-      if (parsedPlayerId >= 0) {
-        return parsedPlayerId;
-      }
-    }
-
-    for (const candidateName of this.getImportedPlayerNameCandidates(sourcePlayer)) {
-      const matchedByName = this.playerService.findPlayerIndexByName(candidateName);
-
-      if (matchedByName >= 0) {
-        return matchedByName;
-      }
-    }
-
-    const csvRowMappedIndex = this.resolveImportedPlayerIndexFromCsvRow(sourcePlayer);
-
-    if (csvRowMappedIndex >= 0) {
-      return csvRowMappedIndex;
-    }
-
-    return -1;
+    return this.resolveImportedPlayerIndexFromCsvRow(sourcePlayer);
   }
 
   private resolveImportedPlayerIndexFromCsvRow(sourcePlayer: ImportedPlayerRecord): number {
@@ -824,7 +912,7 @@ export class AppComponent implements OnInit {
       return -1;
     }
 
-    const importOrderIndex = this.importedPlayers.indexOf(sourcePlayer);
+    const importOrderIndex = this.getImportedPlayersInCsvOrder().indexOf(sourcePlayer);
 
     if (importOrderIndex < 0) {
       return -1;
@@ -848,6 +936,19 @@ export class AppComponent implements OnInit {
     }
 
     return true;
+  }
+
+  private getImportedPlayersInCsvOrder(): ImportedPlayerRecord[] {
+    return [...this.importedPlayers].sort((left, right) => {
+      const leftRow = left.sourceRowIndex ?? Number.MAX_SAFE_INTEGER;
+      const rightRow = right.sourceRowIndex ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftRow !== rightRow) {
+        return leftRow - rightRow;
+      }
+
+      return left.shortName.localeCompare(right.shortName);
+    });
   }
 
   private getImportedPlayerNameCandidates(sourcePlayer: ImportedPlayerRecord): string[] {
@@ -950,14 +1051,6 @@ export class AppComponent implements OnInit {
       })[0];
   }
 
-  private removeImportedPlayerChoice(players: TeamImportResolvedPlayer[], chosenPlayer: TeamImportResolvedPlayer): void {
-    const chosenIndex = players.findIndex((player) => player.playerIndex === chosenPlayer.playerIndex);
-
-    if (chosenIndex !== -1) {
-      players.splice(chosenIndex, 1);
-    }
-  }
-
   private getCompatibleImportPositions(targetPosition: number): number[] {
     switch (targetPosition) {
       case 0:
@@ -1004,6 +1097,22 @@ export class AppComponent implements OnInit {
         return [22, 18, 19, 14, 15, 11, 12, 13];
       default:
         return [targetPosition];
+    }
+  }
+
+  private removeImportedPlayerChoice(players: TeamImportResolvedPlayer[], chosenPlayer: TeamImportResolvedPlayer): void {
+    for (let index = players.length - 1; index >= 0; index--) {
+      const player = players[index];
+
+      if (player === chosenPlayer) {
+        players.splice(index, 1);
+        return;
+      }
+
+      if (player.playerIndex === chosenPlayer.playerIndex && player.sourceOrder === chosenPlayer.sourceOrder) {
+        players.splice(index, 1);
+        return;
+      }
     }
   }
 
@@ -1076,6 +1185,11 @@ export class AppComponent implements OnInit {
       return;
     }
 
+    if (!this.hasBulkImportedPlayerLayout()) {
+      alert('Bulk replace PLAYERS.DAT from this CSV first so team import can link players by CSV row order.');
+      return;
+    }
+
     const resolvedPlayers = this.getResolvedTeamImportPlayers();
     const cappedCount = Math.min(csvPlayers.length, 32);
     const matchedCount = resolvedPlayers.length;
@@ -1142,7 +1256,7 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    const sourcePlayers = this.importedPlayers;
+    const sourcePlayers = this.getImportedPlayersInCsvOrder();
     const shouldContinue = confirm(
       `This will fully replace PLAYERS.DAT players with ${sourcePlayers.length} imported players from ${this.importSourceFileName || this.importAssetUrl}, update the player count header, and download players.dat. Continue?`
     );
@@ -1231,7 +1345,7 @@ export class AppComponent implements OnInit {
       .map((record) => ({
         index: record.index,
         teamId: record.teamId,
-        teamLabel: record.teamLabel,
+        teamLabel: this.getTeamLongDisplayLabel(record.teamId),
         leagueId: record.leagueId,
         rivalId: record.rivalId,
         stadiumName: record.stadiumName,
@@ -1250,6 +1364,31 @@ export class AppComponent implements OnInit {
 
         return left.teamLabel.localeCompare(right.teamLabel);
       });
+  }
+
+  get pagedTeamBrowseItems(): TeamBrowseItem[] {
+    const startIndex = (this.teamBrowseCurrentPage - 1) * this.teamBrowsePageSize;
+    return this.filteredTeamBrowseItems.slice(startIndex, startIndex + this.teamBrowsePageSize);
+  }
+
+  get teamBrowseTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredTeamBrowseItems.length / this.teamBrowsePageSize));
+  }
+
+  get teamBrowseCurrentPage(): number {
+    return Math.min(this.teamBrowsePage, this.teamBrowseTotalPages);
+  }
+
+  get teamBrowseRangeStart(): number {
+    if (this.filteredTeamBrowseItems.length === 0) {
+      return 0;
+    }
+
+    return (this.teamBrowseCurrentPage - 1) * this.teamBrowsePageSize + 1;
+  }
+
+  get teamBrowseRangeEnd(): number {
+    return Math.min(this.teamBrowseCurrentPage * this.teamBrowsePageSize, this.filteredTeamBrowseItems.length);
   }
 
   get pagedDbBrowsePlayers(): DbBrowsePlayer[] {
@@ -1348,12 +1487,30 @@ export class AppComponent implements OnInit {
     }
   }
 
+  resetTeamBrowsePagination(): void {
+    this.teamBrowsePage = 1;
+  }
+
+  goToPreviousTeamBrowsePage(): void {
+    if (this.teamBrowseCurrentPage > 1) {
+      this.teamBrowsePage = this.teamBrowseCurrentPage - 1;
+    }
+  }
+
+  goToNextTeamBrowsePage(): void {
+    if (this.teamBrowseCurrentPage < this.teamBrowseTotalPages) {
+      this.teamBrowsePage = this.teamBrowseCurrentPage + 1;
+    }
+  }
+
   // ─── File loading ─────────────────────────────────────────────
 
   private async getDirectoryFileHandle(dirHandle: any, expectedNames: string[]): Promise<any> {
     for (const expectedName of expectedNames) {
       try {
-        return await dirHandle.getFileHandle(expectedName);
+        const handle = await dirHandle.getFileHandle(expectedName);
+        console.log('[InitLoad] exact file match:', expectedName);
+        return handle;
       } catch {
         // Try the next casing variant.
       }
@@ -1364,12 +1521,84 @@ export class AppComponent implements OnInit {
     if (typeof dirHandle.entries === 'function') {
       for await (const [entryName, entryHandle] of dirHandle.entries()) {
         if (entryHandle?.kind === 'file' && normalizedExpectedNames.has(entryName.toLowerCase())) {
+          console.log('[InitLoad] case-insensitive file match:', entryName);
           return entryHandle;
         }
       }
     }
 
     throw new Error(`File not found: ${expectedNames[0]}`);
+  }
+
+  private normalizeFileName(fileName: string): string {
+    return fileName.toLowerCase().replace(/[^a-z0-9]+/gu, '');
+  }
+
+  private async getTeamNamesXlcHandle(dirHandle: any): Promise<any> {
+    const preferredNames = ['ftsteamnames.xlc', 'FTSTEAMNAMES.XLC', 'teamnames.xlc', 'TEAMNAMES.XLC'];
+    console.log('[InitLoad] looking for team names XLC. Preferred names:', preferredNames.join(', '));
+
+    try {
+      return await this.getDirectoryFileHandle(dirHandle, preferredNames);
+    } catch {
+      // Fall through to a normalized scan so minor naming differences still resolve.
+    }
+
+    const normalizedPreferredNames = new Set([
+      this.normalizeFileName('ftsteamnames.xlc'),
+      this.normalizeFileName('teamnames.xlc')
+    ]);
+
+    if (typeof dirHandle.entries === 'function') {
+      for await (const [entryName, entryHandle] of dirHandle.entries()) {
+        if (entryHandle?.kind !== 'file') {
+          continue;
+        }
+
+        const normalizedEntryName = this.normalizeFileName(entryName);
+        console.log('[InitLoad] scanning candidate file:', entryName, 'normalized:', normalizedEntryName);
+        if (normalizedPreferredNames.has(normalizedEntryName)) {
+          console.log('[InitLoad] normalized team names XLC match:', entryName);
+          return entryHandle;
+        }
+      }
+    }
+
+    throw new Error('File not found: ftsteamnames.xlc');
+  }
+
+  private async getPakHandle(dirHandle: any): Promise<any> {
+    const preferredNames = ['teams.pak', 'TEAMS.PAK'];
+    console.log('[InitLoad] looking for PAK. Preferred names:', preferredNames.join(', '));
+
+    try {
+      const handle = await this.getDirectoryFileHandle(dirHandle, preferredNames);
+      console.log('[InitLoad] exact PAK match found via preferred names.');
+      return handle;
+    } catch {
+      console.log('[InitLoad] exact PAK match not found. Falling back to normalized scan.');
+      // Fall through to normalized lookup for case and punctuation variations.
+    }
+
+    const normalizedPreferredName = this.normalizeFileName('teams.pak');
+
+    if (typeof dirHandle.entries === 'function') {
+      for await (const [entryName, entryHandle] of dirHandle.entries()) {
+        if (entryHandle?.kind !== 'file') {
+          continue;
+        }
+
+        const normalizedEntryName = this.normalizeFileName(entryName);
+        console.log('[InitLoad] scanning PAK candidate:', entryName, 'normalized:', normalizedEntryName);
+
+        if (normalizedEntryName === normalizedPreferredName) {
+          console.log('[InitLoad] normalized PAK match:', entryName);
+          return entryHandle;
+        }
+      }
+    }
+
+    throw new Error('File not found: teams.pak');
   }
 
   async openFolder(): Promise<void> {
@@ -1389,29 +1618,73 @@ export class AppComponent implements OnInit {
     }
 
     const errors: string[] = [];
+  console.log('[InitLoad] folder selected, starting file load sequence.');
 
     try {
+      console.log('[InitLoad] loading PLAYERS.DAT...');
       const handle = await this.getDirectoryFileHandle(dirHandle, ['PLAYERS.DAT', 'players.dat']);
       await this.playerService.loadFile(handle);
       this.applyPlayerFileLoaded();
+      console.log('[InitLoad] PLAYERS.DAT loaded.');
     } catch (err: any) {
+      console.error('[InitLoad] PLAYERS.DAT load failed:', err);
       errors.push(`PLAYERS.DAT: ${err.message || 'not found'}`);
     }
 
     try {
+      console.log('[InitLoad] loading TEAMPLAYERLINKS_0.dat...');
       const handle = await this.getDirectoryFileHandle(dirHandle, ['TEAMPLAYERLINKS_0.dat', 'TEAMPLAYERLINKS_0.DAT', 'teamplayerlinks_0.dat']);
       await this.teamEditorService.loadFile(handle);
       this.applyTeamFileLoaded();
+      console.log('[InitLoad] TEAMPLAYERLINKS_0.dat loaded.');
     } catch (err: any) {
+      console.error('[InitLoad] TEAMPLAYERLINKS_0.dat load failed:', err);
       errors.push(`TEAMPLAYERLINKS_0.dat: ${err.message || 'not found'}`);
     }
 
     try {
+      console.log('[InitLoad] loading TEAMS.DAT...');
       const handle = await this.getDirectoryFileHandle(dirHandle, ['TEAMS.DAT', 'teams.dat']);
       await this.teamsDatService.loadFile(handle);
       this.applyTeamsDatLoaded();
+      console.log('[InitLoad] TEAMS.DAT loaded.');
     } catch (err: any) {
+      console.error('[InitLoad] TEAMS.DAT load failed:', err);
       errors.push(`TEAMS.DAT: ${err.message || 'not found'}`);
+    }
+
+    try {
+      console.log('[InitLoad] loading team names XLC...');
+      const handle = await this.getTeamNamesXlcHandle(dirHandle);
+      const fileName = await this.xlcEditorService.loadFile(handle);
+      this.applyXlcLoaded(fileName);
+      this.xlcStatusMessage = `Loaded ${fileName}.`;
+      console.log('[InitLoad] team names XLC loaded:', fileName);
+    } catch (err: any) {
+      this.clearXlcLoaded();
+
+      const message = err?.message || 'Failed to load the team names XLC file.';
+      this.xlcStatusMessage = message.startsWith('File not found:')
+        ? 'Could not find ftsteamnames.xlc or teamnames.xlc in the selected folder.'
+        : message;
+      console.error('[InitLoad] team names XLC load failed:', err);
+      console.log('[InitLoad] team names XLC status message:', this.xlcStatusMessage);
+    }
+
+    try {
+      console.log('[InitLoad] loading PAK...');
+      const handle = await this.getPakHandle(dirHandle);
+      const fileName = await this.pakEditorService.loadFile(handle);
+      this.applyPakLoaded(fileName);
+      this.pakStatusMessage = `Loaded ${fileName}.`;
+      console.log('[InitLoad] PAK loaded:', fileName);
+    } catch (err: any) {
+      this.clearPakLoaded();
+      const message = err?.message || 'Could not find teams.pak in the selected folder.';
+      this.pakStatusMessage = message;
+      console.error('[InitLoad] PAK load failed:', err);
+      console.log('[InitLoad] PAK status message:', this.pakStatusMessage);
+      errors.push(`teams.pak: ${message}`);
     }
 
     if (errors.length > 0) {
@@ -1491,6 +1764,12 @@ export class AppComponent implements OnInit {
       await this.playerService.saveCurrentToSameFile();
       await this.teamEditorService.saveToSameFile();
       await this.teamsDatService.saveToSameFile();
+      if (this.xlcLoaded) {
+        await this.xlcEditorService.saveToSameFile();
+      }
+      if (this.pakLoaded) {
+        await this.pakEditorService.saveToSameFile();
+      }
       alert('Files overwritten successfully.');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
@@ -1655,20 +1934,17 @@ export class AppComponent implements OnInit {
       return false;
     }
 
-    const sketch = this.getFormationSketch(team);
+    const ratingSlots = this.getActiveTeamSlots(team).slice(0, 18);
     const totals = {
       attack: { sum: 0, count: 0 },
       midfield: { sum: 0, count: 0 },
       defense: { sum: 0, count: 0 }
     };
 
-    sketch.slots.forEach((slot) => {
-      if (!slot.player) {
-        return;
-      }
-
-      const category = this.getTeamRatingCategory(slot.targetPosition);
-      totals[category].sum += slot.player.ovr;
+    ratingSlots.forEach((slot) => {
+      const player = this.playerService.readPlayer(slot.playerId);
+      const category = this.getTeamRatingCategory(slot.position);
+      totals[category].sum += this.playerService.calculateOVR(player);
       totals[category].count += 1;
     });
 
@@ -2078,8 +2354,7 @@ export class AppComponent implements OnInit {
   }
 
   getRivalName(rivalId: number): string {
-    const rival = this.teamsDatService.records.find((r) => r.teamId === rivalId);
-    return rival ? rival.teamLabel : `Team ${rivalId}`;
+    return this.getTeamDisplayLabel(rivalId);
   }
 
   // ─── Pitch player selection / swap ───────────────────────────
@@ -2201,30 +2476,64 @@ export class AppComponent implements OnInit {
   }
 
   private async initializeApp(): Promise<void> {
+    console.log('[InitLoad] initializeApp() start.');
     await this.loadImportSource(false, false);
     await this.restoreRememberedFiles();
+    console.log('[InitLoad] initializeApp() complete.');
   }
 
   private async restoreRememberedFiles(): Promise<void> {
+    console.log('[InitLoad] restoreRememberedFiles() start.');
+
     const restoredPlayerFileName = await this.playerService.tryRestoreLastFile();
     if (restoredPlayerFileName) {
+      console.log('[InitLoad] restored PLAYERS.DAT from remembered handle:', restoredPlayerFileName);
       this.applyPlayerFileLoaded();
+    } else {
+      console.log('[InitLoad] no remembered PLAYERS.DAT handle restored.');
     }
 
     const restoredTeamFileName = await this.teamEditorService.tryRestoreLastFile();
     if (restoredTeamFileName) {
+      console.log('[InitLoad] restored TEAMPLAYERLINKS_0.dat from remembered handle:', restoredTeamFileName);
       this.applyTeamFileLoaded();
+    } else {
+      console.log('[InitLoad] no remembered TEAMPLAYERLINKS_0.dat handle restored.');
     }
 
     const restoredTeamsDatFileName = await this.teamsDatService.tryRestoreLastFile();
     if (restoredTeamsDatFileName) {
+      console.log('[InitLoad] restored TEAMS.DAT from remembered handle:', restoredTeamsDatFileName);
       this.applyTeamsDatLoaded();
+    } else {
+      console.log('[InitLoad] no remembered TEAMS.DAT handle restored.');
     }
+
+    const restoredXlcFileName = await this.xlcEditorService.tryRestoreLastFile();
+    if (restoredXlcFileName) {
+      console.log('[InitLoad] restored team names XLC from remembered handle:', restoredXlcFileName);
+      this.applyXlcLoaded(restoredXlcFileName);
+      this.xlcStatusMessage = `Loaded ${restoredXlcFileName}.`;
+    } else {
+      console.log('[InitLoad] no remembered team names XLC handle restored.');
+    }
+
+    const restoredPakFileName = await this.pakEditorService.tryRestoreLastFile();
+    if (restoredPakFileName) {
+      console.log('[InitLoad] restored PAK from remembered handle:', restoredPakFileName);
+      this.applyPakLoaded(restoredPakFileName);
+      this.pakStatusMessage = `Loaded ${restoredPakFileName}.`;
+    } else {
+      console.log('[InitLoad] no remembered teams.pak handle restored.');
+    }
+
+    console.log('[InitLoad] restoreRememberedFiles() complete. pakLoaded:', this.pakLoaded);
 
     this.checkAutoTransition();
   }
 
   private applyPlayerFileLoaded(): void {
+    console.log('[InitLoad] applyPlayerFileLoaded()');
     this.teamPlayerNameCache.clear();
     this.refreshDbBrowsePlayers();
     this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
@@ -2233,6 +2542,8 @@ export class AppComponent implements OnInit {
   }
 
   private applyTeamFileLoaded(): void {
+    console.log('[InitLoad] applyTeamFileLoaded(). team options:', this.teamEditorService.teamOptions.length);
+    this.rebuildTeamOptions();
     this.refreshDbBrowsePlayers();
     this.selectedTeamOffset = this.teamOptions.length > 0 ? this.teamOptions[0].offset : null;
     this.displayedTeams = this.selectedTeamOffset === null
@@ -2243,12 +2554,297 @@ export class AppComponent implements OnInit {
   }
 
   private applyTeamsDatLoaded(): void {
+    console.log('[InitLoad] applyTeamsDatLoaded(). record count:', this.teamsDatService.teamCount);
     this.selectedTeamsDatIndex = this.teamsDatService.teamCount > 0 ? 0 : null;
     this.rebuildRivalOptions();
 
     if (this.displayedTeams.length > 0) {
       this.syncTeamsDatRatingsForTeam(this.displayedTeams[0]);
     }
+  }
+
+  private applyXlcLoaded(fileName: string): void {
+    console.log('[InitLoad] applyXlcLoaded(). file:', fileName, 'displayed teams before:', this.displayedTeams.length);
+    this.xlcFileName = fileName;
+    this.rebuildTeamOptions();
+    this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+    this.rebuildRivalOptions();
+    this.refreshDbBrowsePlayers();
+    console.log('[InitLoad] applyXlcLoaded() complete. displayed teams now:', this.displayedTeams.length);
+  }
+
+  private clearXlcLoaded(): void {
+    console.log('[InitLoad] clearXlcLoaded()');
+    this.xlcEditorService.clearLoadedFile();
+    this.xlcFileName = '';
+    this.rebuildTeamOptions();
+    this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+    this.rebuildRivalOptions();
+    this.refreshDbBrowsePlayers();
+  }
+
+  private applyPakLoaded(fileName: string): void {
+    console.log('[InitLoad] applyPakLoaded(). file:', fileName, 'entries:', this.pakEditorService.entries.length);
+    this.clearPakPreviewCache();
+    this.pakFileName = fileName;
+  }
+
+  private clearPakLoaded(): void {
+    console.log('[InitLoad] clearPakLoaded()');
+    this.clearPakPreviewCache();
+    this.pakEditorService.clearLoadedFile();
+    this.pakFileName = '';
+  }
+
+  private clearPakPreviewCache(): void {
+    this.pakPreviewObjectUrlCache.forEach((url) => URL.revokeObjectURL(url));
+    this.pakPreviewUrlCache.clear();
+    this.pakPreviewObjectUrlCache.clear();
+  }
+
+  private async renderImageAsPng(file: Blob, width: number, height: number): Promise<Uint8Array> {
+    const imageBitmap = await this.createImageBitmapFromBlob(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('Failed to create a 2D canvas context for logo import.');
+    }
+
+    context.clearRect(0, 0, width, height);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(imageBitmap, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((nextBlob) => {
+        if (nextBlob) {
+          resolve(nextBlob);
+          return;
+        }
+
+        reject(new Error('Canvas failed to export the imported logo as PNG.'));
+      }, 'image/png');
+    });
+
+    if ('close' in imageBitmap && typeof imageBitmap.close === 'function') {
+      imageBitmap.close();
+    }
+
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  private async createImageBitmapFromBlob(file: Blob): Promise<ImageBitmap> {
+    if (typeof createImageBitmap !== 'function') {
+      throw new Error('Your browser does not support image bitmap decoding. Use Chrome.');
+    }
+
+    return await createImageBitmap(file);
+  }
+
+  private getPakImageMimeType(fileName: string): string {
+    if (/\.png$/i.test(fileName)) {
+      return 'image/png';
+    }
+
+    if (/\.jpe?g$/i.test(fileName)) {
+      return 'image/jpeg';
+    }
+
+    if (/\.webp$/i.test(fileName)) {
+      return 'image/webp';
+    }
+
+    if (/\.gif$/i.test(fileName)) {
+      return 'image/gif';
+    }
+
+    return 'application/octet-stream';
+  }
+
+  openTeamLogoPicker(team: TeamRecord): void {
+    if (!this.pakLoaded) {
+      alert('Load teams.pak first.');
+      return;
+    }
+
+    this.pendingTeamLogoImportTeamId = team.teamId;
+
+    if (this.teamLogoFileInput?.nativeElement) {
+      this.teamLogoFileInput.nativeElement.value = '';
+      this.teamLogoFileInput.nativeElement.click();
+    }
+  }
+
+  async onTeamLogoFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0] ?? null;
+    const teamId = this.pendingTeamLogoImportTeamId;
+    this.pendingTeamLogoImportTeamId = null;
+
+    if (!file || teamId === null) {
+      return;
+    }
+
+    const mainEntry = this.getTeamLogoEntry(teamId, 'main');
+    const thumbEntry = this.getTeamLogoEntry(teamId, 'thumb');
+
+    if (!mainEntry || !thumbEntry) {
+      alert(`Could not find both t${teamId}.png and t${teamId}_thumb.png inside teams.pak.`);
+      return;
+    }
+
+    try {
+      const mainBytes = await this.renderImageAsPng(file, 256, 256);
+      const thumbBytes = await this.renderImageAsPng(file, 64, 64);
+
+      this.pakEditorService.replaceEntry(mainEntry, mainBytes);
+      this.pakEditorService.replaceEntry(thumbEntry, thumbBytes);
+      this.clearPakPreviewCache();
+      this.pakStatusMessage = `Prepared new logo for team ${teamId}. Save to write ${mainEntry.name} and ${thumbEntry.name}.`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to import the selected logo image.';
+      alert(message);
+    }
+  }
+
+  private registerRuntimeDebugHandlers(): void {
+    if (this.runtimeDebugHandlersRegistered || typeof window === 'undefined') {
+      return;
+    }
+
+    window.addEventListener('error', (event) => {
+      console.error('[RuntimeError] window error:', event.error ?? event.message, event);
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('[RuntimeError] unhandled rejection:', event.reason, event);
+    });
+
+    this.runtimeDebugHandlersRegistered = true;
+    console.log('[InitLoad] runtime debug handlers registered.');
+  }
+
+  async saveXlcFile(): Promise<void> {
+    if (!this.xlcLoaded) {
+      alert('Load an XLC file first.');
+      return;
+    }
+
+    try {
+      await this.xlcEditorService.saveToSameFile();
+      this.xlcStatusMessage = 'XLC file saved.';
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save XLC file.';
+      this.xlcStatusMessage = message;
+      alert(message);
+    }
+  }
+
+  exportXlcFile(): void {
+    if (!this.xlcLoaded) {
+      alert('Load an XLC file first.');
+      return;
+    }
+
+    const fallbackName = this.xlcFileName ? this.xlcFileName.replace(/\.[^.]+$/u, '') : 'teamnames';
+    this.xlcEditorService.exportFile(`${fallbackName}_export.xlc`);
+    this.xlcStatusMessage = 'Exported XLC file.';
+  }
+
+  updateTeamLongName(team: TeamRecord, nextValue: string): void {
+    this.updateTeamName(team, 'long', nextValue);
+  }
+
+  updateTeamShortName(team: TeamRecord, nextValue: string): void {
+    this.updateTeamName(team, 'short', nextValue);
+  }
+
+  commitTeamLongName(team: TeamRecord, event: Event): void {
+    const nextValue = (event.target as HTMLInputElement | null)?.value ?? '';
+    this.updateTeamLongName(team, nextValue);
+  }
+
+  commitTeamShortName(team: TeamRecord, event: Event): void {
+    const nextValue = (event.target as HTMLInputElement | null)?.value ?? '';
+    this.updateTeamShortName(team, nextValue);
+  }
+
+  private updateTeamName(team: TeamRecord, nameType: 'long' | 'short', nextValue: string): void {
+    if (!this.xlcLoaded) {
+      alert('Load the team names XLC file first.');
+      return;
+    }
+
+    const currentValue = nameType === 'long'
+      ? (team.teamLongName ?? '')
+      : (team.teamShortName ?? '');
+
+    if (currentValue === nextValue) {
+      return;
+    }
+
+    const teamNameKey = this.getTeamNameKey(nameType, team.teamId);
+
+    try {
+      this.xlcEditorService.updateValueByKey(teamNameKey, nextValue);
+      this.xlcStatusMessage = `Updated ${teamNameKey}.`;
+      this.rebuildTeamOptions();
+      this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+      this.rebuildRivalOptions();
+      this.refreshDbBrowsePlayers();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update XLC value.';
+      this.xlcStatusMessage = message;
+      alert(message);
+    }
+  }
+
+  private getTeamNameKey(nameType: 'long' | 'medium' | 'short', teamId: number): string {
+    const prefix = nameType === 'long'
+      ? this.teamLongNamePrefix
+      : nameType === 'medium'
+        ? this.teamMediumNamePrefix
+        : this.teamShortNamePrefix;
+
+    return `${prefix}${teamId}`;
+  }
+
+  private getTeamLongName(teamId: number): string | undefined {
+    return this.xlcEditorService.getValueByKey(this.getTeamNameKey('long', teamId)) ?? undefined;
+  }
+
+  private getTeamMediumName(teamId: number): string | undefined {
+    return this.xlcEditorService.getValueByKey(this.getTeamNameKey('medium', teamId)) ?? undefined;
+  }
+
+  private getTeamShortName(teamId: number): string | undefined {
+    return this.xlcEditorService.getValueByKey(this.getTeamNameKey('short', teamId)) ?? undefined;
+  }
+
+  private getTeamDisplayLabel(teamId: number): string {
+    return this.getTeamShortName(teamId)
+      ?? this.getTeamMediumName(teamId)
+      ?? this.getTeamLongName(teamId)
+      ?? `Team ${teamId}`;
+  }
+
+  private getTeamSelectLabel(teamId: number): string {
+    return `${this.getTeamDisplayLabel(teamId)} (ID ${teamId})`;
+  }
+
+  private getTeamLongDisplayLabel(teamId: number): string {
+    return this.getTeamLongName(teamId)
+      ?? this.getTeamMediumName(teamId)
+      ?? this.getTeamShortName(teamId)
+      ?? `Team ${teamId}`;
+  }
+
+  private getTeamLongSelectLabel(teamId: number): string {
+    return `${this.getTeamLongDisplayLabel(teamId)} (ID ${teamId})`;
   }
 
   private replaceDisplayedTeam(offset: number, updatedTeam: TeamRecord): void {
@@ -2284,7 +2880,9 @@ export class AppComponent implements OnInit {
       return;
     }
 
-    const clubMap = this.teamFileLoaded ? this.teamEditorService.getPlayerClubMap() : new Map<number, string[]>();
+    const clubMap = this.teamFileLoaded
+      ? this.teamEditorService.getPlayerClubMap((teamId) => this.getTeamLongDisplayLabel(teamId))
+      : new Map<number, string[]>();
     const players: DbBrowsePlayer[] = [];
 
     for (let index = 0; index < this.playerService.totalPlayers; index++) {
@@ -2342,8 +2940,15 @@ export class AppComponent implements OnInit {
   }
 
   private decorateTeamWithPlayerNames(team: TeamRecord): TeamRecord {
+    const teamShortName = this.getTeamShortName(team.teamId);
+    const teamMediumName = this.getTeamMediumName(team.teamId);
+    const teamLongName = this.getTeamLongName(team.teamId);
+
     return {
       ...team,
+      teamLabel: teamShortName ?? teamMediumName ?? teamLongName ?? `Team ${team.teamId}`,
+      teamShortName,
+      teamLongName,
       slots: team.slots.map((slot) => ({
         ...slot,
         playerName: this.resolveTeamSlotPlayerName(slot)

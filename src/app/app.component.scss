@@ -89,6 +89,14 @@
   text-transform: uppercase;
 }
 
+.init-file-caption {
+  margin-top: 2px;
+  color: #90a4ae;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .init-continue-btn {
   width: 100%;
   height: 52px;
@@ -213,6 +221,87 @@
 .team-empty-state {
   margin: 12px 0 0;
   color: #90a4ae;
+}
+
+/* ── XLC editor ────────────────────────────────────────────── */
+
+.xlc-editor-layout {
+  display: grid;
+  gap: 16px;
+
+  @media (min-width: 960px) {
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.xlc-entry-list {
+  display: grid;
+  gap: 8px;
+  max-height: 560px;
+  overflow: auto;
+}
+
+.xlc-entry-button {
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: rgba(15, 22, 35, 0.92);
+  color: var(--text);
+  text-align: left;
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s, background 0.2s;
+
+  &:hover {
+    border-color: rgba(87, 214, 255, 0.45);
+    transform: translateY(-1px);
+  }
+
+  &.xlc-entry-button--active {
+    border-color: var(--accent);
+    background: rgba(18, 35, 52, 0.98);
+  }
+}
+
+.xlc-entry-key {
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.xlc-entry-meta,
+.xlc-entry-detail-meta {
+  color: #90a4ae;
+  font-size: 0.8rem;
+}
+
+.xlc-entry-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.xlc-entry-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.xlc-entry-detail-title {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.xlc-locale-field {
+  margin-bottom: 4px;
+}
+
+.xlc-locale-field textarea {
+  min-height: 88px;
+  resize: vertical;
 }
 
 /* ── CSV Team Import panel ─────────────────────────────────── */
@@ -483,6 +572,41 @@
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.team-logo-panel {
+  display: grid;
+  gap: 10px;
+  width: 180px;
+  flex-shrink: 0;
+
+  @media (max-width: 899px) {
+    width: 100%;
+    margin-bottom: 12px;
+  }
+}
+
+.team-logo-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.team-logo-image {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+}
+
+.team-logo-actions {
+  display: flex;
+  justify-content: center;
 }
 
 .team-db-header-main {
@@ -1229,6 +1353,33 @@
 
 .team-browser-card-header {
   align-items: center;
+}
+
+.team-browser-header-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.team-browser-logo-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.team-browser-logo-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 
 .team-browser-title-row {

@@ -4,8 +4,6 @@ import { Player } from '../models/player.model';
 import { calculatePlayerOvr } from './player.service';
 
 export interface ImportedPlayerRecord {
-  playerId: string;
-  hasExplicitPlayerId?: boolean;
   sourceRowIndex?: number;
   shortName: string;
   lastName?: string;
@@ -249,7 +247,6 @@ export class PlayerImportService {
     return players.filter((player) => {
       const searchableText = this.normalizeKey([
         player.shortName,
-        player.playerId,
         player.nationalityName,
         player.clubPosition,
         String(player.overall)
@@ -363,11 +360,7 @@ export class PlayerImportService {
       headerIndexes,
       ['movement_acceleration', 'acceleration', 'acc']
     );
-    const explicitPlayerId = this.getFieldByAliases(row, headerIndexes, ['player_id', 'id', 'playerid', 'sofifa_id']);
-
     return {
-      playerId: explicitPlayerId || String(rowIndex),
-      hasExplicitPlayerId: explicitPlayerId.length > 0,
       sourceRowIndex: rowIndex,
       shortName,
       lastName,
