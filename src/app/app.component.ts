@@ -528,6 +528,10 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.ovrTuningConfig;
   }
 
+  get browserOvrTuningOptions(): OvrTuningConfig[] {
+    return this.ovrTuningOptions.filter((config) => config.category === 'mid' || config.category === 'att');
+  }
+
   get popupTeamSlot(): TeamSlot | null {
     if (!this.popupTeamContext) {
       return null;

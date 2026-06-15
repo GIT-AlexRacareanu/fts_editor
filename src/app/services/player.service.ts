@@ -71,8 +71,8 @@ const DEFAULT_MULTIPLIER = ieee754ToFloat(RATING_MULTIPLIER_BITS);
 const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
   gk: { weights: [2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0, multiplier: DEFAULT_MULTIPLIER},
   def: { weights: [10, 4, 4, 0, 4, 2, 2, 2, 10, 30, 0, 0, 0, 0], bonus: 22, multiplier: DEFAULT_MULTIPLIER },
-  mid: { weights: [4, 4, 4, 4, 30, 30, 10, 4, 0, 2, 0, 0, 0, 0], bonus: 10, multiplier: DEFAULT_MULTIPLIER},
-  att: { weights: [4, 2, 8, 2, 20, 4, 2, 25, 4, 0, 0, 0, 0, 0], bonus: 4, multiplier: DEFAULT_MULTIPLIER }
+  mid: { weights: [10, 4, 0, 0, 35, 35, 0, 0, 0, 8, 0, 0, 0, 0], bonus: 15, multiplier: DEFAULT_MULTIPLIER},
+  att: { weights: [8, 0, 10, 0, 30, 5, 0, 40, 0, 0, 0, 0, 0, 0], bonus: 12, multiplier: DEFAULT_MULTIPLIER }
 };
 
 function ieee754ToFloat(bits: number): number {
@@ -84,6 +84,14 @@ function ieee754ToFloat(bits: number): number {
 function getPositionCategory(position: number): number {
   if (position === 0) {
     return 0;
+  }
+
+  if (position === 8) {
+    return 2;
+  }
+
+  if (position === 16 || position === 17) {
+    return 3;
   }
 
   if (position >= 1 && position <= 10) {

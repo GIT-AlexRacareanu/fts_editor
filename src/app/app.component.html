@@ -474,6 +474,56 @@
                   </button>
                 </div>
 
+                <mat-card class="section-card" *ngIf="browserOvrTuningOptions.length > 0">
+                  <mat-card-header>
+                    <mat-card-title>OVR Tuner</mat-card-title>
+                  </mat-card-header>
+                  <mat-card-content>
+                    <section class="ovr-tuning-group" *ngFor="let config of browserOvrTuningOptions">
+                      <div class="ovr-tuning-surface">
+                        <div class="ovr-tuning-header">
+                          <div class="ovr-tuning-group-title">{{ config.label }}</div>
+                          <div class="ovr-tuning-meta-fields">
+                            <label class="ovr-multiplier-field">
+                              <span>Bonus</span>
+                              <input
+                                #bonusInput
+                                class="ovr-mini-input"
+                                type="number"
+                                [value]="config.bonus"
+                                (blur)="updateOvrBonus(config.category, bonusInput.value)"
+                                (keyup.enter)="updateOvrBonus(config.category, bonusInput.value)">
+                            </label>
+                            <label class="ovr-multiplier-field">
+                              <span>Multiplier</span>
+                              <input
+                                #multiplierInput
+                                class="ovr-mini-input"
+                                type="number"
+                                step="0.01"
+                                [value]="config.multiplier"
+                                (blur)="updateOvrMultiplier(config.category, multiplierInput.value)"
+                                (keyup.enter)="updateOvrMultiplier(config.category, multiplierInput.value)">
+                            </label>
+                          </div>
+                        </div>
+                        <div class="ovr-tuning-stat-grid">
+                          <label class="ovr-tuning-stat-field" *ngFor="let weight of config.weights; let weightIndex = index">
+                            <span>{{ ovrStatLabels[weightIndex] }}</span>
+                            <input
+                              #weightInput
+                              class="ovr-mini-input"
+                              type="number"
+                              [value]="weight"
+                              (blur)="updateOvrWeight(config.category, weightIndex, weightInput.value)"
+                              (keyup.enter)="updateOvrWeight(config.category, weightIndex, weightInput.value)">
+                          </label>
+                        </div>
+                      </div>
+                    </section>
+                  </mat-card-content>
+                </mat-card>
+
                 <div class="db-search-pagination" *ngIf="filteredDbBrowsePlayers.length > 0">
                   <button mat-stroked-button color="primary" (click)="goToPreviousDbBrowsePage()" [disabled]="dbBrowsePage === 1">
                     Previous

@@ -38,7 +38,7 @@ describe('PlayerService', () => {
     expect(service.totalPlayers).toBe(3);
   });
 
-  it('treats LM and RM as midfielders for OVR calculation', () => {
+  it('treats LM and RM as attackers for OVR calculation', () => {
     const service = new PlayerService({} as any);
     const stats = {
       STR: 64,
@@ -58,14 +58,16 @@ describe('PlayerService', () => {
     };
 
     const cmOvr = service.calculateOVR(createPlayer('CM', { pos: 11, ...stats }));
+    const rwOvr = service.calculateOVR(createPlayer('RW', { pos: 21, ...stats }));
     const rmOvr = service.calculateOVR(createPlayer('RM', { pos: 16, ...stats }));
     const lmOvr = service.calculateOVR(createPlayer('LM', { pos: 17, ...stats }));
 
-    expect(rmOvr).toBe(cmOvr);
-    expect(lmOvr).toBe(cmOvr);
+    expect(rmOvr).toBe(rwOvr);
+    expect(lmOvr).toBe(rwOvr);
+    expect(rmOvr).not.toBe(cmOvr);
   });
 
-  it('treats CDM, LDM, and RDM as defenders for OVR calculation', () => {
+  it('treats CDM as midfielder while LDM and RDM stay defenders for OVR calculation', () => {
     const service = new PlayerService({} as any);
     const stats = {
       STR: 74,
@@ -90,10 +92,10 @@ describe('PlayerService', () => {
     const rdmOvr = service.calculateOVR(createPlayer('RDM', { pos: 9, ...stats }));
     const ldmOvr = service.calculateOVR(createPlayer('LDM', { pos: 10, ...stats }));
 
-    expect(cdmOvr).toBe(cbOvr);
+    expect(cdmOvr).toBe(cmOvr);
     expect(rdmOvr).toBe(cbOvr);
     expect(ldmOvr).toBe(cbOvr);
-    expect(cdmOvr).not.toBe(cmOvr);
+    expect(cdmOvr).not.toBe(cbOvr);
   });
 
   it('finds players by normalized names and common abbreviated variants', () => {
