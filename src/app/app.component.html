@@ -11,9 +11,27 @@
   <div class="init-container">
     <h2 class="init-heading">FTS 15 EDITOR PRO</h2>
 
+    <div class="init-file-row" *ngIf="hasStartupChoice">
+      <mat-icon class="init-file-icon">save</mat-icon>
+      <div>
+        <div class="init-file-name">Local save available</div>
+        <div class="init-file-caption" *ngIf="localSaveLastUpdatedLabel">Updated {{ localSaveLastUpdatedLabel }}</div>
+      </div>
+    </div>
+
+    <button mat-raised-button color="accent" class="init-folder-btn" *ngIf="hasStartupChoice" (click)="useLocalSave()">
+      <mat-icon>save</mat-icon>
+      USE LOCAL SAVE
+    </button>
+
     <button mat-raised-button color="primary" class="init-folder-btn" (click)="openFolder()">
       <mat-icon>folder_open</mat-icon>
-      {{ allFilesLoaded ? 'CHANGE FOLDER' : 'SELECT FOLDER' }}
+      {{ allFilesLoaded ? 'CHANGE FOLDER' : 'LOAD FILES FROM FOLDER' }}
+    </button>
+
+    <button mat-stroked-button color="primary" class="init-folder-btn" *ngIf="hasStartupChoice" (click)="downloadLocalSaveFiles()">
+      <mat-icon>download</mat-icon>
+      DOWNLOAD LOCAL FILES
     </button>
 
     <div class="init-file-row" [class.init-file-row--loaded]="fileLoaded">
@@ -578,7 +596,7 @@
                   <div class="db-search-filters db-search-filters--3col team-browser-filters">
                     <mat-form-field appearance="outline">
                       <mat-label>League</mat-label>
-                      <mat-select [(ngModel)]="teamBrowseLeagueQuery" (ngModelChange)="resetTeamBrowsePagination()">
+                      <mat-select [ngModel]="teamBrowseLeagueQuery" (ngModelChange)="onTeamBrowseLeagueQueryChange($event)">
                         <mat-option [value]="null">All leagues</mat-option>
                         <mat-option *ngFor="let league of leagueOptions" [value]="league.value">{{ league.label }}</mat-option>
                       </mat-select>

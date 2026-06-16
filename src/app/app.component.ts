@@ -5,6 +5,8 @@ import { NATIONALITY_NAMES_BY_ID, NATIONALITY_OPTIONS } from './data/nationaliti
 import { Player } from './models/player.model';
 import { TeamRecord, TeamSlot } from './models/team-editor.model';
 import { TeamsDatRecord } from './models/teams-dat.model';
+import { XlcLocaleValue } from './models/xlc-editor.model';
+import { FileHandleStorageService } from './services/file-handle-storage.service';
 import { ImportedPlayerRecord, PlayerImportService } from './services/player-import.service';
 import { PakEditorService, PakEntry } from './services/pak-editor.service';
 import { OvrCategory, OvrTuningConfig, PlayerService } from './services/player.service';
@@ -111,6 +113,20 @@ interface TeamImportResolvedPlayer {
   sourceOrder: number;
 }
 
+interface LocalSaveFile {
+  fileName: string;
+  bytes: ArrayBuffer;
+}
+
+interface LocalSaveBundle {
+  updatedAt: number;
+  players: LocalSaveFile;
+  teamPlayerLinks: LocalSaveFile;
+  teamsDat: LocalSaveFile;
+  pak: LocalSaveFile;
+  xlc?: LocalSaveFile;
+}
+
 type TeamsRoleField = 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole';
 
 @Component({
@@ -122,6 +138,8 @@ export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('teamLogoFileInput') teamLogoFileInput?: ElementRef<HTMLInputElement>;
 
   private readonly importAssetUrl = 'assets/import/import_2.csv';
+  private readonly folderHandleStorageKey = 'fts-editor-folder';
+  private readonly localSaveStorageKey = 'fts-editor-local-save';
   private readonly bulkImportDummyPlayerCount = 18;
   private readonly teamLongNamePrefix = 'TXT_TEAMNAMELONG_';
   private readonly teamMediumNamePrefix = 'TXT_TEAMNAMEMED_';
@@ -131,6 +149,9 @@ export class AppComponent implements OnInit, OnDestroy {
   // ─── App flow ────────────────────────────────────────────────
   showInitPage = true;
   activeMainTab = 0;
+  localSaveAvailable = false;
+  localSaveMode = false;
+  localSaveLastUpdatedLabel = '';
 
   // ─── Player Edit Popup ───────────────────────────────────────
   showPlayerEditPopup = false;
@@ -339,7 +360,8 @@ export class AppComponent implements OnInit, OnDestroy {
     public teamEditorService: TeamEditorService,
     public teamsDatService: TeamsDatService,
     public xlcEditorService: XlcEditorService,
-    private readonly domSanitizer: DomSanitizer
+    private readonly domSanitizer: DomSanitizer,
+    private readonly fileHandleStorage: FileHandleStorageService
   ) {}
 
   ngOnInit(): void {
@@ -360,6 +382,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   get canEnterEditor(): boolean {
     return this.allFilesLoaded;
+  }
+
+  get hasStartupChoice(): boolean {
+    return this.localSaveAvailable;
   }
 
   enterMainApp(): void {
@@ -499,6 +525,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   teamOptions: { label: string; offset: number }[] = [];
+  teamBrowseItems: TeamBrowseItem[] = [];
+  private filteredTeamBrowseItemsCache: TeamBrowseItem[] = [];
 
   // Stable list: rebuilt only when teams.dat data changes
   rivalOptions: { value: number; label: string }[] = [];
@@ -516,6 +544,57 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private rebuildRivalOptions(): void {
     this.rivalOptions = this.teamsDatService.records.map((r) => ({ value: r.teamId, label: this.getTeamSelectLabel(r.teamId) }));
+  }
+
+  private rebuildTeamBrowseItems(): void {
+    if (!this.teamsDatLoaded) {
+      this.teamBrowseItems = [];
+      this.filteredTeamBrowseItemsCache = [];
+      this.teamBrowsePage = 1;
+      return;
+    }
+
+    this.teamBrowseItems = this.teamsDatService.records
+      .map((record) => ({
+        index: record.index,
+        teamId: record.teamId,
+        teamLabel: this.getTeamLongDisplayLabel(record.teamId),
+        leagueId: record.leagueId,
+        rivalId: record.rivalId,
+        stadiumName: record.stadiumName,
+        europeanCompetition: record.europeanCompetition,
+        attackOvr: record.attackOvr,
+        midfieldOvr: record.midfieldOvr,
+        defenseOvr: record.defenseOvr
+      }))
+      .sort((left, right) => {
+        const leftAverageOvr = (left.attackOvr + left.midfieldOvr + left.defenseOvr) / 3;
+        const rightAverageOvr = (right.attackOvr + right.midfieldOvr + right.defenseOvr) / 3;
+
+        if (rightAverageOvr !== leftAverageOvr) {
+          return rightAverageOvr - leftAverageOvr;
+        }
+
+        return left.teamLabel.localeCompare(right.teamLabel);
+      });
+
+    this.refreshFilteredTeamBrowseItems();
+  }
+
+  private refreshFilteredTeamBrowseItems(): void {
+    const leagueQuery = this.teamBrowseLeagueQuery;
+
+    this.filteredTeamBrowseItemsCache = leagueQuery === null
+      ? this.teamBrowseItems
+      : this.teamBrowseItems.filter((record) => record.leagueId === leagueQuery);
+
+    this.teamBrowsePage = Math.min(this.teamBrowsePage, this.teamBrowseTotalPages);
+  }
+
+  onTeamBrowseLeagueQueryChange(value: number | null): void {
+    this.teamBrowseLeagueQuery = value;
+    this.teamBrowsePage = 1;
+    this.refreshFilteredTeamBrowseItems();
   }
 
   // ─── Player Edit Popup ────────────────────────────────────────
@@ -1338,36 +1417,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   get filteredTeamBrowseItems(): TeamBrowseItem[] {
-    if (!this.teamsDatLoaded) {
-      return [];
-    }
-
-    const leagueQuery = this.teamBrowseLeagueQuery;
-
-    return this.teamsDatService.records
-      .filter((record) => leagueQuery === null || record.leagueId === leagueQuery)
-      .map((record) => ({
-        index: record.index,
-        teamId: record.teamId,
-        teamLabel: this.getTeamLongDisplayLabel(record.teamId),
-        leagueId: record.leagueId,
-        rivalId: record.rivalId,
-        stadiumName: record.stadiumName,
-        europeanCompetition: record.europeanCompetition,
-        attackOvr: record.attackOvr,
-        midfieldOvr: record.midfieldOvr,
-        defenseOvr: record.defenseOvr
-      }))
-      .sort((left, right) => {
-        const leftAverageOvr = (left.attackOvr + left.midfieldOvr + left.defenseOvr) / 3;
-        const rightAverageOvr = (right.attackOvr + right.midfieldOvr + right.defenseOvr) / 3;
-
-        if (rightAverageOvr !== leftAverageOvr) {
-          return rightAverageOvr - leftAverageOvr;
-        }
-
-        return left.teamLabel.localeCompare(right.teamLabel);
-      });
+    return this.filteredTeamBrowseItemsCache;
   }
 
   get pagedTeamBrowseItems(): TeamBrowseItem[] {
@@ -1493,6 +1543,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   resetTeamBrowsePagination(): void {
     this.teamBrowsePage = 1;
+    this.refreshFilteredTeamBrowseItems();
   }
 
   goToPreviousTeamBrowsePage(): void {
@@ -1536,6 +1587,41 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private normalizeFileName(fileName: string): string {
     return fileName.toLowerCase().replace(/[^a-z0-9]+/gu, '');
+  }
+
+  private async tryRestoreTeamNamesXlcFromRememberedFolder(): Promise<string | null> {
+    const dirHandle = await this.fileHandleStorage.getFileHandle<any>(this.folderHandleStorageKey);
+
+    if (!dirHandle || !(await this.hasReadPermission(dirHandle))) {
+      return null;
+    }
+
+    try {
+      const handle = await this.getTeamNamesXlcHandle(dirHandle);
+      return await this.xlcEditorService.loadFile(handle);
+    } catch {
+      return null;
+    }
+  }
+
+  private async hasReadPermission(fileSystemHandle: any): Promise<boolean> {
+    if (!fileSystemHandle) {
+      return false;
+    }
+
+    if (typeof fileSystemHandle.queryPermission === 'function') {
+      const permission = await fileSystemHandle.queryPermission({ mode: 'read' });
+      if (permission === 'granted') {
+        return true;
+      }
+    }
+
+    if (typeof fileSystemHandle.requestPermission === 'function') {
+      const permission = await fileSystemHandle.requestPermission({ mode: 'read' });
+      return permission === 'granted';
+    }
+
+    return false;
   }
 
   private async getTeamNamesXlcHandle(dirHandle: any): Promise<any> {
@@ -1621,6 +1707,8 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
 
+    await this.fileHandleStorage.saveFileHandle(this.folderHandleStorageKey, dirHandle);
+
     const errors: string[] = [];
   console.log('[InitLoad] folder selected, starting file load sequence.');
 
@@ -1695,7 +1783,76 @@ export class AppComponent implements OnInit, OnDestroy {
       alert(errors.join('\n'));
     }
 
+    if (this.canEnterEditor) {
+      this.localSaveMode = false;
+      await this.persistLocalSaveBundle();
+      await this.refreshLocalSaveAvailability();
+    }
+
     this.checkAutoTransition();
+  }
+
+
+  async useLocalSave(): Promise<void> {
+    const bundle = await this.fileHandleStorage.getStoredValue<LocalSaveBundle>(this.localSaveStorageKey);
+
+    if (!bundle) {
+      this.localSaveAvailable = false;
+      this.localSaveLastUpdatedLabel = '';
+      alert('No local save was found.');
+      return;
+    }
+
+    try {
+      this.playerService.loadFromBytes(new Uint8Array(bundle.players.bytes), bundle.players.fileName);
+      this.applyPlayerFileLoaded();
+
+      this.teamEditorService.loadFromBytes(new Uint8Array(bundle.teamPlayerLinks.bytes), bundle.teamPlayerLinks.fileName);
+      this.applyTeamFileLoaded();
+
+      this.teamsDatService.loadFromBytes(new Uint8Array(bundle.teamsDat.bytes), bundle.teamsDat.fileName);
+      this.applyTeamsDatLoaded();
+
+      const pakFileName = this.pakEditorService.loadFromBytes(new Uint8Array(bundle.pak.bytes), bundle.pak.fileName);
+      this.applyPakLoaded(pakFileName);
+      this.pakStatusMessage = `Loaded ${pakFileName}.`;
+
+      if (bundle.xlc) {
+        const xlcFileName = this.xlcEditorService.loadFromBytes(new Uint8Array(bundle.xlc.bytes), bundle.xlc.fileName);
+        this.applyXlcLoaded(xlcFileName);
+        this.xlcStatusMessage = `Loaded ${xlcFileName}.`;
+      } else {
+        this.clearXlcLoaded();
+      }
+
+      this.localSaveMode = true;
+      this.localSaveAvailable = true;
+      this.localSaveLastUpdatedLabel = this.formatLocalSaveTimestamp(bundle.updatedAt);
+      this.checkAutoTransition();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load the local save.';
+      alert(message);
+    }
+  }
+
+  async downloadLocalSaveFiles(): Promise<void> {
+    const bundle = await this.fileHandleStorage.getStoredValue<LocalSaveBundle>(this.localSaveStorageKey);
+
+    if (!bundle) {
+      this.localSaveAvailable = false;
+      this.localSaveLastUpdatedLabel = '';
+      alert('No local save was found.');
+      return;
+    }
+
+    this.downloadBinaryFile(bundle.players.fileName, new Uint8Array(bundle.players.bytes));
+    this.downloadBinaryFile(bundle.teamPlayerLinks.fileName, new Uint8Array(bundle.teamPlayerLinks.bytes));
+    this.downloadBinaryFile(bundle.teamsDat.fileName, new Uint8Array(bundle.teamsDat.bytes));
+    this.downloadBinaryFile(bundle.pak.fileName, new Uint8Array(bundle.pak.bytes));
+
+    if (bundle.xlc) {
+      this.downloadBinaryFile(bundle.xlc.fileName, new Uint8Array(bundle.xlc.bytes));
+    }
   }
 
   // ─── Save ─────────────────────────────────────────────────────
@@ -1765,16 +1922,22 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     try {
-      await this.playerService.saveCurrentToSameFile();
-      await this.teamEditorService.saveToSameFile();
-      await this.teamsDatService.saveToSameFile();
-      if (this.xlcLoaded) {
-        await this.xlcEditorService.saveToSameFile();
+      if (this.localSaveMode) {
+        await this.persistLocalSaveBundle();
+      } else {
+        await this.playerService.saveCurrentToSameFile();
+        await this.teamEditorService.saveToSameFile();
+        await this.teamsDatService.saveToSameFile();
+        if (this.xlcLoaded) {
+          await this.xlcEditorService.saveToSameFile();
+        }
+        if (this.pakLoaded) {
+          await this.pakEditorService.saveToSameFile();
+        }
+        await this.persistLocalSaveBundle();
       }
-      if (this.pakLoaded) {
-        await this.pakEditorService.saveToSameFile();
-      }
-      alert('Files overwritten successfully.');
+      await this.refreshLocalSaveAvailability();
+      alert(this.localSaveMode ? 'Local save updated successfully.' : 'Files overwritten successfully.');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
       alert(message);
@@ -1809,10 +1972,14 @@ export class AppComponent implements OnInit, OnDestroy {
     this.teamEditorService.teamOptions.forEach(({ offset }) => {
       const team = this.teamEditorService.getTeam(offset);
 
-      if (this.syncTeamsDatRatingsForTeam(team)) {
+      if (this.syncTeamsDatRatingsForTeam(team, false)) {
         syncedTeams += 1;
       }
     });
+
+    if (syncedTeams > 0) {
+      this.rebuildTeamBrowseItems();
+    }
 
     return syncedTeams;
   }
@@ -1927,7 +2094,7 @@ export class AppComponent implements OnInit, OnDestroy {
     return roleSlot ? roleSlot.playerId : null;
   }
 
-  private syncTeamsDatRatingsForTeam(team: TeamRecord): boolean {
+  private syncTeamsDatRatingsForTeam(team: TeamRecord, refreshTeamBrowseItems = true): boolean {
     if (!this.teamsDatLoaded || !this.fileLoaded) {
       return false;
     }
@@ -1969,6 +2136,10 @@ export class AppComponent implements OnInit, OnDestroy {
       midfieldOvr,
       defenseOvr
     });
+
+    if (refreshTeamBrowseItems) {
+      this.rebuildTeamBrowseItems();
+    }
 
     return true;
   }
@@ -2102,6 +2273,8 @@ export class AppComponent implements OnInit, OnDestroy {
       const idx = this.teamsDatService.records.findIndex((r) => r.teamId === team.teamId);
       this.selectedTeamsDatIndex = idx !== -1 ? idx : null;
     }
+
+    this.logDisplayedTeamNameSummary();
   }
 
   searchTeams(): void {
@@ -2226,6 +2399,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
     changes[field] = Number(value);
     this.teamsDatService.updateRecord(record.index, changes);
+    this.rebuildTeamBrowseItems();
 
     if (field === 'teamId') {
       this.rebuildRivalOptions();
@@ -2246,6 +2420,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   updateTeamsDatStadiumName(record: TeamsDatRecord, value: string): void {
     this.teamsDatService.updateRecord(record.index, { stadiumName: value });
+    this.rebuildTeamBrowseItems();
   }
 
   updateTeamsDatKitColor(record: TeamsDatRecord, kitIndex: number, colorIndex: number, value: string): void {
@@ -2482,8 +2657,79 @@ export class AppComponent implements OnInit, OnDestroy {
   private async initializeApp(): Promise<void> {
     console.log('[InitLoad] initializeApp() start.');
     await this.loadImportSource(false, false);
-    await this.restoreRememberedFiles();
+
+    await this.refreshLocalSaveAvailability();
+
+    if (!this.localSaveAvailable) {
+      await this.restoreRememberedFiles();
+
+      if (this.canEnterEditor) {
+        this.localSaveMode = false;
+        await this.persistLocalSaveBundle();
+        await this.refreshLocalSaveAvailability();
+      }
+    }
+
     console.log('[InitLoad] initializeApp() complete.');
+  }
+
+  private async refreshLocalSaveAvailability(): Promise<void> {
+    const bundle = await this.fileHandleStorage.getStoredValue<LocalSaveBundle>(this.localSaveStorageKey);
+    this.localSaveAvailable = bundle !== null;
+    this.localSaveLastUpdatedLabel = bundle ? this.formatLocalSaveTimestamp(bundle.updatedAt) : '';
+  }
+
+  private async persistLocalSaveBundle(): Promise<void> {
+    if (!this.fileLoaded || !this.teamFileLoaded || !this.teamsDatLoaded || !this.pakLoaded) {
+      return;
+    }
+
+    const bundle: LocalSaveBundle = {
+      updatedAt: Date.now(),
+      players: {
+        fileName: 'PLAYERS.DAT',
+        bytes: this.cloneArrayBuffer(this.playerService.exportCurrentFileBytes())
+      },
+      teamPlayerLinks: {
+        fileName: 'TEAMPLAYERLINKS_0.dat',
+        bytes: this.cloneArrayBuffer(this.teamEditorService.exportCurrentFileBytes())
+      },
+      teamsDat: {
+        fileName: 'TEAMS.DAT',
+        bytes: this.cloneArrayBuffer(this.teamsDatService.exportCurrentFileBytes())
+      },
+      pak: {
+        fileName: this.pakFileName || 'teams.pak',
+        bytes: this.cloneArrayBuffer(this.pakEditorService.exportCurrentFileBytes())
+      }
+    };
+
+    if (this.xlcLoaded) {
+      bundle.xlc = {
+        fileName: this.xlcFileName || 'ftsteamnames.xlc',
+        bytes: this.cloneArrayBuffer(this.xlcEditorService.exportCurrentFileBytes())
+      };
+    }
+
+    await this.fileHandleStorage.saveStoredValue(this.localSaveStorageKey, bundle);
+  }
+
+  private cloneArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    return copy.buffer;
+  }
+
+  private downloadBinaryFile(fileName: string, bytes: Uint8Array): void {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  private formatLocalSaveTimestamp(timestamp: number): string {
+    return new Date(timestamp).toLocaleString();
   }
 
   private async restoreRememberedFiles(): Promise<void> {
@@ -2519,7 +2765,15 @@ export class AppComponent implements OnInit, OnDestroy {
       this.applyXlcLoaded(restoredXlcFileName);
       this.xlcStatusMessage = `Loaded ${restoredXlcFileName}.`;
     } else {
-      console.log('[InitLoad] no remembered team names XLC handle restored.');
+      const restoredFolderXlcFileName = await this.tryRestoreTeamNamesXlcFromRememberedFolder();
+
+      if (restoredFolderXlcFileName) {
+        console.log('[InitLoad] restored team names XLC from remembered folder:', restoredFolderXlcFileName);
+        this.applyXlcLoaded(restoredFolderXlcFileName);
+        this.xlcStatusMessage = `Loaded ${restoredFolderXlcFileName}.`;
+      } else {
+        console.log('[InitLoad] no remembered team names XLC handle restored.');
+      }
     }
 
     const restoredPakFileName = await this.pakEditorService.tryRestoreLastFile();
@@ -2560,6 +2814,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private applyTeamsDatLoaded(): void {
     console.log('[InitLoad] applyTeamsDatLoaded(). record count:', this.teamsDatService.teamCount);
     this.selectedTeamsDatIndex = this.teamsDatService.teamCount > 0 ? 0 : null;
+    this.rebuildTeamBrowseItems();
     this.rebuildRivalOptions();
 
     if (this.displayedTeams.length > 0) {
@@ -2571,7 +2826,15 @@ export class AppComponent implements OnInit, OnDestroy {
     console.log('[InitLoad] applyXlcLoaded(). file:', fileName, 'displayed teams before:', this.displayedTeams.length);
     this.xlcFileName = fileName;
     this.rebuildTeamOptions();
-    this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+    this.rebuildTeamBrowseItems();
+
+    if (this.selectedTeamOffset !== null) {
+      this.loadSingleTeam(this.selectedTeamOffset);
+    } else {
+      this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
+      this.logDisplayedTeamNameSummary();
+    }
+
     this.rebuildRivalOptions();
     this.refreshDbBrowsePlayers();
     console.log('[InitLoad] applyXlcLoaded() complete. displayed teams now:', this.displayedTeams.length);
@@ -2582,6 +2845,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.xlcEditorService.clearLoadedFile();
     this.xlcFileName = '';
     this.rebuildTeamOptions();
+    this.rebuildTeamBrowseItems();
     this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
     this.rebuildRivalOptions();
     this.refreshDbBrowsePlayers();
@@ -2783,6 +3047,13 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (nameType === 'short' && nextValue.length > 3) {
+      const message = 'Short team names can be at most 3 characters.';
+      this.xlcStatusMessage = message;
+      alert(message);
+      return;
+    }
+
     const currentValue = nameType === 'long'
       ? (team.teamLongName ?? '')
       : (team.teamShortName ?? '');
@@ -2796,9 +3067,11 @@ export class AppComponent implements OnInit, OnDestroy {
     try {
       this.xlcEditorService.updateValueByKey(teamNameKey, nextValue);
       this.xlcStatusMessage = `Updated ${teamNameKey}.`;
+
       this.rebuildTeamOptions();
       this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
       this.rebuildRivalOptions();
+      this.rebuildTeamBrowseItems();
       this.refreshDbBrowsePlayers();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to update XLC value.';
@@ -2818,15 +3091,146 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private getTeamLongName(teamId: number): string | undefined {
-    return this.xlcEditorService.getValueByKey(this.getTeamNameKey('long', teamId)) ?? undefined;
+    return this.getNamedTeamLocale(teamId, 'long')?.value ?? undefined;
   }
 
   private getTeamMediumName(teamId: number): string | undefined {
-    return this.xlcEditorService.getValueByKey(this.getTeamNameKey('medium', teamId)) ?? undefined;
+    return this.getNamedTeamLocale(teamId, 'medium')?.value ?? undefined;
   }
 
   private getTeamShortName(teamId: number): string | undefined {
-    return this.xlcEditorService.getValueByKey(this.getTeamNameKey('short', teamId)) ?? undefined;
+    return this.getNamedTeamLocale(teamId, 'short')?.value ?? undefined;
+  }
+
+  private getNamedTeamLocale(teamId: number, nameType: 'long' | 'medium' | 'short') {
+    const teamIndex = this.getTeamIndexById(teamId);
+    const directLocale = this.getDirectTeamNameLocale(teamId, nameType);
+
+    if (directLocale) {
+      return directLocale;
+    }
+
+    const embeddedIdEntry = this.getTeamNameEntryByEmbeddedTeamId(teamId, nameType);
+    const embeddedIdLocale = this.getPreferredTeamNameLocale(embeddedIdEntry?.locales ?? null);
+
+    if (embeddedIdLocale) {
+      return embeddedIdLocale;
+    }
+
+    return null;
+  }
+
+  private getPreferredTeamNameLocale(locales: XlcLocaleValue[] | null | undefined): XlcLocaleValue | null {
+    if (!locales || locales.length === 0) {
+      return null;
+    }
+
+    return locales.find((locale) => locale.value.trim().length > 0) ?? locales[0];
+  }
+
+  private getDirectTeamNameLocale(teamId: number, nameType: 'long' | 'medium' | 'short') {
+    const candidateKeys = this.getTeamNameKeyCandidates(nameType, teamId);
+
+    for (const key of candidateKeys) {
+      const locale = this.xlcEditorService.getLocaleValueByKey(key);
+
+      if (locale) {
+        return locale;
+      }
+    }
+
+    return null;
+  }
+
+  private getTeamNameKeyCandidates(nameType: 'long' | 'medium' | 'short', teamId: number): string[] {
+    const numericSuffixes = [teamId];
+
+    const basePrefixes = nameType === 'long'
+      ? ['TXT_TEAMNAMELONG_', 'TXT_TEAMNAME_', 'TXT_CLUBNAMELONG_', 'TXT_CLUBNAME_']
+      : nameType === 'medium'
+        ? ['TXT_TEAMNAMEMED_', 'TXT_CLUBNAMEMED_']
+        : ['TXT_TEAMNAMESHORT_', 'TXT_TEAMSHORTNAME_', 'TXT_TEAMNAMEABBR_', 'TXT_TEAMNAMEABBREV_', 'TXT_CLUBNAMESHORT_', 'TXT_CLUBSHORTNAME_', 'TXT_CLUBNAMEABBR_', 'TXT_CLUBNAMEABBREV_'];
+    const tokenizedPrefixes = nameType === 'long'
+      ? ['TXT_TEAM_', 'TXT_CLUB_']
+      : nameType === 'medium'
+        ? ['TXT_TEAM_', 'TXT_CLUB_']
+        : ['TXT_TEAM_', 'TXT_CLUB_'];
+    const tokenizedSuffixes = nameType === 'long'
+      ? ['NAME', 'LONGNAME', 'NAMELONG']
+      : nameType === 'medium'
+        ? ['MED', 'MEDNAME', 'NAMEMED']
+        : ['SHORT', 'SHORTNAME', 'NAMESHORT', 'ABBR', 'ABBREV', 'NAMEABBR', 'NAMEABBREV'];
+
+    return Array.from(new Set([
+      ...basePrefixes.flatMap((prefix) => numericSuffixes.map((suffix) => `${prefix}${suffix}`)),
+      ...tokenizedPrefixes.flatMap((prefix) => numericSuffixes.flatMap((suffix) => tokenizedSuffixes.map((token) => `${prefix}${suffix}_${token}`))),
+      ...tokenizedPrefixes.flatMap((prefix) => numericSuffixes.flatMap((suffix) => tokenizedSuffixes.map((token) => `${prefix}${token}_${suffix}`)))
+    ]));
+  }
+
+  private getTeamNameEntries(nameType: 'long' | 'medium' | 'short') {
+    return this.xlcEditorService.entries
+      .filter((entry) => this.matchesTeamNameEntry(entry.key, nameType))
+      .sort((left, right) => {
+        const leftOrder = this.getTeamNameEntryOrder(left.key);
+        const rightOrder = this.getTeamNameEntryOrder(right.key);
+
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+
+        return left.index - right.index;
+      });
+  }
+
+  private getTeamNameEntryByEmbeddedTeamId(teamId: number, nameType: 'long' | 'medium' | 'short') {
+    const matchingEntries = this.getTeamNameEntries(nameType)
+      .filter((entry) => this.entryMatchesTeamIdSuffix(entry.key, teamId));
+
+    return matchingEntries[0] ?? null;
+  }
+
+  private matchesTeamNameEntry(key: string, nameType: 'long' | 'medium' | 'short'): boolean {
+    const normalizedKey = key.toUpperCase();
+
+    const hasTeamOrClubToken = normalizedKey.includes('TEAM') || normalizedKey.includes('CLUB');
+    const hasNameSignal = normalizedKey.includes('NAME')
+      || normalizedKey.includes('SHORT')
+      || normalizedKey.includes('SHRT')
+      || normalizedKey.includes('ABBR')
+      || normalizedKey.includes('MED')
+      || normalizedKey.includes('LONG');
+    const isTeamOrClubName = normalizedKey.startsWith('TXT_') && hasTeamOrClubToken && hasNameSignal;
+
+    if (!isTeamOrClubName) {
+      return false;
+    }
+
+    const isShort = normalizedKey.includes('SHORT') || normalizedKey.includes('SHRT') || normalizedKey.includes('ABBR');
+    const isMedium = normalizedKey.includes('MED');
+
+    if (nameType === 'short') {
+      return isShort;
+    }
+
+    if (nameType === 'medium') {
+      return isMedium;
+    }
+
+    return !isShort && !isMedium;
+  }
+
+  private getTeamNameEntryOrder(key: string): number {
+    const suffixMatch = key.match(/(\d+)(?!.*\d)/u);
+    return suffixMatch ? Number(suffixMatch[1]) : Number.MAX_SAFE_INTEGER;
+  }
+
+  private entryMatchesTeamIdSuffix(key: string, teamId: number): boolean {
+    return this.getTeamNameEntryOrder(key) === teamId;
+  }
+
+  private getTeamIndexById(teamId: number): number {
+    return this.teamEditorService.teamOptions.findIndex((option) => this.teamEditorService.getTeam(option.offset).teamId === teamId);
   }
 
   private getTeamDisplayLabel(teamId: number): string {
@@ -2947,10 +3351,11 @@ export class AppComponent implements OnInit, OnDestroy {
     const teamShortName = this.getTeamShortName(team.teamId);
     const teamMediumName = this.getTeamMediumName(team.teamId);
     const teamLongName = this.getTeamLongName(team.teamId);
+    const teamLabel = teamShortName ?? teamMediumName ?? teamLongName ?? `Team ${team.teamId}`;
 
     return {
       ...team,
-      teamLabel: teamShortName ?? teamMediumName ?? teamLongName ?? `Team ${team.teamId}`,
+      teamLabel,
       teamShortName,
       teamLongName,
       slots: team.slots.map((slot) => ({
@@ -2958,6 +3363,20 @@ export class AppComponent implements OnInit, OnDestroy {
         playerName: this.resolveTeamSlotPlayerName(slot)
       }))
     };
+  }
+
+  private logDisplayedTeamNameSummary(): void {
+    if (!this.xlcLoaded || this.displayedTeams.length === 0) {
+      return;
+    }
+
+    this.displayedTeams.forEach((team) => {
+      console.log('[TeamNames]', {
+        teamId: team.teamId,
+        teamNameLong: team.teamLongName ?? null,
+        teamNameShort: team.teamShortName ?? null
+      });
+    });
   }
 
   private resolveTeamSlotPlayerName(slot: TeamSlot): string | undefined {

@@ -73,21 +73,21 @@ export class XlcEditorService {
       nextHandle = handles[0];
     }
 
-    const file = await nextHandle.getFile();
-    console.log('[Xlc] file picked:', file.name, 'size:', file.size, 'bytes');
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    console.log('[Xlc] raw buffer length:', bytes.byteLength,
-      '| first 4 bytes:', bytes[0], bytes[1], bytes[2], bytes[3]);
-    const parsed = this.parseFile(bytes);
-    console.log('[Xlc] parse complete. entries:', parsed.entries.length, 'shared strings:', parsed.stringValues.size);
-
     this.fileHandle = nextHandle;
-    this.applyParsedState(bytes, parsed);
-    this.hasPendingChanges = false;
+    const file = await nextHandle.getFile();
+    this.loadFromBytes(new Uint8Array(await file.arrayBuffer()), file.name);
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
 
     return file.name;
+  }
+
+  loadFromBytes(bytes: Uint8Array, fileName = 'ftsteamnames.xlc'): string {
+    this.fileHandle = null;
+    const parsed = this.parseFile(bytes);
+    this.applyParsedState(bytes, parsed);
+    this.hasPendingChanges = false;
+    return fileName;
   }
 
   async tryRestoreLastFile(): Promise<string | null> {
@@ -117,6 +117,10 @@ export class XlcEditorService {
     await writable.close();
     this.applyParsedState(serialized, this.parseFile(serialized));
     this.hasPendingChanges = false;
+  }
+
+  exportCurrentFileBytes(): Uint8Array {
+    return this.getSerializedData();
   }
 
   clearLoadedFile(): void {
@@ -170,13 +174,17 @@ export class XlcEditorService {
   }
 
   updateValueByKey(key: string, nextValue: string): void {
-    const locale = this.getLocaleValueByKey(key);
+    const entry = this.entries.find((candidate) => candidate.key === key);
 
-    if (!locale) {
+    if (!entry || entry.locales.length === 0) {
       throw new Error(`XLC key not found: ${key}.`);
     }
 
-    this.updateValue(locale.offset, nextValue);
+    const uniqueOffsets = new Set(entry.locales.map((locale) => locale.offset));
+
+    uniqueOffsets.forEach((offset) => {
+      this.updateValue(offset, nextValue);
+    });
   }
 
   private parseFile(bytes: Uint8Array): ParsedXlcFile {
@@ -185,24 +193,86 @@ export class XlcEditorService {
     }
 
     const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
-    console.log('[Xlc] header magic:', magic, '| byteLength:', bytes.byteLength);
     if (magic !== FILE_MAGIC) {
       throw new Error(`Invalid XLC: expected ${FILE_MAGIC} header, got ${magic || 'unknown'}.`);
     }
 
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const localeHint = view.getUint32(HEADER_LOCALE_HINT_OFFSET, true);
-    console.log('[Xlc] locale hint:', localeHint);
+
+    try {
+      return this.expandRepeatedSingleBlockParse(bytes, this.parseDirectoryBasedFile(bytes, localeHint));
+    } catch {
+      // Fall back to the legacy single-locale layout when the directory-based parse does not fit.
+    }
+
+    return this.expandRepeatedSingleBlockParse(bytes, this.parseLegacySingleLocaleFile(bytes, localeHint));
+  }
+
+  private expandRepeatedSingleBlockParse(bytes: Uint8Array, parsed: ParsedXlcFile): ParsedXlcFile {
+    if (parsed.entries.length === 0 || parsed.entries.some((entry) => entry.locales.length !== 1)) {
+      return parsed;
+    }
+
+    const repeatedBlocks = this.parseRepeatedLegacyBlocks(bytes, parsed.valuesStartOffset, parsed.entries.length);
+
+    if (repeatedBlocks.length <= 1) {
+      return parsed;
+    }
+
+    const keys = parsed.entries.map((entry) => entry.key);
+    const locales = repeatedBlocks.map((block, index) => ({ localeId: index, blockStart: block.blockStart }));
+    const blockRecords = new Map<number, ParsedStringRecord[]>(
+      repeatedBlocks.map((block) => [block.blockStart, block.records])
+    );
+    const offsetUsage = this.buildOffsetUsage(locales, blockRecords, keys.length);
+    const stringValues = this.buildStringValueMap(blockRecords, offsetUsage);
+    const entries = this.buildEntries(keys, locales, blockRecords, stringValues);
+
+    return {
+      entries,
+      stringValues,
+      valuesStartOffset: parsed.valuesStartOffset
+    };
+  }
+
+  private parseDirectoryBasedFile(bytes: Uint8Array, localeHint: number): ParsedXlcFile {
     const firstKeyOffset = this.findFirstKeyOffset(bytes, localeHint);
-    console.log('[Xlc] first key offset:', `0x${firstKeyOffset.toString(16).toUpperCase()}`);
+    const locales = this.parseLocaleDirectory(bytes, firstKeyOffset);
+    const firstBlockStart = Math.min(...locales.map((locale) => locale.blockStart));
+
+    if (!Number.isFinite(firstBlockStart) || firstBlockStart <= firstKeyOffset) {
+      throw new Error('Unsupported XLC layout: locale block starts before the key table ends.');
+    }
+
+    const keys = this.parseKeys(bytes, firstKeyOffset, firstBlockStart);
+
+    const blockRecords = this.parseLocaleBlocks(bytes, locales, keys.length);
+    const offsetUsage = this.buildOffsetUsage(locales, blockRecords, keys.length);
+    const stringValues = this.buildStringValueMap(blockRecords, offsetUsage);
+    const entries = this.buildEntries(keys, locales, blockRecords, stringValues);
+
+    return { entries, stringValues, valuesStartOffset: firstBlockStart };
+  }
+
+  private parseLegacySingleLocaleFile(bytes: Uint8Array, localeHint: number): ParsedXlcFile {
+    const firstKeyOffset = this.findFirstKeyOffset(bytes, localeHint);
     const parsedKeys = this.parseKeyDirectoryUntilValues(bytes, firstKeyOffset);
-    console.log('[Xlc] key count:', parsedKeys.keys.length,
-      '| values start:', `0x${parsedKeys.valuesStartOffset.toString(16).toUpperCase()}`,
-      '| first key:', parsedKeys.keys[0],
-      '| last key:', parsedKeys.keys[parsedKeys.keys.length - 1]);
-    const valueRecords = this.parseValueRecords(bytes, parsedKeys.valuesStartOffset, parsedKeys.keys.length);
-    console.log('[Xlc] value record count:', valueRecords.length,
-      '| first value offset:', valueRecords[0] ? `0x${valueRecords[0].offset.toString(16).toUpperCase()}` : 'n/a');
+    const repeatedBlocks = this.parseRepeatedLegacyBlocks(bytes, parsedKeys.valuesStartOffset, parsedKeys.keys.length);
+
+    if (repeatedBlocks.length > 1) {
+      const locales = repeatedBlocks.map((block, index) => ({ localeId: index, blockStart: block.blockStart }));
+      const blockRecords = new Map<number, ParsedStringRecord[]>(
+        repeatedBlocks.map((block) => [block.blockStart, block.records])
+      );
+      const offsetUsage = this.buildOffsetUsage(locales, blockRecords, parsedKeys.keys.length);
+      const stringValues = this.buildStringValueMap(blockRecords, offsetUsage);
+      const entries = this.buildEntries(parsedKeys.keys, locales, blockRecords, stringValues);
+
+      return { entries, stringValues, valuesStartOffset: parsedKeys.valuesStartOffset };
+    }
+
+    const valueRecords = repeatedBlocks[0]?.records ?? this.parseValueRecords(bytes, parsedKeys.valuesStartOffset, parsedKeys.keys.length);
     const stringValues = this.buildStringValueMapFromRecords(valueRecords);
     const entries = this.buildSingleLocaleEntries(parsedKeys.keys, valueRecords, stringValues);
 
@@ -299,6 +369,49 @@ export class XlcEditorService {
     return records;
   }
 
+  private parseRepeatedLegacyBlocks(
+    bytes: Uint8Array,
+    startOffset: number,
+    expectedValueCount: number
+  ): Array<{ blockStart: number; records: ParsedStringRecord[] }> {
+    const blocks: Array<{ blockStart: number; records: ParsedStringRecord[] }> = [];
+    let cursor = startOffset;
+
+    while (cursor < bytes.byteLength) {
+      const blockStart = cursor;
+      const records: ParsedStringRecord[] = [];
+
+      for (let index = 0; index < expectedValueCount; index += 1) {
+        const stringRead = this.readUtf16LeNullTerminated(bytes, cursor, bytes.byteLength - cursor, true);
+
+        if (!stringRead) {
+          return blocks.length > 0 ? blocks : [];
+        }
+
+        records.push({
+          offset: cursor,
+          value: stringRead.value,
+          originalByteLength: stringRead.originalByteLength,
+          maxByteLength: 0
+        });
+        cursor = stringRead.nextOffset;
+      }
+
+      records.forEach((record, index) => {
+        const nextOffset = records[index + 1]?.offset ?? cursor;
+        record.maxByteLength = nextOffset - record.offset;
+      });
+
+      blocks.push({ blockStart, records });
+
+      if (cursor >= bytes.byteLength) {
+        break;
+      }
+    }
+
+    return blocks;
+  }
+
   private buildStringValueMapFromRecords(records: ParsedStringRecord[]): Map<number, ParsedStringValue> {
     const stringValues = new Map<number, ParsedStringValue>();
 
@@ -353,7 +466,7 @@ export class XlcEditorService {
     const localeByKey = new Map<string, XlcLocaleValue>();
 
     entries.forEach((entry) => {
-      const locale = entry.locales[0];
+      const locale = this.getPreferredLocale(entry.locales);
 
       if (locale) {
         localeByKey.set(entry.key, locale);
@@ -361,6 +474,14 @@ export class XlcEditorService {
     });
 
     return localeByKey;
+  }
+
+  private getPreferredLocale(locales: XlcLocaleValue[]): XlcLocaleValue | null {
+    if (!locales.length) {
+      return null;
+    }
+
+    return locales.find((locale) => locale.value.trim().length > 0) ?? locales[0];
   }
 
   private parseLocaleDirectory(bytes: Uint8Array, firstKeyOffset: number): LocaleDirectoryEntry[] {
@@ -552,23 +673,146 @@ export class XlcEditorService {
     }
 
     const prefix = this.binaryData.slice(0, this.valuesStartOffset);
-    const records = [...this.entries]
-      .sort((left, right) => left.index - right.index)
-      .map((entry) => {
-        const locale = entry.locales[0];
-        if (!locale) {
-          throw new Error(`Missing locale for XLC key ${entry.key}.`);
+    const sortedEntries = [...this.entries].sort((left, right) => left.index - right.index);
+
+    if (sortedEntries.length === 0) {
+      return prefix;
+    }
+
+    const localeLayout = sortedEntries[0].locales.map((locale) => ({ localeId: locale.localeId }));
+
+    if (localeLayout.length === 0) {
+      throw new Error(`Missing locale for XLC key ${sortedEntries[0].key}.`);
+    }
+
+    sortedEntries.forEach((entry) => {
+      if (entry.locales.length !== localeLayout.length) {
+        throw new Error(`Inconsistent locale count for XLC key ${entry.key}.`);
+      }
+
+      entry.locales.forEach((locale, localeIndex) => {
+        if (locale.localeId !== localeLayout[localeIndex].localeId) {
+          throw new Error(`Inconsistent locale ordering for XLC key ${entry.key}.`);
         }
-
-        return this.encodeUtf16LeValueRecord(locale.value);
       });
+    });
 
-    const totalValueBytes = records.reduce((sum, record) => sum + record.byteLength, 0);
+    const orderedEntries = localeLayout.length === 1
+      ? sortedEntries
+      : this.orderEntriesForSerializedNameBlock(sortedEntries);
+    const canonicalBlock = localeLayout.length === 1
+      ? this.buildSingleLocaleValueTable(orderedEntries)
+      : this.buildCanonicalMultiLocaleBlock(orderedEntries, localeLayout.length);
+    const totalValueBytes = canonicalBlock.byteLength * localeLayout.length;
     const output = new Uint8Array(prefix.byteLength + totalValueBytes);
     output.set(prefix, 0);
 
+    const view = new DataView(output.buffer, output.byteOffset, output.byteLength);
+
     let cursor = prefix.byteLength;
+    localeLayout.forEach((_, localeIndex) => {
+      const pairOffset = FIRST_ENTRY_OFFSET + localeIndex * 8;
+      view.setUint32(pairOffset, cursor, true);
+
+      output.set(canonicalBlock, cursor);
+      cursor += canonicalBlock.byteLength;
+    });
+
+    return output;
+  }
+
+  private buildSingleLocaleValueTable(entries: XlcEntry[]): Uint8Array {
+    const records = entries.map((entry) => {
+      const locale = entry.locales[0];
+
+      if (!locale) {
+        throw new Error(`Missing locale for XLC key ${entry.key}.`);
+      }
+
+      return this.encodeUtf16LeValueRecord(locale.value);
+    });
+
+    const totalByteLength = records.reduce((sum, record) => sum + record.byteLength, 0);
+    const output = new Uint8Array(totalByteLength);
+    let cursor = 0;
+
     records.forEach((record) => {
+      output.set(record, cursor);
+      cursor += record.byteLength;
+    });
+
+    return output;
+  }
+
+  private orderEntriesForSerializedNameBlock(entries: XlcEntry[]): XlcEntry[] {
+    return [...entries].sort((left, right) => {
+      const leftInfo = this.getSerializedNameBlockOrder(left.key, left.index);
+      const rightInfo = this.getSerializedNameBlockOrder(right.key, right.index);
+
+      if (leftInfo.nameOrder !== rightInfo.nameOrder) {
+        return leftInfo.nameOrder - rightInfo.nameOrder;
+      }
+
+      if (leftInfo.teamId !== rightInfo.teamId) {
+        return leftInfo.teamId - rightInfo.teamId;
+      }
+
+      return left.index - right.index;
+    });
+  }
+
+  private getSerializedNameBlockOrder(
+    key: string,
+    fallbackIndex: number
+  ): { teamId: number; nameOrder: number } {
+    const match = /^TXT_TEAMNAME(LONG|MED|SHORT)_(\d+)$/u.exec(key);
+
+    if (!match) {
+      return {
+        teamId: Number.MAX_SAFE_INTEGER,
+        nameOrder: fallbackIndex
+      };
+    }
+
+    const [, type, teamIdText] = match;
+    const nameOrder = type === 'LONG'
+      ? 0
+      : type === 'MED'
+        ? 1
+        : 2;
+
+    return {
+      teamId: Number(teamIdText),
+      nameOrder
+    };
+  }
+
+  private buildCanonicalMultiLocaleBlock(entries: XlcEntry[], localeCount: number): Uint8Array {
+    if (!this.binaryData) {
+      throw new Error('No XLC file loaded');
+    }
+
+    const firstEntry = entries[0];
+    const firstLocale = firstEntry?.locales[0];
+
+    if (!firstLocale) {
+      throw new Error('Missing locale data for canonical multi-locale block generation.');
+    }
+
+    const compactRecords = entries.map((entry) => {
+      const locale = entry.locales[0];
+
+      if (!locale) {
+        throw new Error(`Missing locale for XLC key ${entry.key}.`);
+      }
+
+      return this.encodeUtf16LeValueRecord(locale.value);
+    });
+    const compactByteLength = compactRecords.reduce((sum, record) => sum + record.byteLength, 0);
+    const output = new Uint8Array(compactByteLength);
+
+    let cursor = 0;
+    compactRecords.forEach((record) => {
       output.set(record, cursor);
       cursor += record.byteLength;
     });
@@ -612,7 +856,7 @@ export class XlcEditorService {
   }
 
   private encodeUtf16LeValueRecord(value: string): Uint8Array {
-    return this.encodeUtf16LeNullTerminated(`${value}   `);
+    return this.encodeUtf16LeNullTerminated(value);
   }
 
   private isResourceKey(value: string): boolean {

@@ -9,6 +9,8 @@ const FORMATION_OFFSET = 0xB8;
 const SPONSOR_TYPE_OFFSET = 0x100;
 const KIT_MANUFACTURER_OFFSET = 0x104;
 const EUROPEAN_COMPETITION_OFFSET = 0x124;
+const STADIUM_NAME_OFFSET = 0x128;
+const STADIUM_NAME_MAX_BYTES = TEAM_BLOCK_SIZE - STADIUM_NAME_OFFSET;
 const KIT_COLOR_START_OFFSET = 0x18;
 const KIT_COUNT = 4;
 const COLORS_PER_KIT = 10;
@@ -114,69 +116,20 @@ export class TeamsDatService {
       nextHandle = handles[0];
     }
 
+    this.fileHandle = nextHandle;
     const file = await nextHandle.getFile();
     console.log('[TeamsDat] file picked:', file.name, 'size:', file.size, 'bytes');
-
-    const buffer = await file.arrayBuffer();
-    const raw = new Uint8Array(buffer);
-    console.log('[TeamsDat] raw buffer length:', raw.byteLength,
-      '| first 4 bytes:', raw[0], raw[1], raw[2], raw[3]);
-
-    // 0x78 = zlib magic byte — file is compressed, inflate it first
-    const isZlib = raw.length >= 2 && raw[0] === 0x78;
-    let payload: Uint8Array;
-
-    if (isZlib) {
-      console.log('[TeamsDat] zlib header detected, inflating...');
-      payload = new Uint8Array((window as any).pako.inflate(raw));
-      console.log('[TeamsDat] inflated size:', payload.byteLength);
-    } else {
-      console.log('[TeamsDat] no zlib header, reading raw');
-      payload = raw;
-    }
-
-    if (payload.byteLength < FILE_HEADER_SIZE + TEAM_BLOCK_SIZE) {
-      throw new Error(`Invalid teams.dat: file is too small (${payload.byteLength} bytes).`);
-    }
-
-    const nextTeamDataBytes = payload.slice(FILE_HEADER_SIZE);
-    const expectedTeams = Math.floor(nextTeamDataBytes.byteLength / TEAM_BLOCK_SIZE);
-    console.log('[TeamsDat] team data bytes:', nextTeamDataBytes.byteLength,
-      '| expected team count:', expectedTeams);
-
-    if (expectedTeams > 2000) {
-      throw new Error(
-        `Unreasonable team count (${expectedTeams}) — wrong block size or wrong file.` +
-        ` Payload size=${payload.byteLength}, TEAM_BLOCK_SIZE=${TEAM_BLOCK_SIZE}.`
-      );
-    }
-
-    const nextHeaderBytes = payload.slice(0, FILE_HEADER_SIZE);
-    console.log('[TeamsDat] scanning', expectedTeams, 'records...');
-    const nextRecords = this.scanRecords(nextTeamDataBytes);
-    console.log('[TeamsDat] scan done, records:', nextRecords.length);
-
-    if (nextRecords.length === 0) {
-      throw new Error('Invalid teams.dat: no team blocks found.');
-    }
-
-    // Commit only after the file is fully validated and parsed.
-    this.fileHandle = nextHandle;
-    this.wasZlib = isZlib;
-    this.fileHeaderBytes = nextHeaderBytes;
-    this.teamDataBytes = nextTeamDataBytes;
-    this.records = nextRecords;
-    this.teamOptions = nextRecords.map(r => ({
-      value: r.index,
-      label: r.teamLabel + (r.stadiumName ? ` | ${r.stadiumName}` : '')
-    }));
-    this.formationIdByTeamId = this.buildFormationIdMap(nextRecords);
-    this.hasPendingChanges = false;
-    console.log('[TeamsDat] load complete —', nextRecords.length, 'teams.');
+    this.applyLoadedBytes(new Uint8Array(await file.arrayBuffer()));
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
 
     return file.name;
+  }
+
+  loadFromBytes(bytes: Uint8Array, fileName = 'TEAMS.DAT'): string {
+    this.fileHandle = null;
+    this.applyLoadedBytes(bytes);
+    return fileName;
   }
 
   async tryRestoreLastFile(): Promise<string | null> {
@@ -209,6 +162,10 @@ export class TeamsDatService {
     await writable.write(this.getSerializedData());
     await writable.close();
     this.hasPendingChanges = false;
+  }
+
+  exportCurrentFileBytes(): Uint8Array {
+    return new Uint8Array(this.getSerializedData());
   }
 
   exportFile(fileName = 'teams_export.dat'): void {
@@ -409,7 +366,7 @@ export class TeamsDatService {
     }
 
     if (changes.stadiumName !== undefined) {
-      this.writeUtf16String(this.getTeamDataOrThrow(), blockStart + 0x128, 60, changes.stadiumName);
+      this.writeUtf16String(this.getTeamDataOrThrow(), blockStart + STADIUM_NAME_OFFSET, STADIUM_NAME_MAX_BYTES, changes.stadiumName);
     }
 
     const updatedRecord = this.parseRecord(index);
@@ -458,7 +415,7 @@ export class TeamsDatService {
       penaltyRole: safeView.getUint32(blockStart + 0xD8, true),
       freeKickRole: safeView.getUint32(blockStart + 0xDC, true),
       region: this.extractUtf16String(safeBytes, blockStart + 0xF8, 4),
-      stadiumName: this.extractUtf16String(safeBytes, blockStart + 0x128, 60),
+      stadiumName: this.extractUtf16String(safeBytes, blockStart + STADIUM_NAME_OFFSET, STADIUM_NAME_MAX_BYTES),
       sponsorType: safeView.getUint32(blockStart + SPONSOR_TYPE_OFFSET, true),
       kitManufacturer: safeView.getUint32(blockStart + KIT_MANUFACTURER_OFFSET, true),
       europeanCompetition: safeView.getUint32(blockStart + EUROPEAN_COMPETITION_OFFSET, true),
@@ -610,6 +567,60 @@ export class TeamsDatService {
     }
 
     return (await fileHandle.queryPermission({ mode: 'read' })) === 'granted';
+  }
+
+  private applyLoadedBytes(raw: Uint8Array): void {
+    console.log('[TeamsDat] raw buffer length:', raw.byteLength,
+      '| first 4 bytes:', raw[0], raw[1], raw[2], raw[3]);
+
+    const isZlib = raw.length >= 2 && raw[0] === 0x78;
+    let payload: Uint8Array;
+
+    if (isZlib) {
+      console.log('[TeamsDat] zlib header detected, inflating...');
+      payload = new Uint8Array((window as any).pako.inflate(raw));
+      console.log('[TeamsDat] inflated size:', payload.byteLength);
+    } else {
+      console.log('[TeamsDat] no zlib header, reading raw');
+      payload = new Uint8Array(raw);
+    }
+
+    if (payload.byteLength < FILE_HEADER_SIZE + TEAM_BLOCK_SIZE) {
+      throw new Error(`Invalid teams.dat: file is too small (${payload.byteLength} bytes).`);
+    }
+
+    const nextTeamDataBytes = payload.slice(FILE_HEADER_SIZE);
+    const expectedTeams = Math.floor(nextTeamDataBytes.byteLength / TEAM_BLOCK_SIZE);
+    console.log('[TeamsDat] team data bytes:', nextTeamDataBytes.byteLength,
+      '| expected team count:', expectedTeams);
+
+    if (expectedTeams > 2000) {
+      throw new Error(
+        `Unreasonable team count (${expectedTeams}) — wrong block size or wrong file.` +
+        ` Payload size=${payload.byteLength}, TEAM_BLOCK_SIZE=${TEAM_BLOCK_SIZE}.`
+      );
+    }
+
+    const nextHeaderBytes = payload.slice(0, FILE_HEADER_SIZE);
+    console.log('[TeamsDat] scanning', expectedTeams, 'records...');
+    const nextRecords = this.scanRecords(nextTeamDataBytes);
+    console.log('[TeamsDat] scan done, records:', nextRecords.length);
+
+    if (nextRecords.length === 0) {
+      throw new Error('Invalid teams.dat: no team blocks found.');
+    }
+
+    this.wasZlib = isZlib;
+    this.fileHeaderBytes = nextHeaderBytes;
+    this.teamDataBytes = nextTeamDataBytes;
+    this.records = nextRecords;
+    this.teamOptions = nextRecords.map(r => ({
+      value: r.index,
+      label: r.teamLabel + (r.stadiumName ? ` | ${r.stadiumName}` : '')
+    }));
+    this.formationIdByTeamId = this.buildFormationIdMap(nextRecords);
+    this.hasPendingChanges = false;
+    console.log('[TeamsDat] load complete —', nextRecords.length, 'teams.');
   }
 
   private getSerializedData(): ArrayBuffer {

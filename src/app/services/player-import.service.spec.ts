@@ -1,5 +1,6 @@
 /// <reference types="jasmine" />
 
+import { calculatePlayerOvr } from './player.service';
 import { PlayerImportService, ImportedPlayerRecord } from './player-import.service';
 
 describe('PlayerImportService', () => {
@@ -202,26 +203,40 @@ describe('PlayerImportService', () => {
     expect(parsed[0].weightKg).toBe(72);
   });
 
-  it('keeps RM and LM imports on a midfield wide role when that gives the best OVR', () => {
+  it('moves RM and LM imports to a wide attacking role when that gives the better OVR', () => {
     const basePlayer = {
       name: 'Base', pos: 11, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
       boots: 0, mangas: 0, guantes: 0,
-      ACC: 77, SPD: 75, STA: 78, STR: 64, TAC: 63, CON: 81, SHO: 61,
-      CRO: 84, FK: 73, PAS: 80, HEA: 58, GKS: 20, GKH: 20, GKP: 20
+      ACC: 84, SPD: 86, STA: 58, STR: 79, TAC: 34, CON: 88, SHO: 83,
+      CRO: 72, FK: 68, PAS: 54, HEA: 74, GKS: 20, GKH: 20, GKP: 20
     };
 
-    const rmImported = createImportedPlayer({ clubPosition: 'RM', preferredFoot: 'Right' });
-    const lmImported = createImportedPlayer({ clubPosition: 'LM', preferredFoot: 'Left' });
+    const wideOverrides = {
+      shooting: 83,
+      dribbling: 88,
+      powerStrength: 79,
+      attackingHeadingAccuracy: 74,
+      passing: 54,
+      powerStamina: 58,
+      movementAcceleration: 84,
+      movementSprintSpeed: 86,
+      defending: 34,
+      defendingStandingTackle: 34,
+      defendingSlidingTackle: 34
+    };
+
+    const rmImported = createImportedPlayer({ clubPosition: 'RM', preferredFoot: 'Right', ...wideOverrides });
+    const lmImported = createImportedPlayer({ clubPosition: 'LM', preferredFoot: 'Left', ...wideOverrides });
 
     const rmMapped = service.mapImportedPlayer(rmImported, basePlayer);
     const lmMapped = service.mapImportedPlayer(lmImported, basePlayer);
 
-    expect(rmMapped.pos).toBe(16);
-    expect(lmMapped.pos).toBe(17);
+    expect(rmMapped.pos).toBe(21);
+    expect(lmMapped.pos).toBe(20);
   });
 
-  it('moves LW and RW imports to a wide midfield role when that gives the best OVR', () => {
+  it('keeps LW and RW imports on their original wide attacking roles', () => {
     const basePlayer = {
       name: 'Base', pos: 20, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
       skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
@@ -236,8 +251,8 @@ describe('PlayerImportService', () => {
     const rwMapped = service.mapImportedPlayer(rwImported, basePlayer);
     const lwMapped = service.mapImportedPlayer(lwImported, basePlayer);
 
-    expect(rwMapped.pos).toBe(16);
-    expect(lwMapped.pos).toBe(17);
+    expect(rwMapped.pos).toBe(21);
+    expect(lwMapped.pos).toBe(20);
   });
 
   it('does not flip a wide import from left to right or right to left', () => {
@@ -257,8 +272,8 @@ describe('PlayerImportService', () => {
     const lwMapped = service.mapImportedPlayer(createImportedPlayer({ clubPosition: 'LW', preferredFoot: 'Left' }), leftBasePlayer);
     const rwMapped = service.mapImportedPlayer(createImportedPlayer({ clubPosition: 'RW', preferredFoot: 'Right' }), rightBasePlayer);
 
-    expect([17, 20]).toContain(lwMapped.pos);
-    expect([16, 21]).toContain(rwMapped.pos);
+    expect(lwMapped.pos).toBe(20);
+    expect(rwMapped.pos).toBe(21);
   });
 
   it('maps HEA using the import stat formula from heading accuracy', () => {
@@ -335,6 +350,107 @@ describe('PlayerImportService', () => {
     const mapped = service.mapImportedPlayer(imported, basePlayer);
 
     expect(mapped.name).toBe('M. Salah');
+  });
+
+  it('raises goalkeeper stats when the mapped OVR is below the imported OVR', () => {
+    const basePlayer = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 190, peso: 82, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 40, SPD: 42, STA: 45, STR: 60, TAC: 20, CON: 25, SHO: 15,
+      CRO: 10, FK: 12, PAS: 18, HEA: 30, GKS: 70, GKH: 71, GKP: 72
+    };
+
+    const imported = createImportedPlayer({
+      overall: 80,
+      clubPosition: 'GK',
+      goalkeepingReflexes: 70,
+      goalkeepingHandling: 71,
+      goalkeepingDiving: 72
+    });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer);
+
+    expect(calculatePlayerOvr(mapped)).toBeGreaterThanOrEqual(80);
+    expect(mapped.GKS).toBeGreaterThan(70);
+    expect(mapped.GKH).toBeGreaterThan(71);
+    expect(mapped.GKP).toBeGreaterThan(72);
+  });
+
+  it('lowers defender import stats when the mapped OVR is above the imported OVR', () => {
+    const basePlayer = {
+      name: 'Base', pos: 6, foot: 0, nat: 0, estatura: 188, peso: 84, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 65, SPD: 67, STA: 72, STR: 84, TAC: 86, CON: 58, SHO: 40,
+      CRO: 45, FK: 30, PAS: 62, HEA: 80, GKS: 10, GKH: 10, GKP: 10
+    };
+
+    const imported = createImportedPlayer({
+      overall: 74,
+      clubPosition: 'CB',
+      defending: 86,
+      defendingStandingTackle: 86,
+      defendingSlidingTackle: 86,
+      attackingHeadingAccuracy: 80,
+      powerStrength: 84
+    });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer);
+
+    expect(calculatePlayerOvr(mapped)).toBeLessThanOrEqual(74);
+    expect(mapped.TAC).toBeLessThan(86);
+    expect(mapped.HEA).toBeLessThan(80);
+    expect(mapped.STR).toBeLessThan(84);
+  });
+
+  it('applies midfield OVR correction to stamina, control, and passing', () => {
+    const basePlayer = {
+      name: 'Base', pos: 11, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 74, SPD: 72, STA: 76, STR: 68, TAC: 60, CON: 62, SHO: 58,
+      CRO: 64, FK: 55, PAS: 61, HEA: 50, GKS: 10, GKH: 10, GKP: 10
+    };
+
+    const imported = createImportedPlayer({
+      overall: 76,
+      clubPosition: 'CM',
+      dribbling: 62,
+      passing: 61
+    });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer);
+
+    expect(calculatePlayerOvr(mapped)).toBeGreaterThanOrEqual(76);
+    expect(mapped.STA).toBeGreaterThan(76);
+    expect(mapped.CON).toBeGreaterThan(62);
+    expect(mapped.PAS).toBeGreaterThan(61);
+  });
+
+  it('applies attacker OVR correction to strength, dribbling, shooting, and heading', () => {
+    const basePlayer = {
+      name: 'Base', pos: 19, foot: 0, nat: 0, estatura: 182, peso: 78, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 78, SPD: 80, STA: 74, STR: 72, TAC: 35, CON: 66, SHO: 67,
+      CRO: 58, FK: 50, PAS: 60, HEA: 62, GKS: 10, GKH: 10, GKP: 10
+    };
+
+    const imported = createImportedPlayer({
+      overall: 79,
+      clubPosition: 'ST',
+      dribbling: 66,
+      shooting: 67
+    });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer);
+
+    expect(calculatePlayerOvr(mapped)).toBeGreaterThanOrEqual(79);
+    expect(mapped.STR).toBeGreaterThan(72);
+    expect(mapped.CON).toBeGreaterThan(66);
+    expect(mapped.SHO).toBeGreaterThan(67);
+    expect(mapped.HEA).toBeGreaterThan(62);
   });
 
   it('maps multipart surnames by abbreviating only the first name', () => {

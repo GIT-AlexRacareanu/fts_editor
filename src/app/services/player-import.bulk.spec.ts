@@ -1,6 +1,7 @@
 /// <reference types="jasmine" />
 
 import { Player } from '../models/player.model';
+import { calculatePlayerOvr } from './player.service';
 import { ImportedPlayerRecord, PlayerImportService } from './player-import.service';
 
 describe('PlayerImportService bulk import mapping', () => {
@@ -84,6 +85,30 @@ describe('PlayerImportService bulk import mapping', () => {
     const mapped = service.mapImportedPlayer(imported, basePlayer, { includeYear: false });
 
     expect(mapped.HEA).toBe(83);
+  });
+
+  it('applies the same OVR correction during bulk import mapping', () => {
+    const service = new PlayerImportService();
+    const basePlayer: Player = {
+      name: 'Base', pos: 11, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 1998,
+      skin: 2, skin_tone: 1, head_type: 3, hair_type: 4, hair: 5, beard_type: 6,
+      boots: 7, mangas: 8, guantes: 9,
+      ACC: 74, SPD: 72, STA: 76, STR: 68, TAC: 60, CON: 62, SHO: 58,
+      CRO: 64, FK: 55, PAS: 61, HEA: 50, GKS: 10, GKH: 10, GKP: 10
+    };
+    const imported = createImportedPlayer({
+      overall: 76,
+      clubPosition: 'CM',
+      dribbling: 62,
+      passing: 61
+    });
+
+    const mapped = service.mapImportedPlayer(imported, basePlayer, { includeYear: false });
+
+    expect(calculatePlayerOvr(mapped)).toBeGreaterThanOrEqual(76);
+    expect(mapped.CON).toBeGreaterThan(62);
+    expect(mapped.PAS).toBeGreaterThan(61);
+    expect(mapped.year).toBe(1998);
   });
 });
 

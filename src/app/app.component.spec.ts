@@ -1,44 +1,129 @@
-import { TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
-
 import { AppComponent } from './app.component';
 
+function createComponent(
+  playerServiceOverrides: Record<string, any> = {},
+  playerImportServiceOverrides: Record<string, any> = {},
+  teamEditorServiceOverrides: Record<string, any> = {},
+  teamsDatServiceOverrides: Record<string, any> = {},
+  xlcEditorServiceOverrides: Record<string, any> = {},
+  pakEditorServiceOverrides: Record<string, any> = {},
+  fileHandleStorageOverrides: Record<string, any> = {}
+): AppComponent {
+  const ngZone = {
+    run: <T>(callback: () => T) => callback(),
+    runOutsideAngular: <T>(callback: () => T) => callback()
+  };
+  const changeDetectorRef = {
+    detectChanges: () => undefined,
+    markForCheck: () => undefined
+  };
+  const playerService = {
+    getOvrTuningConfig: () => [],
+    readPlayer: () => ({ pos: 11, nat: 0 }),
+    getPlayerNameByIndex: () => 'Player',
+    findPlayerIndexByName: () => -1,
+    parsePlayerId: () => -1,
+    formatPlayerId: () => '0001',
+    calculateOVR: () => 70,
+    binaryData: null,
+    totalPlayers: 0,
+    ...playerServiceOverrides
+  };
+  const playerImportService = {
+    filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
+    mapImportedPlayer: () => ({ pos: 11, nat: 0 }),
+    ...playerImportServiceOverrides
+  };
+  const pakEditorService = {
+    hasData: false,
+    ...pakEditorServiceOverrides
+  };
+  const teamEditorService = {
+    hasData: false,
+    teamOptions: [],
+    getTeam: () => ({ offset: 0, teamId: 0, teamLabel: 'Team 0', playerCount: 0, slots: [] }),
+    searchTeams: () => [],
+    ...teamEditorServiceOverrides
+  };
+  const teamsDatService = {
+    hasData: false,
+    kitStyleOptions: [],
+    sponsorTypeOptions: [],
+    europeanCompetitionOptions: [],
+    records: [],
+    ...teamsDatServiceOverrides
+  };
+  const xlcEditorService = {
+    getLocaleValueByKey: () => null,
+    entries: [],
+    ...xlcEditorServiceOverrides
+  };
+  const domSanitizer = {
+    bypassSecurityTrustUrl: (value: string) => value
+  };
+  const fileHandleStorage = {
+    getFileHandle: async () => null,
+    saveFileHandle: async () => undefined,
+    deleteFileHandle: async () => undefined,
+    ...fileHandleStorageOverrides
+  };
+
+  return new AppComponent(
+    ngZone as any,
+    changeDetectorRef as any,
+    playerService as any,
+    playerImportService as any,
+    pakEditorService as any,
+    teamEditorService as any,
+    teamsDatService as any,
+    xlcEditorService as any,
+    domSanitizer as any,
+    fileHandleStorage as any
+  );
+}
+
 describe('AppComponent', () => {
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [AppComponent],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
+  it('should create the app', () => {
+    const app = createComponent();
+    expect(app).toBeTruthy();
   });
 
-  it('should create the app', () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
+  it('restores the team names XLC from the remembered folder when no standalone XLC handle exists', async () => {
+    const xlcHandle = { kind: 'file', name: 'FTSTEAMNAMES.XLC' };
+    const dirHandle = {
+      queryPermission: async () => 'granted',
+      getFileHandle: jasmine.createSpy('getFileHandle').and.resolveTo(xlcHandle)
+    };
+    const xlcEditorService = {
+      tryRestoreLastFile: async () => null,
+      loadFile: jasmine.createSpy('loadFile').and.resolveTo('FTSTEAMNAMES.XLC')
+    };
+    const fileHandleStorage = {
+      getFileHandle: async (key: string) => key === 'fts-editor-folder' ? dirHandle : null
+    };
+    const component = createComponent(
+      { tryRestoreLastFile: async () => null } as any,
+      {},
+      { tryRestoreLastFile: async () => null } as any,
+      { tryRestoreLastFile: async () => null } as any,
+      xlcEditorService as any,
+      { tryRestoreLastFile: async () => null } as any,
+      fileHandleStorage as any
+    );
+    const applyXlcLoadedSpy = spyOn<any>(component, 'applyXlcLoaded').and.callFake((fileName: string) => {
+      component.xlcFileName = fileName;
+    });
+
+    await (component as any).restoreRememberedFiles();
+
+    expect(dirHandle.getFileHandle).toHaveBeenCalledWith('ftsteamnames.xlc');
+    expect(xlcEditorService.loadFile).toHaveBeenCalledOnceWith(xlcHandle);
+    expect(applyXlcLoadedSpy).toHaveBeenCalledOnceWith('FTSTEAMNAMES.XLC');
+    expect(component.xlcStatusMessage).toBe('Loaded FTSTEAMNAMES.XLC.');
   });
 });
 
 describe('AppComponent team CSV import preview', () => {
-  function createComponent(): AppComponent {
-    const playerService = {
-      getOvrTuningConfig: () => [],
-      readPlayer: () => ({ pos: 11 }),
-      findPlayerIndexByName: () => -1,
-      parsePlayerId: () => -1,
-      formatPlayerId: () => '0001',
-      calculateOVR: () => 70,
-      binaryData: null
-    };
-    const playerImportService = {
-      filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
-      mapImportedPlayer: () => ({ pos: 11 })
-    };
-    const teamEditorService = { hasData: false };
-    const teamsDatService = { hasData: false };
-
-    return new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
-  }
-
   it('loads the import source when team CSV search starts and no source is loaded', async () => {
     const component = createComponent();
     const loadSpy = spyOn(component, 'loadImportSource').and.callFake(async () => {
@@ -82,7 +167,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
       mapImportedPlayer: () => ({ pos: 11 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
       { shortName: 'Matches DB Name', teamName: 'Arsenal', clubPosition: 'CM', overall: 80, sourceRowIndex: 3, playerId: '3' }
@@ -110,7 +195,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
       mapImportedPlayer: () => ({ pos: 11 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
       { shortName: 'Gabriel', lastName: 'dos S. Magalhães', teamName: 'Arsenal', clubPosition: 'CB', overall: 89, sourceRowIndex: 3, playerId: '3' }
@@ -142,7 +227,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
       mapImportedPlayer: () => ({ pos: 11 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
       { shortName: 'Top Arsenal Player', teamName: 'Arsenal', clubPosition: 'CM', overall: 90, sourceRowIndex: 10, playerId: '10' },
@@ -178,7 +263,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
       mapImportedPlayer: () => ({ pos: 11 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
       { shortName: 'Chosen Arsenal Player', teamName: 'Arsenal', clubPosition: 'CM', overall: 92, sourceRowIndex: 25, playerId: '25' },
@@ -210,7 +295,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
       mapImportedPlayer: () => ({ pos: 11 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
       { shortName: 'Exact Arsenal Match', teamName: 'Arsenal', clubPosition: 'CM', overall: 92, sourceRowIndex: 0, playerId: '0' }
@@ -237,7 +322,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
       mapImportedPlayer: () => ({ pos: 11 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
       { shortName: 'Matches DB Name', teamName: 'Arsenal', clubPosition: 'CM', overall: 80, sourceRowIndex: 0 }
@@ -263,7 +348,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: (players: Array<{ teamName: string }>, teamName: string) => players.filter((player) => player.teamName === teamName),
       mapImportedPlayer: () => ({ pos: 19, nat: 0 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.importedPlayers = [
       { shortName: 'Target Striker', teamName: 'Arsenal', clubPosition: 'ST', overall: 90, sourceRowIndex: 3, playerId: '3' }
@@ -316,7 +401,7 @@ describe('AppComponent team CSV import preview', () => {
       getFormationIdByTeamId: () => 0,
       records: []
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
     spyOn(window, 'confirm').and.returnValue(true);
     spyOn(component, 'loadSingleTeam').and.stub();
     spyOn<any>(component, 'refreshDbBrowsePlayers').and.stub();
@@ -355,7 +440,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: () => [],
       mapImportedPlayer: () => ({ name: 'Imported Player', pos: 19, nat: 0 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
 
     component.popupPlayerIndex = 1;
     component.popupPlayer = { name: 'Current Player', pos: 11, nat: 0 } as any;
@@ -383,7 +468,7 @@ describe('AppComponent team CSV import preview', () => {
       filterByTeam: () => [],
       mapImportedPlayer: (source: { shortName: string }) => ({ name: source.shortName, pos: 11, nat: 0, foot: 0, estatura: 180, peso: 75, hiddenFromTransferMarket: 0, isIconLegend: 0, birthDay: 1, birthMonth: 1, year: 2000, skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0, boots: 0, mangas: 0, guantes: 0, ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0, CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0 })
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
+    const component = createComponent(playerService as any, playerImportService as any, { hasData: false } as any, { hasData: false } as any);
     const confirmSpy = spyOn(window, 'confirm').and.returnValue(true);
 
     component.importedPlayers = [
@@ -431,7 +516,7 @@ describe('AppComponent team CSV import preview', () => {
     };
     const teamEditorService = { hasData: true };
     const teamsDatService = { hasData: false };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
     const team = {
       offset: 16,
       teamId: 1,
@@ -530,7 +615,7 @@ describe('AppComponent team CSV import preview', () => {
         return { index: 0, teamId: 99, formationId: currentFormationId };
       }
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
 
     component.loadSingleTeam(16);
     const initialSketch = component.getFormationSketch(component.displayedTeams[0]);
@@ -592,7 +677,7 @@ describe('AppComponent team CSV import preview', () => {
       getFormationIdByTeamId: () => 0,
       updateRecord
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
 
     spyOn(component as any, 'getFormationSketch').and.returnValue({
       slots: [
@@ -629,7 +714,7 @@ describe('AppComponent team CSV import preview', () => {
     };
     const teamEditorService = { hasData: false };
     const teamsDatService = { hasData: false };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
     const applyPlayerFileLoadedSpy = spyOn<any>(component, 'applyPlayerFileLoaded').and.stub();
     const openPlayerEditPopupSpy = spyOn(component, 'openPlayerEditPopup').and.stub();
 
@@ -671,7 +756,7 @@ describe('AppComponent team CSV import preview', () => {
     };
     const teamEditorService = { hasData: false };
     const teamsDatService = { hasData: true, exportUncompressedFile };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
 
     component.downloadTeamsDatUncompressed();
 
@@ -700,7 +785,7 @@ describe('AppComponent team CSV import preview', () => {
       updateKitStyle,
       updateRecord
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
 
     component.openTeamKitDialog({ teamId: 99 } as any);
     component.updateActiveTeamKitDialogColor(2, 4, '#112233');
@@ -742,7 +827,7 @@ describe('AppComponent team CSV import preview', () => {
       sponsorTypeOptions: [],
       europeanCompetitionOptions: [{ value: 0, label: '0. None' }, { value: 1, label: '1. UCL' }, { value: 2, label: '2. UEL' }]
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
     spyOn(component, 'loadSingleTeam').and.callFake(loadSingleTeam as any);
 
     component.teamBrowseLeagueQuery = 0;
@@ -800,7 +885,8 @@ describe('AppComponent team CSV import preview', () => {
       saveToSameFile: jasmine.createSpy('saveToSameFile').and.resolveTo(),
       updateRecord
     };
-    const component = new AppComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+    const rebuildTeamBrowseItemsSpy = spyOn<any>(component, 'rebuildTeamBrowseItems').and.callFake(() => undefined);
 
     spyOn<any>(component, 'syncAllTeamsDatRolesWithCurrentRosters').and.returnValue(0);
     spyOn<any>(component, 'getFormationSketch').and.callFake((team: { teamId: number }) => ({
@@ -830,10 +916,49 @@ describe('AppComponent team CSV import preview', () => {
       midfieldOvr: 77,
       defenseOvr: 67
     });
+    expect(rebuildTeamBrowseItemsSpy).toHaveBeenCalledTimes(1);
     expect(playerService.saveCurrentToSameFile).toHaveBeenCalledTimes(1);
     expect(teamEditorService.saveToSameFile).toHaveBeenCalledTimes(1);
     expect(teamsDatService.saveToSameFile).toHaveBeenCalledTimes(1);
     expect(alertSpy).toHaveBeenCalledWith('Synced ATT/MID/DEF OVR values in TEAMS.DAT for 2 teams before save.');
     expect(alertSpy).toHaveBeenCalledWith('Files overwritten successfully.');
+  });
+});
+
+describe('AppComponent team name resolution', () => {
+  it('prefers the first non-empty locale when decorating team names from XLC entries', () => {
+    const teamEditorService = {
+      hasData: true,
+      teamOptions: [{ offset: 16, label: 'Team 1' }],
+      getTeam: () => ({ offset: 16, teamId: 1, teamLabel: 'Team 1', playerCount: 0, slots: [] })
+    };
+    const xlcEditorService = {
+      getLocaleValueByKey: () => null,
+      entries: [
+        {
+          index: 0,
+          key: 'TXT_TEAMNAMESHORT_1',
+          locales: [
+            { localeId: 0, localeLabel: 'Locale 0', offset: 10, maxByteLength: 4, originalByteLength: 2, sharedReferenceCount: 1, value: '' },
+            { localeId: 1, localeLabel: 'Locale 1', offset: 20, maxByteLength: 8, originalByteLength: 8, sharedReferenceCount: 1, value: 'ARS' }
+          ]
+        },
+        {
+          index: 1,
+          key: 'TXT_TEAMNAMELONG_1',
+          locales: [
+            { localeId: 0, localeLabel: 'Locale 0', offset: 30, maxByteLength: 4, originalByteLength: 2, sharedReferenceCount: 1, value: '' },
+            { localeId: 1, localeLabel: 'Locale 1', offset: 40, maxByteLength: 16, originalByteLength: 16, sharedReferenceCount: 1, value: 'Arsenal' }
+          ]
+        }
+      ]
+    };
+    const component = createComponent({}, {}, teamEditorService as any, { hasData: false, records: [] } as any, xlcEditorService as any);
+
+    component.loadSingleTeam(16);
+
+    expect(component.displayedTeams[0].teamLabel).toBe('ARS');
+    expect(component.displayedTeams[0].teamShortName).toBe('ARS');
+    expect(component.displayedTeams[0].teamLongName).toBe('Arsenal');
   });
 });

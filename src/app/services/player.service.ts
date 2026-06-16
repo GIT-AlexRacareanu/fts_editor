@@ -65,14 +65,14 @@ export function calculatePlayerOvr(player: Player): number {
   return Math.max(0, Math.min(100, raw));
 }
 
-const RATING_MULTIPLIER_BITS = 0x3f833333;
+const RATING_MULTIPLIER_BITS = 0x3f866666;
 const DEFAULT_MULTIPLIER = ieee754ToFloat(RATING_MULTIPLIER_BITS);
 
 const DEFAULT_PROFILES: Record<OvrCategory, OvrProfile> = {
   gk: { weights: [2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 12, 12, 12], bonus: 0, multiplier: DEFAULT_MULTIPLIER},
-  def: { weights: [10, 4, 4, 0, 4, 2, 2, 2, 10, 30, 0, 0, 0, 0], bonus: 22, multiplier: DEFAULT_MULTIPLIER },
-  mid: { weights: [10, 4, 0, 0, 35, 35, 0, 0, 0, 8, 0, 0, 0, 0], bonus: 15, multiplier: DEFAULT_MULTIPLIER},
-  att: { weights: [8, 0, 10, 0, 30, 5, 0, 40, 0, 0, 0, 0, 0, 0], bonus: 12, multiplier: DEFAULT_MULTIPLIER }
+  def: { weights: [10, 4, 2, 2, 4, 4, 0, 0, 10, 15, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER },
+  mid: { weights: [5, 10, 2, 2, 15, 15, 6, 0, 2, 6, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER},
+  att: { weights: [4, 2, 4, 4, 20, 6, 2, 20, 2, 0, 0, 0, 0, 0], bonus: 0, multiplier: DEFAULT_MULTIPLIER }
 };
 
 function ieee754ToFloat(bits: number): number {
@@ -88,10 +88,6 @@ function getPositionCategory(position: number): number {
 
   if (position === 8) {
     return 2;
-  }
-
-  if (position === 16 || position === 17) {
-    return 3;
   }
 
   if (position >= 1 && position <= 10) {
@@ -393,14 +389,19 @@ export class PlayerService {
       nextHandle = handles[0];
     }
 
-    const file = await nextHandle.getFile();
-    const buffer = await file.arrayBuffer();
     this.fileHandle = nextHandle;
-    this.binaryData = new Uint8Array(pako.inflate(new Uint8Array(buffer)));
+    const file = await nextHandle.getFile();
+    this.applyLoadedBytes(new Uint8Array(await file.arrayBuffer()));
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
 
     return file.name;
+  }
+
+  loadFromBytes(bytes: Uint8Array, fileName = 'PLAYERS.DAT'): string {
+    this.fileHandle = null;
+    this.applyLoadedBytes(bytes);
+    return fileName;
   }
 
   async tryRestoreLastFile(): Promise<string | null> {
@@ -424,7 +425,7 @@ export class PlayerService {
     if (!this.fileHandle || !this.binaryData) throw new Error('No file loaded');
     this.writePlayer(idx, player);
     const writable = await this.fileHandle.createWritable();
-    await writable.write(pako.deflate(this.binaryData));
+    await writable.write(this.getSerializedData());
     await writable.close();
   }
 
@@ -434,17 +435,33 @@ export class PlayerService {
     }
 
     const writable = await this.fileHandle.createWritable();
-    await writable.write(pako.deflate(this.binaryData));
+    await writable.write(this.getSerializedData());
     await writable.close();
+  }
+
+  exportCurrentFileBytes(): Uint8Array {
+    return this.getSerializedData();
   }
 
   async downloadFile(): Promise<void> {
     if (!this.binaryData) return;
-    const blob = new Blob([pako.deflate(this.binaryData)], { type: 'application/octet-stream' });
+    const blob = new Blob([this.getSerializedData()], { type: 'application/octet-stream' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'players.dat';
     a.click();
+  }
+
+  private applyLoadedBytes(bytes: Uint8Array): void {
+    this.binaryData = new Uint8Array(pako.inflate(bytes));
+  }
+
+  private getSerializedData(): Uint8Array {
+    if (!this.binaryData) {
+      throw new Error('No file loaded');
+    }
+
+    return new Uint8Array(pako.deflate(this.binaryData));
   }
 
   readPlayer(idx: number): Player {

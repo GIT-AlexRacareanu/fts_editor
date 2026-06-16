@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { NATIONALITY_NAMES_BY_ID } from '../data/nationalities';
 import { Player } from '../models/player.model';
-import { calculatePlayerOvr } from './player.service';
+import { calculatePlayerOvr, OvrCategory } from './player.service';
 
 export interface ImportedPlayerRecord {
   sourceRowIndex?: number;
@@ -120,7 +120,6 @@ const POSITION_MAP: Record<string, number> = {
   LW: 20
 };
 
-const WIDE_IMPORT_POSITIONS = new Set(['LM', 'RM', 'LW', 'RW']);
 const LEFT_WIDE_GAME_POSITIONS = [17, 20] as const;
 const RIGHT_WIDE_GAME_POSITIONS = [16, 21] as const;
 
@@ -300,6 +299,7 @@ export class PlayerImportService {
     };
 
     mappedPlayer.pos = this.resolveBestWidePosition(source, mappedPlayer);
+    this.applyImportedOvrAdjustment(source, mappedPlayer);
 
     return mappedPlayer;
   }
@@ -692,14 +692,36 @@ export class PlayerImportService {
     return this.inferPositionFromStats(source, fallback);
   }
 
+  private applyImportedOvrAdjustment(source: ImportedPlayerRecord, mappedPlayer: Player): void {
+    if (!Number.isFinite(source.overall) || source.overall <= 0) {
+      return;
+    }
+
+    const ovrCategory = this.getOvrCategoryForPosition(mappedPlayer.pos);
+
+    for (let attempt = 0; attempt < 99; attempt += 1) {
+      const ratingDifference = source.overall - calculatePlayerOvr(mappedPlayer);
+
+      if (ratingDifference === 0) {
+        return;
+      }
+
+      const adjustmentAmount = attempt === 0 ? ratingDifference : Math.sign(ratingDifference);
+
+      if (!this.adjustPlayerStatsForCategory(mappedPlayer, ovrCategory, adjustmentAmount)) {
+        return;
+      }
+    }
+  }
+
   private resolveBestWidePosition(source: ImportedPlayerRecord, mappedPlayer: Player): number {
     const normalizedPosition = source.clubPosition.trim().toUpperCase();
 
-    if (!WIDE_IMPORT_POSITIONS.has(normalizedPosition)) {
+    if (normalizedPosition !== 'LM' && normalizedPosition !== 'RM') {
       return mappedPlayer.pos;
     }
 
-    const candidatePositions = normalizedPosition.startsWith('L')
+    const candidatePositions = normalizedPosition === 'LM'
       ? LEFT_WIDE_GAME_POSITIONS
       : RIGHT_WIDE_GAME_POSITIONS;
 
@@ -716,6 +738,71 @@ export class PlayerImportService {
     }
 
     return bestPosition;
+  }
+
+  private adjustPlayerStatsForCategory(player: Player, ovrCategory: OvrCategory, ratingDifference: number): boolean {
+    switch (ovrCategory) {
+      case 'gk':
+        return [
+          this.adjustPlayerStat(player, 'GKH', ratingDifference),
+          this.adjustPlayerStat(player, 'GKP', ratingDifference),
+          this.adjustPlayerStat(player, 'GKS', ratingDifference)
+        ].some(Boolean);
+      case 'def':
+        return [
+          this.adjustPlayerStat(player, 'STR', ratingDifference),
+          this.adjustPlayerStat(player, 'HEA', ratingDifference),
+          this.adjustPlayerStat(player, 'TAC', ratingDifference)
+        ].some(Boolean);
+      case 'mid':
+        return [
+          this.adjustPlayerStat(player, 'STA', ratingDifference),
+          this.adjustPlayerStat(player, 'CON', ratingDifference),
+          this.adjustPlayerStat(player, 'PAS', ratingDifference)
+        ].some(Boolean);
+      default:
+        return [
+          this.adjustPlayerStat(player, 'STR', ratingDifference),
+          this.adjustPlayerStat(player, 'CON', ratingDifference),
+          this.adjustPlayerStat(player, 'SHO', ratingDifference),
+          this.adjustPlayerStat(player, 'HEA', ratingDifference)
+        ].some(Boolean);
+    }
+  }
+
+  private getOvrCategoryForPosition(position: number): OvrCategory {
+    if (position === 0) {
+      return 'gk';
+    }
+
+    if (position === 8) {
+      return 'mid';
+    }
+
+    if (position === 16 || position === 17) {
+      return 'att';
+    }
+
+    if (position >= 1 && position <= 10) {
+      return 'def';
+    }
+
+    if (position >= 11 && position <= 18) {
+      return 'mid';
+    }
+
+    return 'att';
+  }
+
+  private adjustPlayerStat(player: Player, stat: keyof Pick<Player, 'STA' | 'STR' | 'TAC' | 'CON' | 'SHO' | 'PAS' | 'HEA' | 'GKS' | 'GKH' | 'GKP'>, delta: number): boolean {
+    const nextValue = this.clampStat(player[stat] + delta, player[stat]);
+
+    if (nextValue === player[stat]) {
+      return false;
+    }
+
+    player[stat] = nextValue;
+    return true;
   }
 
   private inferPositionFromStats(source: ImportedPlayerRecord, fallback: number): number {

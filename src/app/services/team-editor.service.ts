@@ -64,19 +64,19 @@ export class TeamEditorService {
       nextHandle = handles[0];
     }
 
-    const file = await nextHandle.getFile();
-    const buffer = await file.arrayBuffer();
-    const input = new Uint8Array(buffer);
-
     this.fileHandle = nextHandle;
-    this.wasCompressed = this.isCompressed(input);
-    this.binaryData = this.wasCompressed ? new Uint8Array(pako.inflate(input)) : input;
-    this.syncTeamCountHeaderWithDerivedCount();
-    this.scanTeams();
+    const file = await nextHandle.getFile();
+    this.applyLoadedBytes(new Uint8Array(await file.arrayBuffer()));
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
 
     return file.name;
+  }
+
+  loadFromBytes(bytes: Uint8Array, fileName = 'TEAMPLAYERLINKS_0.dat'): string {
+    this.fileHandle = null;
+    this.applyLoadedBytes(bytes);
+    return fileName;
   }
 
   async tryRestoreLastFile(): Promise<string | null> {
@@ -105,6 +105,10 @@ export class TeamEditorService {
     const writable = await this.fileHandle.createWritable();
     await writable.write(this.getSerializedData());
     await writable.close();
+  }
+
+  exportCurrentFileBytes(): Uint8Array {
+    return new Uint8Array(this.getSerializedData());
   }
 
   exportFile(fileName = 'DB_EXPORT.bin'): void {
@@ -763,6 +767,13 @@ export class TeamEditorService {
     }
 
     return (await fileHandle.queryPermission({ mode: 'read' })) === 'granted';
+  }
+
+  private applyLoadedBytes(input: Uint8Array): void {
+    this.wasCompressed = this.isCompressed(input);
+    this.binaryData = this.wasCompressed ? new Uint8Array(pako.inflate(input)) : new Uint8Array(input);
+    this.syncTeamCountHeaderWithDerivedCount();
+    this.scanTeams();
   }
 
   private getSerializedData(): ArrayBuffer {

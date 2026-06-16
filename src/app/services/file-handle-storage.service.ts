@@ -6,6 +6,10 @@ const STORE_NAME = 'handles';
 @Injectable({ providedIn: 'root' })
 export class FileHandleStorageService {
   async getFileHandle<T>(key: string): Promise<T | null> {
+    return this.getStoredValue<T>(key);
+  }
+
+  async getStoredValue<T>(key: string): Promise<T | null> {
     if (!this.isSupported()) {
       return null;
     }
@@ -23,6 +27,10 @@ export class FileHandleStorageService {
   }
 
   async saveFileHandle(key: string, fileHandle: unknown): Promise<void> {
+    await this.saveStoredValue(key, fileHandle);
+  }
+
+  async saveStoredValue(key: string, value: unknown): Promise<void> {
     if (!this.isSupported()) {
       return;
     }
@@ -36,11 +44,15 @@ export class FileHandleStorageService {
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error ?? new Error('Failed to save file handle.'));
 
-      store.put(fileHandle, key);
+      store.put(value, key);
     });
   }
 
   async deleteFileHandle(key: string): Promise<void> {
+    await this.deleteStoredValue(key);
+  }
+
+  async deleteStoredValue(key: string): Promise<void> {
     if (!this.isSupported()) {
       return;
     }

@@ -38,7 +38,7 @@ describe('PlayerService', () => {
     expect(service.totalPlayers).toBe(3);
   });
 
-  it('treats LM and RM as attackers for OVR calculation', () => {
+  it('treats LM and RM as midfielders for OVR calculation', () => {
     const service = new PlayerService({} as any);
     const stats = {
       STR: 64,
@@ -62,9 +62,9 @@ describe('PlayerService', () => {
     const rmOvr = service.calculateOVR(createPlayer('RM', { pos: 16, ...stats }));
     const lmOvr = service.calculateOVR(createPlayer('LM', { pos: 17, ...stats }));
 
-    expect(rmOvr).toBe(rwOvr);
-    expect(lmOvr).toBe(rwOvr);
-    expect(rmOvr).not.toBe(cmOvr);
+    expect(rmOvr).toBe(cmOvr);
+    expect(lmOvr).toBe(cmOvr);
+    expect(rmOvr).not.toBe(rwOvr);
   });
 
   it('treats CDM as midfielder while LDM and RDM stay defenders for OVR calculation', () => {

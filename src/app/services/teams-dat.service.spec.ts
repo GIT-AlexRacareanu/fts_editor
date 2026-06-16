@@ -172,6 +172,25 @@ describe('TeamsDatService', () => {
     expect(service.hasPendingChanges).toBeTrue();
   });
 
+  it('preserves long stadium names beyond the old 60-byte limit', () => {
+    const service = new TeamsDatService({} as any);
+    const teamDataBytes = new Uint8Array(TEAM_BLOCK_SIZE);
+    const view = new DataView(teamDataBytes.buffer);
+    const longStadiumName = 'Metropolitano Grand National Arena Expansion';
+
+    view.setUint32(0, 99, true);
+
+    service.fileHeaderBytes = new Uint8Array(FILE_HEADER_SIZE);
+    service.teamDataBytes = teamDataBytes;
+    service.records = [(service as any).parseRecord(0)];
+
+    const updated = service.updateRecord(0, { stadiumName: longStadiumName });
+
+    expect(updated.stadiumName).toBe(longStadiumName);
+    expect(service.records[0].stadiumName).toBe(longStadiumName);
+    expect(service.hasPendingChanges).toBeTrue();
+  });
+
   it('parses european competition from the team block metadata area', () => {
     const service = new TeamsDatService({} as any);
     const teamDataBytes = new Uint8Array(TEAM_BLOCK_SIZE);

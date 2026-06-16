@@ -85,19 +85,24 @@ export class PakEditorService {
       nextHandle = handles[0];
     }
 
-    const file = await nextHandle.getFile();
-    console.log('[Pak] file picked:', file.name, 'size:', file.size, 'bytes');
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const parsed = this.parseFile(bytes);
-    console.log('[Pak] parse complete. entries:', parsed.entries.length);
-
     this.fileHandle = nextHandle;
-    this.applyParsedState(bytes, parsed);
-    this.hasPendingChanges = false;
+    const file = await nextHandle.getFile();
+    this.loadFromBytes(new Uint8Array(await file.arrayBuffer()), file.name);
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
 
     return file.name;
+  }
+
+  loadFromBytes(bytes: Uint8Array, fileName = 'teams.pak'): string {
+    console.log('[Pak] file picked:', fileName, 'size:', bytes.byteLength, 'bytes');
+    const parsed = this.parseFile(bytes);
+    console.log('[Pak] parse complete. entries:', parsed.entries.length);
+
+    this.fileHandle = null;
+    this.applyParsedState(bytes, parsed);
+    this.hasPendingChanges = false;
+    return fileName;
   }
 
   async tryRestoreLastFile(): Promise<string | null> {
@@ -176,6 +181,10 @@ export class PakEditorService {
     const reparsed = this.parseFile(serialized);
     this.applyParsedState(serialized, reparsed);
     this.hasPendingChanges = false;
+  }
+
+  exportCurrentFileBytes(): Uint8Array {
+    return this.getSerializedData();
   }
 
   extractEntry(entry: PakEntry): Uint8Array {
