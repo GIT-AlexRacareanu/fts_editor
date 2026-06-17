@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-import { TeamsDatKit, TeamsDatKitColor, TeamsDatRecord } from '../models/teams-dat.model';
+import { TeamsDatColorValue, TeamsDatKit, TeamsDatKitColor, TeamsDatRecord } from '../models/teams-dat.model';
 import { FileHandleStorageService } from './file-handle-storage.service';
 
 const FILE_HEADER_SIZE = 12;
@@ -8,9 +8,16 @@ const TEAM_BLOCK_SIZE = 4356;
 const FORMATION_OFFSET = 0xB8;
 const SPONSOR_TYPE_OFFSET = 0x100;
 const KIT_MANUFACTURER_OFFSET = 0x104;
+const LINES_UL_OFFSET = 0x108;
+const LINES_UV_OFFSET = 0x10C;
+const LINES_PL_OFFSET = 0x110;
+const LINES_PV_OFFSET = 0x114;
 const EUROPEAN_COMPETITION_OFFSET = 0x124;
 const STADIUM_NAME_OFFSET = 0x128;
-const STADIUM_NAME_MAX_BYTES = TEAM_BLOCK_SIZE - STADIUM_NAME_OFFSET;
+const STADIUM_NAME_MAX_CHARS = 23;
+const STADIUM_NAME_MAX_BYTES = STADIUM_NAME_MAX_CHARS * 2;
+const STADIUM_COLOR_OFFSET = 0x10EC;
+const PITCH_TYPE_OFFSET = 0x10FC;
 const KIT_COLOR_START_OFFSET = 0x18;
 const KIT_COUNT = 4;
 const COLORS_PER_KIT = 10;
@@ -226,6 +233,10 @@ export class TeamsDatService {
     return EUROPEAN_COMPETITION_LABELS.map((label, index) => ({ value: index, label: `${index}. ${label}` }));
   }
 
+  get stadiumNameMaxLength(): number {
+    return STADIUM_NAME_MAX_CHARS;
+  }
+
   updateKitColor(index: number, kitIndex: number, colorIndex: number, hexColor: string): TeamsDatRecord {
     if (!this.hasData) {
       throw new Error('No teams.dat loaded');
@@ -280,6 +291,46 @@ export class TeamsDatService {
     return updatedRecord;
   }
 
+  updateStadiumColor(index: number, hexColor: string): TeamsDatRecord {
+    if (!this.hasData) {
+      throw new Error('No teams.dat loaded');
+    }
+
+    const normalizedHex = this.normalizeHexColor(hexColor);
+
+    if (!normalizedHex) {
+      throw new Error(`Invalid color value: ${hexColor}`);
+    }
+
+    const bytes = this.getTeamDataOrThrow();
+    const offset = this.getStadiumColorOffset(this.getBlockStart(index));
+    const [red, green, blue] = this.hexColorToRgb(normalizedHex);
+
+    bytes[offset] = blue;
+    bytes[offset + 1] = green;
+    bytes[offset + 2] = red;
+
+    const updatedRecord = this.parseRecord(index);
+    this.records[index] = updatedRecord;
+    this.hasPendingChanges = true;
+    return updatedRecord;
+  }
+
+  updatePitchType(index: number, pitchType: number): TeamsDatRecord {
+    if (!this.hasData) {
+      throw new Error('No teams.dat loaded');
+    }
+
+    const normalizedPitchType = Number.isFinite(pitchType) ? Math.trunc(pitchType) : 0;
+    const view = this.getView();
+    view.setUint32(this.getPitchTypeOffset(this.getBlockStart(index)), this.clamp(normalizedPitchType, 0, 0xffffffff), true);
+
+    const updatedRecord = this.parseRecord(index);
+    this.records[index] = updatedRecord;
+    this.hasPendingChanges = true;
+    return updatedRecord;
+  }
+
   resetAllTeamRoles(playerId = 0): void {
     if (!this.hasData) {
       throw new Error('No teams.dat loaded');
@@ -305,7 +356,8 @@ export class TeamsDatService {
   updateRecord(index: number, changes: Partial<Pick<TeamsDatRecord,
     'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' |
     'formationId' | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' |
-    'freeKickRole' | 'region' | 'stadiumName' | 'sponsorType' | 'kitManufacturer' | 'europeanCompetition'
+    'freeKickRole' | 'region' | 'stadiumName' | 'sponsorType' | 'kitManufacturer' |
+    'linesUL' | 'linesUV' | 'linesPL' | 'linesPV' | 'europeanCompetition'
   >>): TeamsDatRecord {
     const view = this.getView();
     const blockStart = this.getBlockStart(index);
@@ -351,6 +403,18 @@ export class TeamsDatService {
     }
     if (changes.kitManufacturer !== undefined) {
       view.setUint32(blockStart + KIT_MANUFACTURER_OFFSET, this.clamp(changes.kitManufacturer, 0, 0xffffffff), true);
+    }
+    if (changes.linesUL !== undefined) {
+      view.setUint32(blockStart + LINES_UL_OFFSET, this.clamp(changes.linesUL, 0, 0xffffffff), true);
+    }
+    if (changes.linesUV !== undefined) {
+      view.setUint32(blockStart + LINES_UV_OFFSET, this.clamp(changes.linesUV, 0, 0xffffffff), true);
+    }
+    if (changes.linesPL !== undefined) {
+      view.setUint32(blockStart + LINES_PL_OFFSET, this.clamp(changes.linesPL, 0, 0xffffffff), true);
+    }
+    if (changes.linesPV !== undefined) {
+      view.setUint32(blockStart + LINES_PV_OFFSET, this.clamp(changes.linesPV, 0, 0xffffffff), true);
     }
     if (changes.europeanCompetition !== undefined) {
       view.setUint32(blockStart + EUROPEAN_COMPETITION_OFFSET, this.clamp(changes.europeanCompetition, 0, 0xffffffff), true);
@@ -416,8 +480,14 @@ export class TeamsDatService {
       freeKickRole: safeView.getUint32(blockStart + 0xDC, true),
       region: this.extractUtf16String(safeBytes, blockStart + 0xF8, 4),
       stadiumName: this.extractUtf16String(safeBytes, blockStart + STADIUM_NAME_OFFSET, STADIUM_NAME_MAX_BYTES),
+      stadiumColor: this.readColorValue(safeBytes, this.getStadiumColorOffset(blockStart)),
+      pitchType: safeView.getUint32(this.getPitchTypeOffset(blockStart), true),
       sponsorType: safeView.getUint32(blockStart + SPONSOR_TYPE_OFFSET, true),
       kitManufacturer: safeView.getUint32(blockStart + KIT_MANUFACTURER_OFFSET, true),
+      linesUL: safeView.getUint32(blockStart + LINES_UL_OFFSET, true),
+      linesUV: safeView.getUint32(blockStart + LINES_UV_OFFSET, true),
+      linesPL: safeView.getUint32(blockStart + LINES_PL_OFFSET, true),
+      linesPV: safeView.getUint32(blockStart + LINES_PV_OFFSET, true),
       europeanCompetition: safeView.getUint32(blockStart + EUROPEAN_COMPETITION_OFFSET, true),
       kits: this.readKits(safeBytes, blockStart)
     };
@@ -437,14 +507,20 @@ export class TeamsDatService {
 
   private readKitColor(bytes: Uint8Array, blockStart: number, kitIndex: number, colorIndex: number): TeamsDatKitColor {
     const byteOffset = this.getKitColorOffset(blockStart, kitIndex, colorIndex);
+    return {
+      colorIndex,
+      label: KIT_COLOR_LABELS[colorIndex] ?? `Color ${colorIndex + 1}`,
+      ...this.readColorValue(bytes, byteOffset)
+    };
+  }
+
+  private readColorValue(bytes: Uint8Array, byteOffset: number): TeamsDatColorValue {
     const colorBytes = bytes.subarray(byteOffset, byteOffset + KIT_COLOR_STRIDE);
     const blue = colorBytes[0] ?? 0;
     const green = colorBytes[1] ?? 0;
     const red = colorBytes[2] ?? 0;
 
     return {
-      colorIndex,
-      label: KIT_COLOR_LABELS[colorIndex] ?? `Color ${colorIndex + 1}`,
       byteOffset,
       fileOffset: FILE_HEADER_SIZE + byteOffset,
       hex: this.rgbToHexColor(red, green, blue),
@@ -458,6 +534,14 @@ export class TeamsDatService {
 
   private getKitStyleOffset(blockStart: number, kitIndex: number): number {
     return blockStart + KIT_STYLE_START_OFFSET + kitIndex * KIT_STYLE_STRIDE;
+  }
+
+  private getStadiumColorOffset(blockStart: number): number {
+    return blockStart + STADIUM_COLOR_OFFSET;
+  }
+
+  private getPitchTypeOffset(blockStart: number): number {
+    return blockStart + PITCH_TYPE_OFFSET;
   }
 
   private readKitStyleId(bytes: Uint8Array, blockStart: number, kitIndex: number): number {

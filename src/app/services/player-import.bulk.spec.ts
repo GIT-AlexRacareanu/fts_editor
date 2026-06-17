@@ -5,7 +5,7 @@ import { calculatePlayerOvr } from './player.service';
 import { ImportedPlayerRecord, PlayerImportService } from './player-import.service';
 
 describe('PlayerImportService bulk import mapping', () => {
-  it('keeps the template year and appearance when bulk import disables year mapping', () => {
+  it('keeps the template year but applies imported/default appearance when bulk import disables year mapping', () => {
     const service = new PlayerImportService();
     const basePlayer: Player = {
       name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 1998,
@@ -14,12 +14,18 @@ describe('PlayerImportService bulk import mapping', () => {
       ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
       CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
     };
-    const imported = createImportedPlayer({ age: 20, shortName: 'Mohamed Salah' });
+    const imported = createImportedPlayer({ age: 20, shortName: 'Mohamed Salah', hairColorCode: 7, skinToneCode: 9 });
+
+    spyOn(Math, 'random').and.returnValue(0.9);
 
     const mapped = service.mapImportedPlayer(imported, basePlayer, { includeYear: false });
 
     expect(mapped.year).toBe(1998);
-    expect(mapped.skin).toBe(2);
+    expect(mapped.skin).toBe(4);
+    expect(mapped.skin_tone).toBe(0);
+    expect(mapped.hair_type).toBe(10);
+    expect(mapped.hair).toBe(6);
+    expect(mapped.beard_type).toBe(0);
     expect(mapped.boots).toBe(7);
     expect(mapped.name).toBe('M. Salah');
     expect(mapped.pos).toBe(imported.clubPosition === 'CM' ? 11 : mapped.pos);

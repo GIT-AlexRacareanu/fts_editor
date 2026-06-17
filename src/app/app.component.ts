@@ -191,6 +191,8 @@ export class AppComponent implements OnInit, OnDestroy {
   showTeamKitDialog = false;
   teamKitDialogRecordIndex: number | null = null;
   teamKitDialogTabIndex = 0;
+  showTeamStadiumDialog = false;
+  teamStadiumDialogRecordIndex: number | null = null;
 
   // ─── XLC Names ───────────────────────────────────────────────
   xlcFileName = '';
@@ -332,6 +334,7 @@ export class AppComponent implements OnInit, OnDestroy {
   readonly kitStyleOptions = this.teamsDatService.kitStyleOptions;
   readonly sponsorTypeOptions = this.teamsDatService.sponsorTypeOptions;
   readonly europeanCompetitionOptions = this.teamsDatService.europeanCompetitionOptions;
+  readonly stadiumNameMaxLength = this.teamsDatService.stadiumNameMaxLength;
 
   constructor(
     private readonly ngZone: NgZone,
@@ -491,6 +494,18 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     const record = this.teamsDatService.records[this.teamKitDialogRecordIndex] ?? null;
+
+    return record
+      ? { ...record, teamLabel: this.getTeamDisplayLabel(record.teamId) }
+      : null;
+  }
+
+  get activeTeamStadiumRecord(): TeamsDatRecord | null {
+    if (!this.teamsDatLoaded || this.teamStadiumDialogRecordIndex === null) {
+      return null;
+    }
+
+    const record = this.teamsDatService.records[this.teamStadiumDialogRecordIndex] ?? null;
 
     return record
       ? { ...record, teamLabel: this.getTeamDisplayLabel(record.teamId) }
@@ -2357,11 +2372,6 @@ export class AppComponent implements OnInit, OnDestroy {
     this.teamsDatService.updateRecord(record.index, { region: value });
   }
 
-  updateTeamsDatStadiumName(record: TeamsDatRecord, value: string): void {
-    this.teamsDatService.updateRecord(record.index, { stadiumName: value });
-    this.rebuildTeamBrowseItems();
-  }
-
   updateTeamsDatKitColor(record: TeamsDatRecord, kitIndex: number, colorIndex: number, value: string): void {
     this.teamsDatService.updateKitColor(record.index, kitIndex, colorIndex, value);
   }
@@ -2383,10 +2393,27 @@ export class AppComponent implements OnInit, OnDestroy {
     this.showTeamKitDialog = true;
   }
 
+  openTeamStadiumDialog(team: TeamRecord): void {
+    const record = this.teamsDatService.records.find((entry) => entry.teamId === team.teamId);
+
+    if (!record) {
+      alert('No matching TEAMS.DAT record was found for this team.');
+      return;
+    }
+
+    this.teamStadiumDialogRecordIndex = record.index;
+    this.showTeamStadiumDialog = true;
+  }
+
   closeTeamKitDialog(): void {
     this.showTeamKitDialog = false;
     this.teamKitDialogRecordIndex = null;
     this.teamKitDialogTabIndex = 0;
+  }
+
+  closeTeamStadiumDialog(): void {
+    this.showTeamStadiumDialog = false;
+    this.teamStadiumDialogRecordIndex = null;
   }
 
   updateActiveTeamKitDialogColor(kitIndex: number, colorIndex: number, value: string): void {
@@ -2414,6 +2441,42 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.teamsDatService.updateRecord(this.teamKitDialogRecordIndex, { [field]: Number(value) });
+  }
+
+  updateActiveTeamStadiumDialogName(value: string): void {
+    if (this.teamStadiumDialogRecordIndex === null) {
+      return;
+    }
+
+    this.teamsDatService.updateRecord(this.teamStadiumDialogRecordIndex, { stadiumName: value });
+    this.rebuildTeamBrowseItems();
+  }
+
+  updateActiveTeamStadiumDialogColor(value: string): void {
+    if (this.teamStadiumDialogRecordIndex === null) {
+      return;
+    }
+
+    this.teamsDatService.updateStadiumColor(this.teamStadiumDialogRecordIndex, value);
+  }
+
+  updateActiveTeamStadiumDialogPitchType(value: string | number): void {
+    if (this.teamStadiumDialogRecordIndex === null) {
+      return;
+    }
+
+    this.teamsDatService.updatePitchType(this.teamStadiumDialogRecordIndex, Number(value));
+  }
+
+  updateActiveTeamStadiumDialogNumberField(
+    field: 'linesUL' | 'linesUV' | 'linesPL' | 'linesPV',
+    value: string | number
+  ): void {
+    if (this.teamStadiumDialogRecordIndex === null) {
+      return;
+    }
+
+    this.teamsDatService.updateRecord(this.teamStadiumDialogRecordIndex, { [field]: Number(value) });
   }
 
   updateTeamsDatRoleField(

@@ -50,6 +50,7 @@ function createComponent(
     kitStyleOptions: [],
     sponsorTypeOptions: [],
     europeanCompetitionOptions: [],
+    stadiumNameMaxLength: 23,
     records: [],
     ...teamsDatServiceOverrides
   };
@@ -779,7 +780,7 @@ describe('AppComponent team CSV import preview', () => {
     const teamsDatService = {
       hasData: true,
       records: [
-        { index: 7, teamId: 99, teamLabel: 'Test FC', kits: [], sponsorType: 1, kitManufacturer: 2 }
+        { index: 7, teamId: 99, teamLabel: 'Test FC', kits: [], sponsorType: 1, kitManufacturer: 2, linesUL: 11, linesUV: 22, linesPL: 33, linesPV: 44 }
       ],
       updateKitColor,
       updateKitStyle,
@@ -799,6 +800,61 @@ describe('AppComponent team CSV import preview', () => {
     expect(updateKitStyle).toHaveBeenCalledOnceWith(7, 2, 5);
     expect(updateRecord).toHaveBeenCalledWith(7, { sponsorType: 44 });
     expect(updateRecord).toHaveBeenCalledWith(7, { kitManufacturer: 55 });
+  });
+
+  it('opens the team stadium dialog and updates name, color, pitch type, and line fields through the active record index', () => {
+    const updateRecord = jasmine.createSpy('updateRecord');
+    const updateStadiumColor = jasmine.createSpy('updateStadiumColor');
+    const updatePitchType = jasmine.createSpy('updatePitchType');
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      binaryData: null
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const teamEditorService = { hasData: true };
+    const teamsDatService = {
+      hasData: true,
+      records: [
+        {
+          index: 7,
+          teamId: 99,
+          teamLabel: 'Test FC',
+          stadiumName: 'Arena',
+          stadiumColor: { hex: '#102030', rawHex: '3020107F', fileOffset: 0x10F8, byteOffset: 0x10EC },
+          pitchType: 3,
+          linesUL: 11,
+          linesUV: 22,
+          linesPL: 33,
+          linesPV: 44
+        }
+      ],
+      updateRecord,
+      updateStadiumColor,
+      updatePitchType
+    };
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+
+    component.openTeamStadiumDialog({ teamId: 99 } as any);
+    component.updateActiveTeamStadiumDialogName('National Arena');
+    component.updateActiveTeamStadiumDialogColor('#112233');
+    component.updateActiveTeamStadiumDialogPitchType(6);
+    component.updateActiveTeamStadiumDialogNumberField('linesUL', 101);
+    component.updateActiveTeamStadiumDialogNumberField('linesUV', 202);
+    component.updateActiveTeamStadiumDialogNumberField('linesPL', 303);
+    component.updateActiveTeamStadiumDialogNumberField('linesPV', 404);
+
+    expect(component.showTeamStadiumDialog).toBeTrue();
+    expect(component.teamStadiumDialogRecordIndex).toBe(7);
+    expect(updateRecord).toHaveBeenCalledWith(7, { stadiumName: 'National Arena' });
+    expect(updateRecord).toHaveBeenCalledWith(7, { linesUL: 101 });
+    expect(updateRecord).toHaveBeenCalledWith(7, { linesUV: 202 });
+    expect(updateRecord).toHaveBeenCalledWith(7, { linesPL: 303 });
+    expect(updateRecord).toHaveBeenCalledWith(7, { linesPV: 404 });
+    expect(updateStadiumColor).toHaveBeenCalledOnceWith(7, '#112233');
+    expect(updatePitchType).toHaveBeenCalledOnceWith(7, 6);
   });
 
   it('filters the team browser by league, sorts by average ovr, and opens the matching team in Team Editor', () => {

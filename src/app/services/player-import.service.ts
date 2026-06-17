@@ -50,6 +50,8 @@ export interface ImportedPlayerRecord {
   interceptions: number;
   defAwareness: number;
   defending: number;
+  hairColorCode?: number;
+  skinToneCode?: number;
 }
 
 export interface ImportPlayerMapOptions {
@@ -172,6 +174,43 @@ const SPECIAL_LATIN_MAP: Record<string, string> = {
   'Ŋ': 'N', 'ŋ': 'n'
 };
 
+const DEFAULT_IMPORTED_APPEARANCE = {
+  skin: 0,
+  skinTone: 0,
+  hairType: 10,
+  hair: 0,
+  beardType: 0
+} as const;
+
+const IMPORTED_HAIR_COLOR_MAP: Record<number, number> = {
+  0: 0,
+  1: 5,
+  2: 5,
+  3: 3,
+  4: 4,
+  5: 2,
+  6: 1,
+  7: 6,
+  8: 7,
+  9: 7,
+  12: 0,
+  13: 6,
+  15: 4
+};
+
+const IMPORTED_SKIN_TONE_OPTIONS: Record<number, Array<{ skin: number; skinTone: number }>> = {
+  1: [{ skin: 0, skinTone: 0 }],
+  2: [{ skin: 0, skinTone: 1 }],
+  3: [{ skin: 0, skinTone: 2 }],
+  4: [{ skin: 1, skinTone: 0 }],
+  5: [{ skin: 1, skinTone: 1 }, { skin: 1, skinTone: 2 }],
+  6: [{ skin: 2, skinTone: 0 }, { skin: 2, skinTone: 1 }],
+  7: [{ skin: 2, skinTone: 2 }, { skin: 3, skinTone: 0 }],
+  8: [{ skin: 3, skinTone: 1 }],
+  9: [{ skin: 3, skinTone: 2 }, { skin: 4, skinTone: 0 }],
+  10: [{ skin: 4, skinTone: 1 }, { skin: 4, skinTone: 2 }]
+};
+
 @Injectable({ providedIn: 'root' })
 export class PlayerImportService {
   private readonly maxGameNameLength = 16;
@@ -261,6 +300,7 @@ export class PlayerImportService {
     options: ImportPlayerMapOptions = {}
   ): Player {
     const { includeYear = true } = options;
+    const appearance = this.mapImportedAppearance(source);
     const shooting = source.shooting;
     const freeKick = source.skillFkAccuracy;
     const crossing = source.attackingCrossing;
@@ -282,6 +322,11 @@ export class PlayerImportService {
       birthDay: 1,
       birthMonth: 1,
       year: includeYear ? this.mapYear(source.age, currentPlayer.year) : currentPlayer.year,
+      skin: appearance.skin,
+      skin_tone: appearance.skinTone,
+      hair_type: appearance.hairType,
+      hair: appearance.hair,
+      beard_type: appearance.beardType,
       ACC: this.clampStat(source.movementAcceleration, currentPlayer.ACC),
       SPD: this.clampStat(source.movementSprintSpeed, currentPlayer.SPD),
       STA: this.clampStat(source.powerStamina, currentPlayer.STA),
@@ -360,6 +405,7 @@ export class PlayerImportService {
       headerIndexes,
       ['movement_acceleration', 'acceleration', 'acc']
     );
+
     return {
       sourceRowIndex: rowIndex,
       shortName,
@@ -423,7 +469,9 @@ export class PlayerImportService {
       vision,
       interceptions,
       defAwareness,
-      defending
+      defending,
+      hairColorCode: this.getOptionalNumberFieldByAliases(row, headerIndexes, ['haircolor', 'hair_color', 'hair color']),
+      skinToneCode: this.getOptionalNumberFieldByAliases(row, headerIndexes, ['skintone', 'skin_tone', 'skin tone'])
     };
   }
 
@@ -463,6 +511,17 @@ export class PlayerImportService {
     const parsed = this.parseLooseNumber(value);
 
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getOptionalNumberFieldByAliases(row: string[], headerIndexes: Map<string, number>, fieldNames: string[]): number | undefined {
+    const value = this.getFieldByAliases(row, headerIndexes, fieldNames);
+
+    if (!value) {
+      return undefined;
+    }
+
+    const parsed = this.parseLooseNumber(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
   }
 
   private getHeightFieldByAliases(row: string[], headerIndexes: Map<string, number>, fieldNames: string[]): number {
@@ -650,6 +709,42 @@ export class PlayerImportService {
     }
 
     return Math.round(explicitValues.reduce((total, value) => total + value, 0) / explicitValues.length);
+  }
+
+  private mapImportedAppearance(source: ImportedPlayerRecord): {
+    skin: number;
+    skinTone: number;
+    hairType: number;
+    hair: number;
+    beardType: number;
+  } {
+    const skinOptions = source.skinToneCode !== undefined
+      ? IMPORTED_SKIN_TONE_OPTIONS[source.skinToneCode]
+      : undefined;
+    const skinSelection = skinOptions?.length
+      ? this.chooseRandomOption(skinOptions)
+      : { skin: DEFAULT_IMPORTED_APPEARANCE.skin, skinTone: DEFAULT_IMPORTED_APPEARANCE.skinTone };
+
+    const hair = source.hairColorCode !== undefined
+      ? IMPORTED_HAIR_COLOR_MAP[source.hairColorCode] ?? DEFAULT_IMPORTED_APPEARANCE.hair
+      : DEFAULT_IMPORTED_APPEARANCE.hair;
+
+    return {
+      skin: skinSelection.skin,
+      skinTone: skinSelection.skinTone,
+      hairType: DEFAULT_IMPORTED_APPEARANCE.hairType,
+      hair,
+      beardType: DEFAULT_IMPORTED_APPEARANCE.beardType
+    };
+  }
+
+  private chooseRandomOption<T>(options: T[]): T {
+    if (options.length <= 1) {
+      return options[0];
+    }
+
+    const index = Math.floor(Math.random() * options.length);
+    return options[index] ?? options[0];
   }
 
   private toGameName(sourceName: string, fallback: string): string {

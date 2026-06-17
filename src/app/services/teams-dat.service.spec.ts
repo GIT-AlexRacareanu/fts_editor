@@ -8,7 +8,15 @@ const KIT_COLOR_START_OFFSET = 0x18;
 const KIT_STYLE_START_OFFSET = 0xBC;
 const SPONSOR_TYPE_OFFSET = 0x100;
 const KIT_MANUFACTURER_OFFSET = 0x104;
+const LINES_UL_OFFSET = 0x108;
+const LINES_UV_OFFSET = 0x10C;
+const LINES_PL_OFFSET = 0x110;
+const LINES_PV_OFFSET = 0x114;
 const EUROPEAN_COMPETITION_OFFSET = 0x124;
+const STADIUM_NAME_OFFSET = 0x128;
+const STADIUM_NAME_MAX_CHARS = 23;
+const STADIUM_COLOR_OFFSET = 0x10EC;
+const PITCH_TYPE_OFFSET = 0x10FC;
 
 describe('TeamsDatService', () => {
   it('parses the four kit palettes from the team block color area', () => {
@@ -172,11 +180,45 @@ describe('TeamsDatService', () => {
     expect(service.hasPendingChanges).toBeTrue();
   });
 
-  it('preserves long stadium names beyond the old 60-byte limit', () => {
+  it('parses and updates the four line metadata values after sponsor and manufacturer', () => {
+    const service = new TeamsDatService({} as any);
+    const teamDataBytes = new Uint8Array(TEAM_BLOCK_SIZE);
+    const view = new DataView(teamDataBytes.buffer);
+
+    view.setUint32(0, 99, true);
+    view.setUint32(LINES_UL_OFFSET, 11, true);
+    view.setUint32(LINES_UV_OFFSET, 22, true);
+    view.setUint32(LINES_PL_OFFSET, 33, true);
+    view.setUint32(LINES_PV_OFFSET, 44, true);
+
+    service.fileHeaderBytes = new Uint8Array(FILE_HEADER_SIZE);
+    service.teamDataBytes = teamDataBytes;
+    service.records = [(service as any).parseRecord(0)];
+
+    expect(service.records[0].linesUL).toBe(11);
+    expect(service.records[0].linesUV).toBe(22);
+    expect(service.records[0].linesPL).toBe(33);
+    expect(service.records[0].linesPV).toBe(44);
+
+    const updated = service.updateRecord(0, { linesUL: 101, linesUV: 202, linesPL: 303, linesPV: 404 });
+
+    expect(view.getUint32(LINES_UL_OFFSET, true)).toBe(101);
+    expect(view.getUint32(LINES_UV_OFFSET, true)).toBe(202);
+    expect(view.getUint32(LINES_PL_OFFSET, true)).toBe(303);
+    expect(view.getUint32(LINES_PV_OFFSET, true)).toBe(404);
+    expect(updated.linesUL).toBe(101);
+    expect(updated.linesUV).toBe(202);
+    expect(updated.linesPL).toBe(303);
+    expect(updated.linesPV).toBe(404);
+    expect(service.hasPendingChanges).toBeTrue();
+  });
+
+  it('caps stadium names at 23 characters', () => {
     const service = new TeamsDatService({} as any);
     const teamDataBytes = new Uint8Array(TEAM_BLOCK_SIZE);
     const view = new DataView(teamDataBytes.buffer);
     const longStadiumName = 'Metropolitano Grand National Arena Expansion';
+    const truncatedName = longStadiumName.slice(0, STADIUM_NAME_MAX_CHARS);
 
     view.setUint32(0, 99, true);
 
@@ -186,8 +228,58 @@ describe('TeamsDatService', () => {
 
     const updated = service.updateRecord(0, { stadiumName: longStadiumName });
 
-    expect(updated.stadiumName).toBe(longStadiumName);
-    expect(service.records[0].stadiumName).toBe(longStadiumName);
+    expect(updated.stadiumName).toBe(truncatedName);
+    expect(service.records[0].stadiumName).toBe(truncatedName);
+    expect((service as any).extractUtf16String(teamDataBytes, STADIUM_NAME_OFFSET, STADIUM_NAME_MAX_CHARS * 2)).toBe(truncatedName);
+    expect(service.hasPendingChanges).toBeTrue();
+  });
+
+  it('parses and updates the stadium color without overwriting the fourth byte', () => {
+    const service = new TeamsDatService({} as any);
+    const teamDataBytes = new Uint8Array(TEAM_BLOCK_SIZE);
+    const view = new DataView(teamDataBytes.buffer);
+
+    view.setUint32(0, 99, true);
+    teamDataBytes[STADIUM_COLOR_OFFSET] = 0xAA;
+    teamDataBytes[STADIUM_COLOR_OFFSET + 1] = 0xBB;
+    teamDataBytes[STADIUM_COLOR_OFFSET + 2] = 0xCC;
+    teamDataBytes[STADIUM_COLOR_OFFSET + 3] = 0x7F;
+
+    service.fileHeaderBytes = new Uint8Array(FILE_HEADER_SIZE);
+    service.teamDataBytes = teamDataBytes;
+    service.records = [(service as any).parseRecord(0)];
+
+    expect(service.records[0].stadiumColor.hex).toBe('#CCBBAA');
+    expect(service.records[0].stadiumColor.fileOffset).toBe(0x10F8);
+
+    const updated = service.updateStadiumColor(0, '#112233');
+
+    expect(teamDataBytes[STADIUM_COLOR_OFFSET]).toBe(0x33);
+    expect(teamDataBytes[STADIUM_COLOR_OFFSET + 1]).toBe(0x22);
+    expect(teamDataBytes[STADIUM_COLOR_OFFSET + 2]).toBe(0x11);
+    expect(teamDataBytes[STADIUM_COLOR_OFFSET + 3]).toBe(0x7F);
+    expect(updated.stadiumColor.hex).toBe('#112233');
+    expect(updated.stadiumColor.rawHex).toBe('3322117F');
+  });
+
+  it('parses and updates the pitch type from the end-of-block metadata area', () => {
+    const service = new TeamsDatService({} as any);
+    const teamDataBytes = new Uint8Array(TEAM_BLOCK_SIZE);
+    const view = new DataView(teamDataBytes.buffer);
+
+    view.setUint32(0, 99, true);
+    view.setUint32(PITCH_TYPE_OFFSET, 6, true);
+
+    service.fileHeaderBytes = new Uint8Array(FILE_HEADER_SIZE);
+    service.teamDataBytes = teamDataBytes;
+    service.records = [(service as any).parseRecord(0)];
+
+    expect(service.records[0].pitchType).toBe(6);
+
+    const updated = service.updatePitchType(0, 9);
+
+    expect(view.getUint32(PITCH_TYPE_OFFSET, true)).toBe(9);
+    expect(updated.pitchType).toBe(9);
     expect(service.hasPendingChanges).toBeTrue();
   });
 

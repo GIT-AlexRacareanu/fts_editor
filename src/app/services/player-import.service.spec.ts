@@ -90,8 +90,8 @@ describe('PlayerImportService', () => {
 
   it('parses import_2 compact headers including knownas and overallrating', () => {
     const csv = [
-      'knownas,age,height,weight,overallrating,agility,balance,ballcontrol,crossing,curve,dribbling,finishing,freekickaccuracy,headingaccuracy,interceptions,longpassing,longshots,penalties,reactions,shortpassing,shotpower,slidingtackle,sprintspeed,stamina,standingtackle,strength,vision,volleys,sho,pas,dri,def,phy,nation,club,national_team,loanedto_club',
-      'Erling Haaland,24,195,94,91,71,69,83,58,77,79,96,62,85,43,66,83,90,95,78,94,29,92,78,47,93,75,90,91,69,80,49,88,Norway,Manchester City,Norway,'
+      'knownas,age,height,weight,overallrating,agility,balance,ballcontrol,crossing,curve,dribbling,finishing,freekickaccuracy,headingaccuracy,interceptions,longpassing,longshots,penalties,reactions,shortpassing,shotpower,slidingtackle,sprintspeed,stamina,standingtackle,strength,vision,volleys,sho,pas,dri,def,phy,haircolor,skintone,nation,club,national_team,loanedto_club',
+      'Erling Haaland,24,195,94,91,71,69,83,58,77,79,96,62,85,43,66,83,90,95,78,94,29,92,78,47,93,75,90,91,69,80,49,88,15,2,Norway,Manchester City,Norway,'
     ].join('\n');
 
     const parsed = service.parseCsv(csv);
@@ -110,9 +110,74 @@ describe('PlayerImportService', () => {
     expect(parsed[0].defendingSlidingTackle).toBe(29);
     expect(parsed[0].powerStrength).toBe(88);
     expect(parsed[0].defending).toBe(49);
+    expect(parsed[0].hairColorCode).toBe(15);
+    expect(parsed[0].skinToneCode).toBe(2);
     expect(parsed[0].teamName).toBe('Manchester City');
     expect(parsed[0].nationalTeamName).toBe('Norway');
     expect(parsed[0].loanedToTeamName).toBe('');
+  });
+
+  it('maps imported appearance ids to the editor defaults and color tables', () => {
+    const basePlayer = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 3, skin_tone: 3, head_type: 2, hair_type: 4, hair: 5, beard_type: 6,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
+      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+
+    const mapped = service.mapImportedPlayer(
+      createImportedPlayer({ hairColorCode: 5, skinToneCode: 4 }),
+      basePlayer
+    );
+
+    expect(mapped.skin).toBe(1);
+    expect(mapped.skin_tone).toBe(0);
+    expect(mapped.hair_type).toBe(10);
+    expect(mapped.hair).toBe(2);
+    expect(mapped.beard_type).toBe(0);
+    expect(mapped.head_type).toBe(2);
+  });
+
+  it('uses defaults when imported appearance columns are missing or unmapped', () => {
+    const basePlayer = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 3, skin_tone: 2, head_type: 1, hair_type: 8, hair: 7, beard_type: 5,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
+      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+
+    const mapped = service.mapImportedPlayer(
+      createImportedPlayer({ hairColorCode: 99, skinToneCode: 99 }),
+      basePlayer
+    );
+
+    expect(mapped.skin).toBe(0);
+    expect(mapped.skin_tone).toBe(0);
+    expect(mapped.hair_type).toBe(10);
+    expect(mapped.hair).toBe(0);
+    expect(mapped.beard_type).toBe(0);
+  });
+
+  it('randomizes dual-option skin tone mappings', () => {
+    const basePlayer = {
+      name: 'Base', pos: 0, foot: 0, nat: 0, estatura: 180, peso: 75, birthDay: 1, birthMonth: 1, year: 2000,
+      skin: 0, skin_tone: 0, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,
+      boots: 0, mangas: 0, guantes: 0,
+      ACC: 0, SPD: 0, STA: 0, STR: 0, TAC: 0, CON: 0, SHO: 0,
+      CRO: 0, FK: 0, PAS: 0, HEA: 0, GKS: 0, GKH: 0, GKP: 0
+    };
+
+    spyOn(Math, 'random').and.returnValue(0.75);
+
+    const mapped = service.mapImportedPlayer(
+      createImportedPlayer({ skinToneCode: 7 }),
+      basePlayer
+    );
+
+    expect(mapped.skin).toBe(3);
+    expect(mapped.skin_tone).toBe(0);
   });
 
   it('includes club, national team, and loan destination names in the import team options', () => {

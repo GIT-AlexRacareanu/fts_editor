@@ -204,10 +204,6 @@
                         <mat-label>Team ID</mat-label>
                         <input matInput type="number" [ngModel]="record.teamId" (ngModelChange)="updateTeamsDatNumberField(record, 'teamId', $event)">
                       </mat-form-field>
-                      <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--stadium">
-                        <mat-label>Stadium</mat-label>
-                        <input matInput [ngModel]="record.stadiumName" (ngModelChange)="updateTeamsDatStadiumName(record, $event)">
-                      </mat-form-field>
                       <mat-form-field appearance="outline" class="teams-dat-inline-field">
                         <mat-label>League</mat-label>
                         <mat-select [ngModel]="record.leagueId" (ngModelChange)="updateTeamsDatNumberField(record, 'leagueId', $event)">
@@ -264,6 +260,10 @@
                       <input type="number" [ngModel]="team.playerCount" (ngModelChange)="updateTeamPlayerCount(team, $event)">
                     </label>
                     <div class="team-db-toolbar-actions">
+                      <button mat-stroked-button color="primary" class="team-slot-action-btn" (click)="openTeamStadiumDialog(team)">
+                        <mat-icon>stadium</mat-icon>
+                        STADIUM
+                      </button>
                       <button mat-stroked-button color="primary" class="team-slot-action-btn" (click)="openTeamKitDialog(team)">
                         <mat-icon>checkroom</mat-icon>
                         KIT
@@ -598,6 +598,101 @@
 
 
   </mat-tab-group>
+</div>
+
+<!-- ─── TEAM STADIUM DIALOG ─────────────────────────────────── -->
+<div class="popup-overlay" *ngIf="showTeamStadiumDialog && activeTeamStadiumRecord as record" (click)="closeTeamStadiumDialog()">
+  <div class="popup-panel stadium-dialog-panel" (click)="$event.stopPropagation()">
+    <div class="popup-header">
+      <div class="popup-header-info">
+        <div class="popup-player-name">{{ record.teamLabel }} Stadium</div>
+        <div class="popup-player-meta">Name @ {{ formatTeamsDatOffset(308) }} · Lines @ {{ formatTeamsDatOffset(276) }}-{{ formatTeamsDatOffset(288) }} · Color @ {{ formatTeamsDatOffset(record.stadiumColor.fileOffset) }} · Pitch @ {{ formatTeamsDatOffset(4360) }}</div>
+      </div>
+      <button mat-icon-button (click)="closeTeamStadiumDialog()">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <div class="popup-body stadium-dialog-body">
+      <div class="stadium-dialog-grid">
+        <mat-form-field appearance="outline" class="stadium-dialog-name-field">
+          <mat-label>Stadium Name</mat-label>
+          <input
+            matInput
+            [ngModel]="record.stadiumName"
+            [maxlength]="stadiumNameMaxLength"
+            (ngModelChange)="updateActiveTeamStadiumDialogName($event)">
+          <mat-hint align="end">{{ (record.stadiumName || '').length }}/{{ stadiumNameMaxLength }}</mat-hint>
+        </mat-form-field>
+
+        <div class="stadium-dialog-color-card">
+          <div class="stadium-dialog-label">Stadium Color</div>
+          <div class="stadium-dialog-color-control">
+            <span class="stadium-dialog-color-swatch" [style.background]="record.stadiumColor.hex"></span>
+            <input
+              class="stadium-dialog-color-picker"
+              type="color"
+              [value]="record.stadiumColor.hex"
+              (input)="updateActiveTeamStadiumDialogColor($any($event.target).value)">
+          </div>
+          <div class="stadium-dialog-meta">{{ record.stadiumColor.hex }} · {{ record.stadiumColor.rawHex }}</div>
+          <div class="stadium-dialog-offset">{{ formatTeamsDatOffset(record.stadiumColor.fileOffset) }}</div>
+        </div>
+
+        <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-pitch-field">
+          <mat-label>Pitch Type</mat-label>
+          <input
+            matInput
+            type="number"
+            [ngModel]="record.pitchType"
+            (ngModelChange)="updateActiveTeamStadiumDialogPitchType($event)">
+          <mat-hint>Stored at {{ formatTeamsDatOffset(4360) }}</mat-hint>
+        </mat-form-field>
+
+        <div class="stadium-dialog-lines-grid">
+          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-line-field">
+            <mat-label>Lines U L</mat-label>
+            <input
+              matInput
+              type="number"
+              [ngModel]="record.linesUL"
+              (ngModelChange)="updateActiveTeamStadiumDialogNumberField('linesUL', $event)">
+            <mat-hint>{{ formatTeamsDatOffset(276) }}</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-line-field">
+            <mat-label>Lines U V</mat-label>
+            <input
+              matInput
+              type="number"
+              [ngModel]="record.linesUV"
+              (ngModelChange)="updateActiveTeamStadiumDialogNumberField('linesUV', $event)">
+            <mat-hint>{{ formatTeamsDatOffset(280) }}</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-line-field">
+            <mat-label>Lines P L</mat-label>
+            <input
+              matInput
+              type="number"
+              [ngModel]="record.linesPL"
+              (ngModelChange)="updateActiveTeamStadiumDialogNumberField('linesPL', $event)">
+            <mat-hint>{{ formatTeamsDatOffset(284) }}</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-line-field">
+            <mat-label>Lines P V</mat-label>
+            <input
+              matInput
+              type="number"
+              [ngModel]="record.linesPV"
+              (ngModelChange)="updateActiveTeamStadiumDialogNumberField('linesPV', $event)">
+            <mat-hint>{{ formatTeamsDatOffset(288) }}</mat-hint>
+          </mat-form-field>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ─── TEAM KIT DIALOG ─────────────────────────────────────── -->

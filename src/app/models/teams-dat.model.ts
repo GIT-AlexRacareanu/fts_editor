@@ -7,6 +7,13 @@ export interface TeamsDatKitColor {
   rawHex: string;
 }
 
+export interface TeamsDatColorValue {
+  byteOffset: number;
+  fileOffset: number;
+  hex: string;
+  rawHex: string;
+}
+
 export interface TeamsDatKit {
   kitIndex: number;
   label: string;
@@ -35,8 +42,14 @@ export interface TeamsDatRecord {
   freeKickRole: number;
   region: string;
   stadiumName: string;
+  stadiumColor: TeamsDatColorValue;
+  pitchType: number;
   sponsorType: number;
   kitManufacturer: number;
+  linesUL: number;
+  linesUV: number;
+  linesPL: number;
+  linesPV: number;
   europeanCompetition: number;
   kits: TeamsDatKit[];
 }
