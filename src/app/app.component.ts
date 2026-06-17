@@ -9,7 +9,7 @@ import { XlcLocaleValue } from './models/xlc-editor.model';
 import { FileHandleStorageService } from './services/file-handle-storage.service';
 import { ImportedPlayerRecord, PlayerImportService } from './services/player-import.service';
 import { PakEditorService, PakEntry } from './services/pak-editor.service';
-import { OvrCategory, OvrTuningConfig, PlayerService } from './services/player.service';
+import { PlayerService } from './services/player.service';
 import { TeamEditorService } from './services/team-editor.service';
 import { TeamsDatService } from './services/teams-dat.service';
 import { XlcEditorService } from './services/xlc-editor.service';
@@ -38,7 +38,6 @@ const FORMATION_VALUE_BY_ID: Record<number, string> = {
 };
 
 const FORMATION_BY_VALUE = new Map(FORMATION_PRESETS.map((formation) => [formation.value, formation]));
-const OVR_STAT_LABELS = ['STR', 'STA', 'SPD', 'ACC', 'CON', 'PAS', 'CRO', 'SHO', 'HEA', 'TAC', 'FK', 'GKS', 'GKH', 'GKP'] as const;
 
 interface FormationSketchPlayer {
   slotIndex: number;
@@ -85,9 +84,7 @@ interface TeamBrowseItem {
   rivalId: number;
   stadiumName: string;
   europeanCompetition: number;
-  attackOvr: number;
-  midfieldOvr: number;
-  defenseOvr: number;
+  overallOvr: number;
 }
 
 interface PopupTeamContext {
@@ -113,20 +110,6 @@ interface TeamImportResolvedPlayer {
   sourceOrder: number;
 }
 
-interface LocalSaveFile {
-  fileName: string;
-  bytes: ArrayBuffer;
-}
-
-interface LocalSaveBundle {
-  updatedAt: number;
-  players: LocalSaveFile;
-  teamPlayerLinks: LocalSaveFile;
-  teamsDat: LocalSaveFile;
-  pak: LocalSaveFile;
-  xlc?: LocalSaveFile;
-}
-
 type TeamsRoleField = 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole';
 
 @Component({
@@ -138,8 +121,11 @@ export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('teamLogoFileInput') teamLogoFileInput?: ElementRef<HTMLInputElement>;
 
   private readonly importAssetUrl = 'assets/import/import_2.csv';
+  private readonly backupPlayersAssetUrl = 'assets/backup/players.dat';
+  private readonly backupTeamPlayerLinksAssetUrl = 'assets/backup/teamplayerlinks_0.dat';
+  private readonly backupTeamsDatAssetUrl = 'assets/backup/teams.dat';
+  private readonly backupXlcAssetUrl = 'assets/backup/ftsteamnames.xlc';
   private readonly folderHandleStorageKey = 'fts-editor-folder';
-  private readonly localSaveStorageKey = 'fts-editor-local-save';
   private readonly bulkImportDummyPlayerCount = 18;
   private readonly teamLongNamePrefix = 'TXT_TEAMNAMELONG_';
   private readonly teamMediumNamePrefix = 'TXT_TEAMNAMEMED_';
@@ -149,9 +135,6 @@ export class AppComponent implements OnInit, OnDestroy {
   // ─── App flow ────────────────────────────────────────────────
   showInitPage = true;
   activeMainTab = 0;
-  localSaveAvailable = false;
-  localSaveMode = false;
-  localSaveLastUpdatedLabel = '';
 
   // ─── Player Edit Popup ───────────────────────────────────────
   showPlayerEditPopup = false;
@@ -162,7 +145,6 @@ export class AppComponent implements OnInit, OnDestroy {
   popupSearchQuery = '';
   popupPlayerHexQuery = '';
   popupTeamContext: PopupTeamContext | null = null;
-  ovrTuningConfig: OvrTuningConfig[] = [];
 
   // ─── Import ──────────────────────────────────────────────────
   importedPlayers: ImportedPlayerRecord[] = [];
@@ -223,6 +205,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private readonly teamBrowsePageSize = 25;
   private readonly importSearchPageSize = 50;
   private readonly importSearchMinLength = 3;
+  private readonly liveTextSearchMinLength = 3;
 
   readonly positions = [
     { value: 0, label: 'GK' }, { value: 1, label: 'LB' }, { value: 2, label: 'RB' },
@@ -236,7 +219,6 @@ export class AppComponent implements OnInit, OnDestroy {
   ];
 
   readonly formations = FORMATION_PRESETS;
-  readonly ovrStatLabels = OVR_STAT_LABELS;
   readonly formationIdOptions = Object.entries(FORMATION_VALUE_BY_ID)
     .map(([id, value]) => {
       const parsedId = Number(id);
@@ -365,7 +347,6 @@ export class AppComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
     this.registerRuntimeDebugHandlers();
     void this.initializeApp();
   }
@@ -382,10 +363,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
   get canEnterEditor(): boolean {
     return this.allFilesLoaded;
-  }
-
-  get hasStartupChoice(): boolean {
-    return this.localSaveAvailable;
   }
 
   enterMainApp(): void {
@@ -527,6 +504,8 @@ export class AppComponent implements OnInit, OnDestroy {
   teamOptions: { label: string; offset: number }[] = [];
   teamBrowseItems: TeamBrowseItem[] = [];
   private filteredTeamBrowseItemsCache: TeamBrowseItem[] = [];
+  private dbBrowsePlayersDirty = true;
+  private teamBrowseItemsDirty = true;
 
   // Stable list: rebuilt only when teams.dat data changes
   rivalOptions: { value: number; label: string }[] = [];
@@ -551,7 +530,17 @@ export class AppComponent implements OnInit, OnDestroy {
       this.teamBrowseItems = [];
       this.filteredTeamBrowseItemsCache = [];
       this.teamBrowsePage = 1;
+      this.teamBrowseItemsDirty = false;
       return;
+    }
+
+    const teamsById = new Map<number, TeamRecord>();
+
+    if (this.teamFileLoaded) {
+      this.teamEditorService.teamOptions.forEach(({ offset }) => {
+        const team = this.teamEditorService.getTeam(offset);
+        teamsById.set(team.teamId, team);
+      });
     }
 
     this.teamBrowseItems = this.teamsDatService.records
@@ -563,25 +552,42 @@ export class AppComponent implements OnInit, OnDestroy {
         rivalId: record.rivalId,
         stadiumName: record.stadiumName,
         europeanCompetition: record.europeanCompetition,
-        attackOvr: record.attackOvr,
-        midfieldOvr: record.midfieldOvr,
-        defenseOvr: record.defenseOvr
+        overallOvr: this.getTeamBrowseOverall(teamsById.get(record.teamId))
       }))
       .sort((left, right) => {
-        const leftAverageOvr = (left.attackOvr + left.midfieldOvr + left.defenseOvr) / 3;
-        const rightAverageOvr = (right.attackOvr + right.midfieldOvr + right.defenseOvr) / 3;
-
-        if (rightAverageOvr !== leftAverageOvr) {
-          return rightAverageOvr - leftAverageOvr;
+        if (right.overallOvr !== left.overallOvr) {
+          return right.overallOvr - left.overallOvr;
         }
 
         return left.teamLabel.localeCompare(right.teamLabel);
       });
 
+    this.teamBrowseItemsDirty = false;
     this.refreshFilteredTeamBrowseItems();
   }
 
+  private getTeamBrowseOverall(team: TeamRecord | undefined): number {
+    if (!team || !this.fileLoaded) {
+      return 0;
+    }
+    const players = this.getActiveTeamSlots(team).slice(0, 18);
+
+    if (players.length === 0) {
+      return 0;
+    }
+
+    let totalOvr = 0;
+
+    players.forEach((slot) => {
+      totalOvr += this.playerService.calculateOVR(this.playerService.readPlayer(slot.playerId));
+    });
+
+    return Math.round(totalOvr / players.length);
+  }
+
   private refreshFilteredTeamBrowseItems(): void {
+    this.ensureTeamBrowseItems();
+
     const leagueQuery = this.teamBrowseLeagueQuery;
 
     this.filteredTeamBrowseItemsCache = leagueQuery === null
@@ -601,14 +607,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
   get currentPopupHexId(): string {
     return this.playerService.formatPlayerId(this.popupPlayerIndex);
-  }
-
-  get ovrTuningOptions(): OvrTuningConfig[] {
-    return this.ovrTuningConfig;
-  }
-
-  get browserOvrTuningOptions(): OvrTuningConfig[] {
-    return this.ovrTuningOptions.filter((config) => config.category === 'mid' || config.category === 'att');
   }
 
   get popupTeamSlot(): TeamSlot | null {
@@ -631,7 +629,6 @@ export class AppComponent implements OnInit, OnDestroy {
     this.popupPlayerHexQuery = this.currentPopupHexId;
     this.popupSearchQuery = '';
     this.popupTeamContext = teamContext;
-    this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
     this.showImportPicker = false;
     this.importSearchQuery = '';
     this.importStatusMessage = '';
@@ -658,48 +655,6 @@ export class AppComponent implements OnInit, OnDestroy {
     } else {
       this.popupOvrColor = '#cd7f32';
     }
-  }
-
-  updateOvrWeight(category: OvrCategory, weightIndex: number, value: string | number): void {
-    const parsed = Number(value);
-
-    if (!Number.isFinite(parsed)) {
-      return;
-    }
-
-    const currentConfig = this.ovrTuningConfig.find((config) => config.category === category);
-
-    if (!currentConfig || weightIndex < 0 || weightIndex >= currentConfig.weights.length) {
-      return;
-    }
-
-    const nextWeights = [...currentConfig.weights];
-    nextWeights[weightIndex] = parsed;
-
-    this.playerService.setOvrProfile(category, { weights: nextWeights });
-    this.refreshOvrTuningState();
-  }
-
-  updateOvrBonus(category: OvrCategory, value: string | number): void {
-    const parsed = Number(value);
-
-    if (!Number.isFinite(parsed)) {
-      return;
-    }
-
-    this.playerService.setOvrProfile(category, { bonus: parsed });
-    this.refreshOvrTuningState();
-  }
-
-  updateOvrMultiplier(category: OvrCategory, value: string | number): void {
-    const parsed = Number(value);
-
-    if (!Number.isFinite(parsed)) {
-      return;
-    }
-
-    this.playerService.setRatingMultiplier(category, parsed);
-    this.refreshOvrTuningState();
   }
 
   applyPopupChanges(): void {
@@ -739,18 +694,6 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.openPlayerEditPopup(idx);
-  }
-
-  private refreshOvrTuningState(): void {
-    this.ovrTuningConfig = this.playerService.getOvrTuningConfig();
-
-    if (this.showPlayerEditPopup) {
-      this.refreshPlayerLinkedViews(this.popupPlayerIndex);
-      this.updatePopupOVR();
-      return;
-    }
-
-    this.refreshDbBrowsePlayers();
   }
 
   // ─── Team slot editing from popup ────────────────────────────
@@ -870,6 +813,14 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.importSearchQuery.trim().length >= this.importSearchMinLength;
   }
 
+  get canSearchCsvTeams(): boolean {
+    return this.teamImportCsvTeamSearch.trim().length >= this.liveTextSearchMinLength;
+  }
+
+  get canSearchTeamAddPlayers(): boolean {
+    return this.teamAddSearchQuery.trim().length >= this.liveTextSearchMinLength;
+  }
+
   get filteredImportedPlayers(): ImportedPlayerRecord[] {
     if (!this.canSearchImportedPlayers) {
       return [];
@@ -927,9 +878,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   get filteredCsvTeamOptions(): string[] {
     const q = this.teamImportCsvTeamSearch.trim().toLowerCase();
-    if (!q) {
-      return this.csvTeamOptions;
+    if (q.length < this.liveTextSearchMinLength) {
+      return [];
     }
+
     return this.csvTeamOptions.filter((t) => t.toLowerCase().includes(q));
   }
 
@@ -1234,7 +1186,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.teamImportCsvTeamSearch = value;
     this.onTeamImportCsvTeamChange();
 
-    if (!value.trim() || this.importSourceLoaded) {
+    if (value.trim().length < this.liveTextSearchMinLength || this.importSourceLoaded) {
       return;
     }
 
@@ -1393,13 +1345,16 @@ export class AppComponent implements OnInit, OnDestroy {
   // ─── DB Browser ───────────────────────────────────────────────
 
   get filteredDbBrowsePlayers(): DbBrowsePlayer[] {
+    this.ensureDbBrowsePlayers();
+
     const normalizedNameQuery = this.dbSearchNameQuery.trim().toLowerCase();
+    const hasNameQuery = normalizedNameQuery.length >= this.liveTextSearchMinLength;
     const nationalityQuery = this.dbSearchNationalityQuery;
     const positionQuery = this.dbSearchPositionQuery;
     const teamQuery = this.dbSearchTeamQuery;
 
     return this.dbBrowsePlayers.filter((player) => {
-      const matchesName = !normalizedNameQuery
+      const matchesName = !hasNameQuery
         || player.name.toLowerCase().includes(normalizedNameQuery)
         || player.hexId.toLowerCase().includes(normalizedNameQuery);
 
@@ -1417,6 +1372,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   get filteredTeamBrowseItems(): TeamBrowseItem[] {
+    this.ensureTeamBrowseItems();
     return this.filteredTeamBrowseItemsCache;
   }
 
@@ -1784,80 +1740,19 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     if (this.canEnterEditor) {
-      this.localSaveMode = false;
-      await this.persistLocalSaveBundle();
-      await this.refreshLocalSaveAvailability();
     }
 
     this.checkAutoTransition();
   }
 
-
-  async useLocalSave(): Promise<void> {
-    const bundle = await this.fileHandleStorage.getStoredValue<LocalSaveBundle>(this.localSaveStorageKey);
-
-    if (!bundle) {
-      this.localSaveAvailable = false;
-      this.localSaveLastUpdatedLabel = '';
-      alert('No local save was found.');
-      return;
-    }
-
-    try {
-      this.playerService.loadFromBytes(new Uint8Array(bundle.players.bytes), bundle.players.fileName);
-      this.applyPlayerFileLoaded();
-
-      this.teamEditorService.loadFromBytes(new Uint8Array(bundle.teamPlayerLinks.bytes), bundle.teamPlayerLinks.fileName);
-      this.applyTeamFileLoaded();
-
-      this.teamsDatService.loadFromBytes(new Uint8Array(bundle.teamsDat.bytes), bundle.teamsDat.fileName);
-      this.applyTeamsDatLoaded();
-
-      const pakFileName = this.pakEditorService.loadFromBytes(new Uint8Array(bundle.pak.bytes), bundle.pak.fileName);
-      this.applyPakLoaded(pakFileName);
-      this.pakStatusMessage = `Loaded ${pakFileName}.`;
-
-      if (bundle.xlc) {
-        const xlcFileName = this.xlcEditorService.loadFromBytes(new Uint8Array(bundle.xlc.bytes), bundle.xlc.fileName);
-        this.applyXlcLoaded(xlcFileName);
-        this.xlcStatusMessage = `Loaded ${xlcFileName}.`;
-      } else {
-        this.clearXlcLoaded();
-      }
-
-      this.localSaveMode = true;
-      this.localSaveAvailable = true;
-      this.localSaveLastUpdatedLabel = this.formatLocalSaveTimestamp(bundle.updatedAt);
-      this.checkAutoTransition();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load the local save.';
-      alert(message);
-    }
-  }
-
-  async downloadLocalSaveFiles(): Promise<void> {
-    const bundle = await this.fileHandleStorage.getStoredValue<LocalSaveBundle>(this.localSaveStorageKey);
-
-    if (!bundle) {
-      this.localSaveAvailable = false;
-      this.localSaveLastUpdatedLabel = '';
-      alert('No local save was found.');
-      return;
-    }
-
-    this.downloadBinaryFile(bundle.players.fileName, new Uint8Array(bundle.players.bytes));
-    this.downloadBinaryFile(bundle.teamPlayerLinks.fileName, new Uint8Array(bundle.teamPlayerLinks.bytes));
-    this.downloadBinaryFile(bundle.teamsDat.fileName, new Uint8Array(bundle.teamsDat.bytes));
-    this.downloadBinaryFile(bundle.pak.fileName, new Uint8Array(bundle.pak.bytes));
-
-    if (bundle.xlc) {
-      this.downloadBinaryFile(bundle.xlc.fileName, new Uint8Array(bundle.xlc.bytes));
-    }
-  }
-
   // ─── Save ─────────────────────────────────────────────────────
 
-  clearTeamPlayerLinks(): void {
+  async clearTeamPlayerLinks(): Promise<void> {
+    if (!this.fileLoaded) {
+      alert('Load PLAYERS.DAT file first.');
+      return;
+    }
+
     if (!this.teamEditorService.hasData) {
       alert('Load TEAMPLAYERLINKS file first.');
       return;
@@ -1868,16 +1763,59 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (!confirm('This will reset all team rosters: slots 0–17 set to players 0x0000..0x0011, slots 18–31 set to 0xFFFF, and all captain/set-piece roles cleared to 0xFFFFFFFF. Continue?')) {
+    if (!confirm('This will overwrite the currently loaded PLAYERS.DAT, TEAMPLAYERLINKS_0.dat, TEAMS.DAT, and loaded XLC file with the backup files from assets/backup. Continue?')) {
       return;
     }
 
-    this.teamEditorService.clearAllTeams(
-      this.buildCleanStarterPositionsByTeamId(),
-      this.buildCleanReservePositionsByPlayerId()
-    );
-    this.teamsDatService.resetAllTeamRoles(0xffffffff);
-    this.loadSingleTeam(this.selectedTeamOffset);
+    try {
+      const [playerBytes, teamPlayerLinksBytes, teamsDatBytes, xlcBytes] = await Promise.all([
+        this.fetchBackupBytes(this.backupPlayersAssetUrl, 'PLAYERS.DAT'),
+        this.fetchBackupBytes(this.backupTeamPlayerLinksAssetUrl, 'TEAMPLAYERLINKS_0.dat'),
+        this.fetchBackupBytes(this.backupTeamsDatAssetUrl, 'TEAMS.DAT'),
+        this.xlcLoaded ? this.fetchBackupBytes(this.backupXlcAssetUrl, 'ftsteamnames.xlc') : Promise.resolve(null)
+      ]);
+
+      const playerHandle = this.playerService.fileHandle;
+      const teamHandle = this.teamEditorService.fileHandle;
+      const teamsDatHandle = this.teamsDatService.fileHandle;
+      const xlcHandle = this.xlcEditorService.fileHandle;
+
+      this.playerService.loadFromBytes(playerBytes, 'PLAYERS.DAT');
+      this.playerService.fileHandle = playerHandle;
+
+      this.teamEditorService.loadFromBytes(teamPlayerLinksBytes, 'TEAMPLAYERLINKS_0.dat');
+      this.teamEditorService.fileHandle = teamHandle;
+
+      this.teamsDatService.loadFromBytes(teamsDatBytes, 'TEAMS.DAT');
+      this.teamsDatService.fileHandle = teamsDatHandle;
+
+      if (this.xlcLoaded && xlcBytes && xlcHandle) {
+        this.xlcEditorService.loadFromBytes(xlcBytes, 'ftsteamnames.xlc');
+        this.xlcEditorService.fileHandle = xlcHandle;
+      }
+
+      this.applyTeamsDatLoaded();
+      this.applyPlayerFileLoaded();
+      this.applyTeamFileLoaded();
+
+      if (this.xlcLoaded && xlcBytes && xlcHandle) {
+        this.applyXlcLoaded('ftsteamnames.xlc');
+        this.xlcStatusMessage = 'Restored ftsteamnames.xlc from backup.';
+      }
+
+      await this.playerService.saveCurrentToSameFile();
+      await this.teamEditorService.saveToSameFile();
+      await this.teamsDatService.saveToSameFile();
+
+      if (this.xlcLoaded && xlcBytes && xlcHandle) {
+        await this.xlcEditorService.saveToSameFile();
+      }
+
+      alert('Backup files restored successfully.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to restore the backup files.';
+      alert(message);
+    }
   }
 
   async saveAllFiles(): Promise<void> {
@@ -1922,22 +1860,16 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     try {
-      if (this.localSaveMode) {
-        await this.persistLocalSaveBundle();
-      } else {
-        await this.playerService.saveCurrentToSameFile();
-        await this.teamEditorService.saveToSameFile();
-        await this.teamsDatService.saveToSameFile();
-        if (this.xlcLoaded) {
-          await this.xlcEditorService.saveToSameFile();
-        }
-        if (this.pakLoaded) {
-          await this.pakEditorService.saveToSameFile();
-        }
-        await this.persistLocalSaveBundle();
+      await this.playerService.saveCurrentToSameFile();
+      await this.teamEditorService.saveToSameFile();
+      await this.teamsDatService.saveToSameFile();
+      if (this.xlcLoaded) {
+        await this.xlcEditorService.saveToSameFile();
       }
-      await this.refreshLocalSaveAvailability();
-      alert(this.localSaveMode ? 'Local save updated successfully.' : 'Files overwritten successfully.');
+      if (this.pakLoaded) {
+        await this.pakEditorService.saveToSameFile();
+      }
+      alert('Files overwritten successfully.');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Save failed. Make sure you gave the browser permission to save changes.';
       alert(message);
@@ -2242,11 +2174,16 @@ export class AppComponent implements OnInit, OnDestroy {
   // ─── Team Editor ──────────────────────────────────────────────
 
   get filteredTeamAddPlayers(): DbBrowsePlayer[] {
+    this.ensureDbBrowsePlayers();
+
     const normalizedQuery = this.teamAddSearchQuery.trim().toLowerCase();
 
+    if (normalizedQuery.length < this.liveTextSearchMinLength) {
+      return [];
+    }
+
     return this.dbBrowsePlayers
-      .filter((player) => !normalizedQuery
-        || player.name.toLowerCase().includes(normalizedQuery)
+      .filter((player) => player.name.toLowerCase().includes(normalizedQuery)
         || player.hexId.toLowerCase().includes(normalizedQuery))
       .slice(0, this.importSearchPageSize);
   }
@@ -2314,6 +2251,8 @@ export class AppComponent implements OnInit, OnDestroy {
     if (this.teamAddPickerOffset !== team.offset || this.selectedTeamAddPlayerIndex === null) {
       return;
     }
+
+    this.ensureDbBrowsePlayers();
 
     const selectedPlayer = this.dbBrowsePlayers.find((player) => player.index === this.selectedTeamAddPlayerIndex);
 
@@ -2654,82 +2593,23 @@ export class AppComponent implements OnInit, OnDestroy {
     return `"${normalizedValue}"`;
   }
 
+  private async fetchBackupBytes(assetUrl: string, label: string): Promise<Uint8Array> {
+    const response = await fetch(assetUrl, { cache: 'no-store' });
+
+    if (!response.ok) {
+      throw new Error(`Backup file not found: ${label}.`);
+    }
+
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
   private async initializeApp(): Promise<void> {
     console.log('[InitLoad] initializeApp() start.');
     await this.loadImportSource(false, false);
-
-    await this.refreshLocalSaveAvailability();
-
-    if (!this.localSaveAvailable) {
-      await this.restoreRememberedFiles();
-
-      if (this.canEnterEditor) {
-        this.localSaveMode = false;
-        await this.persistLocalSaveBundle();
-        await this.refreshLocalSaveAvailability();
-      }
-    }
+    await this.fileHandleStorage.deleteStoredValue('fts-editor-local-save');
+    await this.restoreRememberedFiles();
 
     console.log('[InitLoad] initializeApp() complete.');
-  }
-
-  private async refreshLocalSaveAvailability(): Promise<void> {
-    const bundle = await this.fileHandleStorage.getStoredValue<LocalSaveBundle>(this.localSaveStorageKey);
-    this.localSaveAvailable = bundle !== null;
-    this.localSaveLastUpdatedLabel = bundle ? this.formatLocalSaveTimestamp(bundle.updatedAt) : '';
-  }
-
-  private async persistLocalSaveBundle(): Promise<void> {
-    if (!this.fileLoaded || !this.teamFileLoaded || !this.teamsDatLoaded || !this.pakLoaded) {
-      return;
-    }
-
-    const bundle: LocalSaveBundle = {
-      updatedAt: Date.now(),
-      players: {
-        fileName: 'PLAYERS.DAT',
-        bytes: this.cloneArrayBuffer(this.playerService.exportCurrentFileBytes())
-      },
-      teamPlayerLinks: {
-        fileName: 'TEAMPLAYERLINKS_0.dat',
-        bytes: this.cloneArrayBuffer(this.teamEditorService.exportCurrentFileBytes())
-      },
-      teamsDat: {
-        fileName: 'TEAMS.DAT',
-        bytes: this.cloneArrayBuffer(this.teamsDatService.exportCurrentFileBytes())
-      },
-      pak: {
-        fileName: this.pakFileName || 'teams.pak',
-        bytes: this.cloneArrayBuffer(this.pakEditorService.exportCurrentFileBytes())
-      }
-    };
-
-    if (this.xlcLoaded) {
-      bundle.xlc = {
-        fileName: this.xlcFileName || 'ftsteamnames.xlc',
-        bytes: this.cloneArrayBuffer(this.xlcEditorService.exportCurrentFileBytes())
-      };
-    }
-
-    await this.fileHandleStorage.saveStoredValue(this.localSaveStorageKey, bundle);
-  }
-
-  private cloneArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-    const copy = new Uint8Array(bytes.byteLength);
-    copy.set(bytes);
-    return copy.buffer;
-  }
-
-  private downloadBinaryFile(fileName: string, bytes: Uint8Array): void {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
-
-  private formatLocalSaveTimestamp(timestamp: number): string {
-    return new Date(timestamp).toLocaleString();
   }
 
   private async restoreRememberedFiles(): Promise<void> {
@@ -2793,7 +2673,8 @@ export class AppComponent implements OnInit, OnDestroy {
   private applyPlayerFileLoaded(): void {
     console.log('[InitLoad] applyPlayerFileLoaded()');
     this.teamPlayerNameCache.clear();
-    this.refreshDbBrowsePlayers();
+    this.invalidateDbBrowsePlayers();
+    this.invalidateTeamBrowseItems();
     this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
     this.rebuildRoleSelectOptions();
     this.refreshTeamImportPreview();
@@ -2802,7 +2683,8 @@ export class AppComponent implements OnInit, OnDestroy {
   private applyTeamFileLoaded(): void {
     console.log('[InitLoad] applyTeamFileLoaded(). team options:', this.teamEditorService.teamOptions.length);
     this.rebuildTeamOptions();
-    this.refreshDbBrowsePlayers();
+    this.invalidateDbBrowsePlayers();
+    this.invalidateTeamBrowseItems();
     this.selectedTeamOffset = this.teamOptions.length > 0 ? this.teamOptions[0].offset : null;
     this.displayedTeams = this.selectedTeamOffset === null
       ? []
@@ -2814,7 +2696,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private applyTeamsDatLoaded(): void {
     console.log('[InitLoad] applyTeamsDatLoaded(). record count:', this.teamsDatService.teamCount);
     this.selectedTeamsDatIndex = this.teamsDatService.teamCount > 0 ? 0 : null;
-    this.rebuildTeamBrowseItems();
+    this.invalidateTeamBrowseItems();
     this.rebuildRivalOptions();
 
     if (this.displayedTeams.length > 0) {
@@ -2826,7 +2708,7 @@ export class AppComponent implements OnInit, OnDestroy {
     console.log('[InitLoad] applyXlcLoaded(). file:', fileName, 'displayed teams before:', this.displayedTeams.length);
     this.xlcFileName = fileName;
     this.rebuildTeamOptions();
-    this.rebuildTeamBrowseItems();
+    this.invalidateTeamBrowseItems();
 
     if (this.selectedTeamOffset !== null) {
       this.loadSingleTeam(this.selectedTeamOffset);
@@ -2836,7 +2718,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.rebuildRivalOptions();
-    this.refreshDbBrowsePlayers();
+    this.invalidateDbBrowsePlayers();
     console.log('[InitLoad] applyXlcLoaded() complete. displayed teams now:', this.displayedTeams.length);
   }
 
@@ -2845,10 +2727,10 @@ export class AppComponent implements OnInit, OnDestroy {
     this.xlcEditorService.clearLoadedFile();
     this.xlcFileName = '';
     this.rebuildTeamOptions();
-    this.rebuildTeamBrowseItems();
+    this.invalidateTeamBrowseItems();
     this.displayedTeams = this.decorateTeamsWithPlayerNames(this.displayedTeams);
     this.rebuildRivalOptions();
-    this.refreshDbBrowsePlayers();
+    this.invalidateDbBrowsePlayers();
   }
 
   private applyPakLoaded(fileName: string): void {
@@ -3262,7 +3144,8 @@ export class AppComponent implements OnInit, OnDestroy {
     const decoratedTeam = this.decorateTeamWithPlayerNames(updatedTeam);
     this.displayedTeams = this.displayedTeams.map((team) => team.offset === offset ? decoratedTeam : team);
     this.rebuildRoleSelectOptions();
-    this.refreshDbBrowsePlayers();
+    this.invalidateDbBrowsePlayers();
+    this.invalidateTeamBrowseItems();
 
     if (this.selectedTeamOffset === offset && !this.displayedTeams.some((team) => team.offset === offset)) {
       this.displayedTeams = [decoratedTeam];
@@ -3278,12 +3161,38 @@ export class AppComponent implements OnInit, OnDestroy {
       this.rebuildRoleSelectOptions();
     }
 
+    this.invalidateDbBrowsePlayers();
+    this.invalidateTeamBrowseItems();
+  }
+
+  private invalidateDbBrowsePlayers(): void {
+    this.dbBrowsePlayersDirty = true;
+  }
+
+  private ensureDbBrowsePlayers(): void {
+    if (!this.dbBrowsePlayersDirty) {
+      return;
+    }
+
     this.refreshDbBrowsePlayers();
+  }
+
+  private invalidateTeamBrowseItems(): void {
+    this.teamBrowseItemsDirty = true;
+  }
+
+  private ensureTeamBrowseItems(): void {
+    if (!this.teamBrowseItemsDirty) {
+      return;
+    }
+
+    this.rebuildTeamBrowseItems();
   }
 
   private refreshDbBrowsePlayers(): void {
     if (!this.fileLoaded) {
       this.dbBrowsePlayers = [];
+      this.dbBrowsePlayersDirty = false;
       this.resetDbBrowsePagination();
       return;
     }
@@ -3316,6 +3225,7 @@ export class AppComponent implements OnInit, OnDestroy {
       return left.index - right.index;
     });
 
+    this.dbBrowsePlayersDirty = false;
     this.resetDbBrowsePagination();
   }
 

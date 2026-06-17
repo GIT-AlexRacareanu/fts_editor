@@ -24,14 +24,6 @@ interface OvrProfile {
   multiplier: number;
 }
 
-export interface OvrTuningConfig {
-  category: OvrCategory;
-  label: string;
-  weights: number[];
-  bonus: number;
-  multiplier: number;
-}
-
 export interface ReplacePlayersOptions {
   templatePlayerIndex?: number;
 }
@@ -125,11 +117,12 @@ export class PlayerService {
   private readonly playerStride = 112;
   private readonly yearOffset = 120;
   private readonly totalPlayersOffset = 8;
+  private readonly playerNameOffset = 48;
+  private readonly playerNameByteLength = 32;
+  private readonly playerNameDecoder = new TextDecoder('utf-16le');
 
   binaryData: Uint8Array | null = null;
   fileHandle: any = null;
-
-  private readonly profiles: Record<OvrCategory, OvrProfile> = DEFAULT_PROFILES;
 
   constructor(private readonly fileHandleStorage: FileHandleStorageService) {}
 
@@ -445,7 +438,12 @@ export class PlayerService {
 
   async downloadFile(): Promise<void> {
     if (!this.binaryData) return;
-    const blob = new Blob([this.getSerializedData()], { type: 'application/octet-stream' });
+    const serialized = this.getSerializedData();
+    const downloadBytes = new Uint8Array(serialized.byteLength);
+    downloadBytes.set(serialized);
+    const blob = new Blob([
+      downloadBytes.buffer
+    ], { type: 'application/octet-stream' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'players.dat';
@@ -467,8 +465,7 @@ export class PlayerService {
   readPlayer(idx: number): Player {
     const view = new DataView(this.binaryData!.buffer);
     const base = idx * 112;
-    const nameArr = new Uint8Array(this.binaryData!.buffer.slice(base + 48, base + 80));
-    const name = new TextDecoder('utf-16').decode(nameArr).replace(/\0/g, '').trim();
+    const name = this.readPlayerName(base);
     const hiddenFromTransferMarket = view.getUint8(base + this.hiddenFromTransferMarketOffset);
     const isIconLegend = view.getUint8(base + this.isIconLegendOffset);
     const canReadBirthFields = this.birthMonthOffset + 4 <= this.playerStride;
@@ -516,8 +513,7 @@ export class PlayerService {
 
     const total = this.totalPlayers;
     for (let i = 0; i < total; i++) {
-      const nameArr = new Uint8Array(this.binaryData!.buffer.slice(i * 112 + 48, i * 112 + 80));
-      const name = new TextDecoder('utf-16').decode(nameArr).toLowerCase();
+      const name = this.readPlayerName(i * this.playerStride).toLowerCase();
       const playerId = this.formatPlayerId(i).toLowerCase();
       if (name.includes(q) || playerId.includes(q)) return i;
     }
@@ -526,7 +522,7 @@ export class PlayerService {
 
   calculateOVR(player: Player): number {
     const posCategory = getPositionCategory(player.pos);
-    const { weights, bonus, multiplier } = this.getProfileByPositionCategory(posCategory);
+    const { weights, bonus, multiplier } = getDefaultProfileByPositionCategory(posCategory);
 
     let weightedSum = 0;
     let totalWeight = 0;
@@ -552,74 +548,9 @@ export class PlayerService {
     return Math.max(0, Math.min(100, raw));
   }
 
-  getOvrTuningConfig(): OvrTuningConfig[] {
-    return [
-      {
-        category: 'gk',
-        label: 'GK',
-        weights: [...this.profiles.gk.weights],
-        bonus: this.profiles.gk.bonus,
-        multiplier: this.profiles.gk.multiplier
-      },
-      {
-        category: 'def',
-        label: 'DEF',
-        weights: [...this.profiles.def.weights],
-        bonus: this.profiles.def.bonus,
-        multiplier: this.profiles.def.multiplier
-      },
-      {
-        category: 'mid',
-        label: 'MID',
-        weights: [...this.profiles.mid.weights],
-        bonus: this.profiles.mid.bonus,
-        multiplier: this.profiles.mid.multiplier
-      },
-      {
-        category: 'att',
-        label: 'ATT',
-        weights: [...this.profiles.att.weights],
-        bonus: this.profiles.att.bonus,
-        multiplier: this.profiles.att.multiplier
-      }
-    ];
-  }
-
-  setRatingMultiplier(category: OvrCategory, multiplier: number): void {
-    if (!Number.isFinite(multiplier) || multiplier <= 0) {
-      return;
-    }
-
-    this.profiles[category].multiplier = multiplier;
-  }
-
-  setOvrProfile(category: OvrCategory, profile: Partial<Pick<OvrProfile, 'weights' | 'bonus' | 'multiplier'>>): void {
-    const currentProfile = this.profiles[category];
-
-    if (profile.weights) {
-      currentProfile.weights = [...profile.weights];
-    }
-
-    if (profile.bonus !== undefined && Number.isFinite(profile.bonus)) {
-      currentProfile.bonus = profile.bonus;
-    }
-
-    if (profile.multiplier !== undefined) {
-      this.setRatingMultiplier(category, profile.multiplier);
-    }
-  }
-
-  private getProfileByPositionCategory(posCategory: number): OvrProfile {
-    switch (posCategory) {
-      case 0:
-        return this.profiles.gk;
-      case 1:
-        return this.profiles.def;
-      case 2:
-        return this.profiles.mid;
-      default:
-        return this.profiles.att;
-    }
+  private readPlayerName(base: number): string {
+    const nameBytes = this.binaryData!.subarray(base + this.playerNameOffset, base + this.playerNameOffset + this.playerNameByteLength);
+    return this.playerNameDecoder.decode(nameBytes).replace(/\0/g, '').trim();
   }
 
   appendPlayers(players: Player[]): number[] {

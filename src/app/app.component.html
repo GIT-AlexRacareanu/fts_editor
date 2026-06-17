@@ -11,27 +11,9 @@
   <div class="init-container">
     <h2 class="init-heading">FTS 15 EDITOR PRO</h2>
 
-    <div class="init-file-row" *ngIf="hasStartupChoice">
-      <mat-icon class="init-file-icon">save</mat-icon>
-      <div>
-        <div class="init-file-name">Local save available</div>
-        <div class="init-file-caption" *ngIf="localSaveLastUpdatedLabel">Updated {{ localSaveLastUpdatedLabel }}</div>
-      </div>
-    </div>
-
-    <button mat-raised-button color="accent" class="init-folder-btn" *ngIf="hasStartupChoice" (click)="useLocalSave()">
-      <mat-icon>save</mat-icon>
-      USE LOCAL SAVE
-    </button>
-
     <button mat-raised-button color="primary" class="init-folder-btn" (click)="openFolder()">
       <mat-icon>folder_open</mat-icon>
       {{ allFilesLoaded ? 'CHANGE FOLDER' : 'LOAD FILES FROM FOLDER' }}
-    </button>
-
-    <button mat-stroked-button color="primary" class="init-folder-btn" *ngIf="hasStartupChoice" (click)="downloadLocalSaveFiles()">
-      <mat-icon>download</mat-icon>
-      DOWNLOAD LOCAL FILES
     </button>
 
     <div class="init-file-row" [class.init-file-row--loaded]="fileLoaded">
@@ -139,7 +121,7 @@
                   </button>
                 </mat-form-field>
 
-                <div class="team-csv-search-results" *ngIf="teamImportCsvTeamSearch && !teamImportCsvTeam">
+                <div class="team-csv-search-results" *ngIf="canSearchCsvTeams && !teamImportCsvTeam">
                   <button
                     class="team-csv-search-option"
                     *ngFor="let t of filteredCsvTeamOptions"
@@ -150,6 +132,9 @@
                   <div class="team-csv-search-empty" *ngIf="filteredCsvTeamOptions.length === 0">
                     No matching teams
                   </div>
+                </div>
+                <div class="team-csv-search-empty" *ngIf="teamImportCsvTeamSearch && !teamImportCsvTeam && !canSearchCsvTeams">
+                  Type at least 3 characters
                 </div>
               </div>
 
@@ -306,7 +291,8 @@
                         </mat-select>
                       </mat-form-field>
                     </div>
-                    <p class="team-empty-state" *ngIf="filteredTeamAddPlayers.length === 0">No player matches the current search.</p>
+                    <p class="team-empty-state" *ngIf="teamAddSearchQuery && !canSearchTeamAddPlayers">Type at least 3 characters to search players.</p>
+                    <p class="team-empty-state" *ngIf="canSearchTeamAddPlayers && filteredTeamAddPlayers.length === 0">No player matches the current search.</p>
                   </div>
 
                   <!-- Formation sketch -->
@@ -492,56 +478,6 @@
                   </button>
                 </div>
 
-                <mat-card class="section-card" *ngIf="browserOvrTuningOptions.length > 0">
-                  <mat-card-header>
-                    <mat-card-title>OVR Tuner</mat-card-title>
-                  </mat-card-header>
-                  <mat-card-content>
-                    <section class="ovr-tuning-group" *ngFor="let config of browserOvrTuningOptions">
-                      <div class="ovr-tuning-surface">
-                        <div class="ovr-tuning-header">
-                          <div class="ovr-tuning-group-title">{{ config.label }}</div>
-                          <div class="ovr-tuning-meta-fields">
-                            <label class="ovr-multiplier-field">
-                              <span>Bonus</span>
-                              <input
-                                #bonusInput
-                                class="ovr-mini-input"
-                                type="number"
-                                [value]="config.bonus"
-                                (blur)="updateOvrBonus(config.category, bonusInput.value)"
-                                (keyup.enter)="updateOvrBonus(config.category, bonusInput.value)">
-                            </label>
-                            <label class="ovr-multiplier-field">
-                              <span>Multiplier</span>
-                              <input
-                                #multiplierInput
-                                class="ovr-mini-input"
-                                type="number"
-                                step="0.01"
-                                [value]="config.multiplier"
-                                (blur)="updateOvrMultiplier(config.category, multiplierInput.value)"
-                                (keyup.enter)="updateOvrMultiplier(config.category, multiplierInput.value)">
-                            </label>
-                          </div>
-                        </div>
-                        <div class="ovr-tuning-stat-grid">
-                          <label class="ovr-tuning-stat-field" *ngFor="let weight of config.weights; let weightIndex = index">
-                            <span>{{ ovrStatLabels[weightIndex] }}</span>
-                            <input
-                              #weightInput
-                              class="ovr-mini-input"
-                              type="number"
-                              [value]="weight"
-                              (blur)="updateOvrWeight(config.category, weightIndex, weightInput.value)"
-                              (keyup.enter)="updateOvrWeight(config.category, weightIndex, weightInput.value)">
-                          </label>
-                        </div>
-                      </div>
-                    </section>
-                  </mat-card-content>
-                </mat-card>
-
                 <div class="db-search-pagination" *ngIf="filteredDbBrowsePlayers.length > 0">
                   <button mat-stroked-button color="primary" (click)="goToPreviousDbBrowsePage()" [disabled]="dbBrowsePage === 1">
                     Previous
@@ -641,14 +577,10 @@
                               }">
                               {{ getEuropeanCompetitionBadgeLabel(team.europeanCompetition) }}
                             </span>
+                            <span class="team-browser-ovr-pill">OVR {{ team.overallOvr }}</span>
                           </div>
                         </div>
                         <button mat-stroked-button color="primary" (click)="openTeamFromBrowser(team)">Edit</button>
-                      </div>
-                      <div class="team-browser-ovrs">
-                        <span class="team-browser-ovr-pill team-browser-ovr-pill--attack">ATT {{ team.attackOvr }}</span>
-                        <span class="team-browser-ovr-pill team-browser-ovr-pill--midfield">MID {{ team.midfieldOvr }}</span>
-                        <span class="team-browser-ovr-pill team-browser-ovr-pill--defense">DEF {{ team.defenseOvr }}</span>
                       </div>
                     </article>
                   </div>

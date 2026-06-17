@@ -87,7 +87,12 @@ export class PakEditorService {
 
     this.fileHandle = nextHandle;
     const file = await nextHandle.getFile();
-    this.loadFromBytes(new Uint8Array(await file.arrayBuffer()), file.name);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    console.log('[Pak] file picked:', file.name, 'size:', bytes.byteLength, 'bytes');
+    const parsed = this.parseFile(bytes);
+    console.log('[Pak] parse complete. entries:', parsed.entries.length);
+    this.applyParsedState(bytes, parsed);
+    this.hasPendingChanges = false;
 
     await this.fileHandleStorage.saveFileHandle(this.storageKey, nextHandle);
 

@@ -107,7 +107,39 @@ describe('AppComponent Team Browser caching', () => {
         defenseOvr: 82
       }
     ];
-    const component = createComponent({}, {}, {}, { hasData: true, teamCount: records.length, records } as any);
+    const playerService = {
+      binaryData: new Uint8Array(1),
+      readPlayer: (playerId: number) => ({ pos: playerId, nat: 0 }),
+      calculateOVR: (player: { pos: number }) => player.pos
+    };
+    const teamEditorService = {
+      hasData: true,
+      teamOptions: [{ offset: 10, label: 'Team 100' }, { offset: 20, label: 'Team 101' }],
+      getTeam: (offset: number) => offset === 10
+        ? {
+          offset: 10,
+          teamId: 100,
+          teamLabel: 'Team 100',
+          playerCount: 3,
+          slots: [
+            { playerId: 70, isEmpty: false },
+            { playerId: 72, isEmpty: false },
+            { playerId: 74, isEmpty: false }
+          ]
+        }
+        : {
+          offset: 20,
+          teamId: 101,
+          teamLabel: 'Team 101',
+          playerCount: 3,
+          slots: [
+            { playerId: 80, isEmpty: false },
+            { playerId: 81, isEmpty: false },
+            { playerId: 82, isEmpty: false }
+          ]
+        }
+    };
+    const component = createComponent(playerService as any, {}, teamEditorService as any, { hasData: true, teamCount: records.length, records } as any);
     const labelSpy = spyOn<any>(component, 'getTeamLongDisplayLabel').and.callFake((teamId: number) => `Team ${teamId}`);
 
     (component as any).rebuildTeamBrowseItems();
@@ -120,5 +152,7 @@ describe('AppComponent Team Browser caching', () => {
     expect(firstRead).toBe(secondRead);
     expect(pageRead.length).toBe(records.length);
     expect(firstRead.map((team) => team.teamId)).toEqual([101, 100]);
+    expect(firstRead[0]?.overallOvr).toBe(81);
+    expect(firstRead[1]?.overallOvr).toBe(72);
   });
 });

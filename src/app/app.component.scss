@@ -1419,12 +1419,6 @@
   color: #b8c7d3;
 }
 
-.team-browser-ovrs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .team-browser-ovr-pill {
   display: inline-flex;
   align-items: center;
@@ -1432,25 +1426,12 @@
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(87, 214, 255, 0.14);
+  color: #aeeeff;
   font-size: 0.74rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.team-browser-ovr-pill--attack {
-  background: rgba(187, 64, 64, 0.2);
-  color: #ffb1b1;
-}
-
-.team-browser-ovr-pill--midfield {
-  background: rgba(182, 136, 24, 0.2);
-  color: #ffe091;
-}
-
-.team-browser-ovr-pill--defense {
-  background: rgba(44, 132, 96, 0.22);
-  color: #9ff1cb;
 }
 
 .db-search-summary {
@@ -1567,102 +1548,6 @@
 
 .accent-title {
   color: var(--accent) !important;
-}
-
-/* ── OVR tuning table ─────────────────────────────────────── */
-
-.ovr-tuning-group {
-  & + & {
-    margin-top: 18px;
-  }
-}
-
-.ovr-tuning-surface {
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  padding: 12px;
-  background: rgba(15, 22, 35, 0.92);
-}
-
-.ovr-tuning-header {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-
-  @media (max-width: 899px) {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-.ovr-tuning-group-title {
-  color: var(--accent);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.ovr-tuning-meta-fields {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-
-  @media (max-width: 599px) {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.ovr-tuning-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
-  gap: 10px;
-}
-
-.ovr-tuning-stat-field {
-  display: grid;
-  gap: 4px;
-
-  span {
-    text-align: center;
-    color: #9db0be;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-}
-
-.ovr-mini-input {
-  width: 100%;
-  min-height: 32px;
-  border-radius: 6px;
-  border: 1px solid rgba(70, 90, 120, 0.7);
-  background: rgba(10, 16, 28, 0.95);
-  color: var(--text);
-  text-align: center;
-  font-weight: 700;
-  padding: 0 6px;
-}
-
-.ovr-multiplier-field {
-  display: grid;
-  gap: 4px;
-  min-width: 100px;
-
-  span {
-    color: #9db0be;
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .ovr-mini-input {
-    width: 100%;
-  }
 }
 
 /* ── Navigation / search rows ──────────────────────────────── */
