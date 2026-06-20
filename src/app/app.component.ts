@@ -112,6 +112,12 @@ interface TeamImportResolvedPlayer {
 
 type TeamsRoleField = 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' | 'freeKickRole';
 
+interface ColorChannelOption {
+  readonly index: 0 | 1 | 2;
+  readonly label: string;
+  readonly shortLabel: string;
+}
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html'
@@ -219,6 +225,11 @@ export class AppComponent implements OnInit, OnDestroy {
     { value: 18, label: 'CAM' }, { value: 19, label: 'ST' }, { value: 20, label: 'LW' },
     { value: 21, label: 'RW' }, { value: 22, label: 'CF' }
   ];
+  readonly colorChannels: ColorChannelOption[] = [
+    { index: 0, label: 'Red', shortLabel: 'R' },
+    { index: 1, label: 'Green', shortLabel: 'G' },
+    { index: 2, label: 'Blue', shortLabel: 'B' }
+  ];
 
   readonly formations = FORMATION_PRESETS;
   readonly formationIdOptions = Object.entries(FORMATION_VALUE_BY_ID)
@@ -313,6 +324,7 @@ export class AppComponent implements OnInit, OnDestroy {
     { value: 7, label: 'scottish 1' },
     { value: 8, label: 'usa 1' },
     { value: 9, label: 'european nations' },
+    { value: 10, label: 'asian nations' },
     { value: 11, label: 'south american nations' },
     { value: 12, label: 'north american nations' },
     { value: 13, label: 'african nations' },
@@ -320,6 +332,7 @@ export class AppComponent implements OnInit, OnDestroy {
     { value: 15, label: 'rest of asia' },
     { value: 16, label: 'rest of america' },
     { value: 17, label: 'classic teams' },
+    { value: 18, label: 'england 3' },
     { value: 19, label: 'france 2' },
     { value: 20, label: 'italy 2' },
     { value: 21, label: 'germany 2' },
@@ -2177,6 +2190,15 @@ export class AppComponent implements OnInit, OnDestroy {
     this.teamEditorService.exportUncompressedFile();
   }
 
+  downloadPlayersUncompressed(): void {
+    if (!this.fileLoaded) {
+      alert('Load PLAYERS.DAT first.');
+      return;
+    }
+
+    this.playerService.exportUncompressedFile();
+  }
+
   downloadTeamsDatUncompressed(): void {
     if (!this.teamsDatLoaded) {
       alert('Load TEAMS.DAT first.');
@@ -2424,6 +2446,20 @@ export class AppComponent implements OnInit, OnDestroy {
     this.teamsDatService.updateKitColor(this.teamKitDialogRecordIndex, kitIndex, colorIndex, value);
   }
 
+  updateActiveTeamKitDialogColorChannel(
+    kitIndex: number,
+    colorIndex: number,
+    currentHex: string,
+    channelIndex: 0 | 1 | 2,
+    value: string | number
+  ): void {
+    this.updateActiveTeamKitDialogColor(
+      kitIndex,
+      colorIndex,
+      this.withHexColorChannel(currentHex, channelIndex, value)
+    );
+  }
+
   updateActiveTeamKitDialogStyle(kitIndex: number, value: string | number): void {
     if (this.teamKitDialogRecordIndex === null) {
       return;
@@ -2458,6 +2494,14 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.teamsDatService.updateStadiumColor(this.teamStadiumDialogRecordIndex, value);
+  }
+
+  updateActiveTeamStadiumDialogColorChannel(
+    currentHex: string,
+    channelIndex: 0 | 1 | 2,
+    value: string | number
+  ): void {
+    this.updateActiveTeamStadiumDialogColor(this.withHexColorChannel(currentHex, channelIndex, value));
   }
 
   updateActiveTeamStadiumDialogPitchType(value: string | number): void {
@@ -2498,6 +2542,18 @@ export class AppComponent implements OnInit, OnDestroy {
     this.setRoleForCurrentTeam(field, parsedValue);
     changes[field] = parsedValue;
     this.teamsDatService.updateRecord(record.index, changes);
+  }
+
+  getHexColorChannel(value: string, channelIndex: 0 | 1 | 2): number {
+    const normalizedValue = this.normalizeHexColor(value);
+
+    if (!normalizedValue) {
+      return 0;
+    }
+
+    const startIndex = 1 + (channelIndex * 2);
+
+    return Number.parseInt(normalizedValue.slice(startIndex, startIndex + 2), 16);
   }
 
   formatHexRoleValue(value: number): string {
@@ -3183,6 +3239,38 @@ export class AppComponent implements OnInit, OnDestroy {
       ?? this.getTeamMediumName(teamId)
       ?? this.getTeamLongName(teamId)
       ?? `Team ${teamId}`;
+  }
+
+  private withHexColorChannel(currentHex: string, channelIndex: 0 | 1 | 2, value: string | number): string {
+    const normalizedValue = this.normalizeHexColor(currentHex) ?? '#000000';
+    const channels = [
+      this.getHexColorChannel(normalizedValue, 0),
+      this.getHexColorChannel(normalizedValue, 1),
+      this.getHexColorChannel(normalizedValue, 2)
+    ];
+    channels[channelIndex] = this.clampColorChannel(value);
+
+    return `#${channels.map((channel) => channel.toString(16).toUpperCase().padStart(2, '0')).join('')}`;
+  }
+
+  private clampColorChannel(value: string | number): number {
+    const numericValue = Number(value);
+
+    if (!Number.isFinite(numericValue)) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(255, Math.round(numericValue)));
+  }
+
+  private normalizeHexColor(value: string | null | undefined): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const normalizedValue = value.trim();
+
+    return /^#[0-9A-Fa-f]{6}$/.test(normalizedValue) ? normalizedValue.toUpperCase() : null;
   }
 
   private getTeamSelectLabel(teamId: number): string {

@@ -67,6 +67,10 @@
                 <mat-icon>save</mat-icon>
                 SAVE
               </button>
+              <button mat-stroked-button color="primary" class="team-action-btn" (click)="downloadPlayersUncompressed()" title="Download PLAYERS.DAT as raw uncompressed bytes">
+                <mat-icon>download</mat-icon>
+                PLAYERS RAW
+              </button>
               <button mat-stroked-button color="primary" class="team-action-btn" (click)="downloadTeamPlayerLinksUncompressed()" title="Download TEAMPLAYERLINKS as raw uncompressed bytes">
                 <mat-icon>download</mat-icon>
                 TEAMPLAYERLINKS RAW
@@ -629,11 +633,20 @@
           <div class="stadium-dialog-label">Stadium Color</div>
           <div class="stadium-dialog-color-control">
             <span class="stadium-dialog-color-swatch" [style.background]="record.stadiumColor.hex"></span>
-            <input
-              class="stadium-dialog-color-picker"
-              type="color"
-              [value]="record.stadiumColor.hex"
-              (input)="updateActiveTeamStadiumDialogColor($any($event.target).value)">
+            <div class="teams-dat-rgb-sliders">
+              <label class="teams-dat-rgb-slider" *ngFor="let channel of colorChannels">
+                <span class="teams-dat-rgb-slider-name">{{ channel.label }}</span>
+                <input
+                  class="teams-dat-rgb-slider-input"
+                  type="range"
+                  min="0"
+                  max="255"
+                  [attr.data-channel]="channel.shortLabel"
+                  [value]="getHexColorChannel(record.stadiumColor.hex, channel.index)"
+                  (change)="updateActiveTeamStadiumDialogColorChannel(record.stadiumColor.hex, channel.index, $any($event.target).value)">
+                <span class="teams-dat-rgb-slider-value">{{ getHexColorChannel(record.stadiumColor.hex, channel.index) }}</span>
+              </label>
+            </div>
           </div>
           <div class="stadium-dialog-meta">{{ record.stadiumColor.hex }} · {{ record.stadiumColor.rawHex }}</div>
           <div class="stadium-dialog-offset">{{ formatTeamsDatOffset(record.stadiumColor.fileOffset) }}</div>
@@ -756,11 +769,20 @@
                   <span class="teams-dat-kit-color-name">{{ color.colorIndex + 1 }}. {{ color.label }}</span>
                   <div class="teams-dat-kit-color-control">
                     <span class="teams-dat-kit-swatch" [style.background]="color.hex"></span>
-                    <input
-                      class="teams-dat-kit-picker"
-                      type="color"
-                      [value]="color.hex"
-                      (input)="updateActiveTeamKitDialogColor(kit.kitIndex, color.colorIndex, $any($event.target).value)">
+                    <div class="teams-dat-rgb-sliders">
+                      <label class="teams-dat-rgb-slider" *ngFor="let channel of colorChannels">
+                        <span class="teams-dat-rgb-slider-name">{{ channel.shortLabel }}</span>
+                        <input
+                          class="teams-dat-rgb-slider-input"
+                          type="range"
+                          min="0"
+                          max="255"
+                          [attr.data-channel]="channel.shortLabel"
+                          [value]="getHexColorChannel(color.hex, channel.index)"
+                          (change)="updateActiveTeamKitDialogColorChannel(kit.kitIndex, color.colorIndex, color.hex, channel.index, $any($event.target).value)">
+                        <span class="teams-dat-rgb-slider-value">{{ getHexColorChannel(color.hex, channel.index) }}</span>
+                      </label>
+                    </div>
                   </div>
                   <span class="teams-dat-kit-color-hex">{{ color.hex }}</span>
                   <span class="teams-dat-kit-color-raw">{{ color.rawHex }} · {{ formatTeamsDatOffset(color.fileOffset) }}</span>

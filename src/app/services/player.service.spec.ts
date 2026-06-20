@@ -38,6 +38,23 @@ describe('PlayerService', () => {
     expect(service.totalPlayers).toBe(3);
   });
 
+  it('normalizes a stale header count to the derived player total when loading bytes', () => {
+    const service = new PlayerService({} as any);
+    const inflatedPayload = new Uint8Array(122 + 2 * 112);
+    const view = new DataView(inflatedPayload.buffer);
+
+    view.setUint16(8, 13360, true);
+    (globalThis as any).pako = {
+      deflate: (input: Uint8Array) => input,
+      inflate: (input: Uint8Array) => input
+    };
+
+    service.loadFromBytes(inflatedPayload);
+
+    expect(new DataView(service.binaryData!.buffer).getUint16(8, true)).toBe(3);
+    expect(service.totalPlayers).toBe(3);
+  });
+
   it('treats LM and RM as midfielders for OVR calculation', () => {
     const service = new PlayerService({} as any);
     const stats = {

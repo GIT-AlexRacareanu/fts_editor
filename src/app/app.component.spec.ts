@@ -764,6 +764,26 @@ describe('AppComponent team CSV import preview', () => {
     expect(exportUncompressedFile).toHaveBeenCalledTimes(1);
   });
 
+  it('downloads raw players.dat bytes from the Team Editor actions', () => {
+    const exportUncompressedFile = jasmine.createSpy('exportUncompressedFile');
+    const playerService = {
+      getOvrTuningConfig: () => [],
+      binaryData: new Uint8Array(1),
+      exportUncompressedFile
+    };
+    const playerImportService = {
+      filterByTeam: () => [],
+      mapImportedPlayer: () => ({ pos: 11 })
+    };
+    const teamEditorService = { hasData: false };
+    const teamsDatService = { hasData: false };
+    const component = createComponent(playerService as any, playerImportService as any, teamEditorService as any, teamsDatService as any);
+
+    component.downloadPlayersUncompressed();
+
+    expect(exportUncompressedFile).toHaveBeenCalledTimes(1);
+  });
+
   it('opens the team kit dialog and updates shared/team-specific kit values through the active record index', () => {
     const updateKitColor = jasmine.createSpy('updateKitColor');
     const updateKitStyle = jasmine.createSpy('updateKitStyle');

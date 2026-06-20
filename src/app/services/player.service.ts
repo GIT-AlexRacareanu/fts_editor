@@ -436,6 +436,22 @@ export class PlayerService {
     return this.getSerializedData();
   }
 
+  exportUncompressedFile(fileName = 'players_raw.dat'): void {
+    if (!this.binaryData) {
+      return;
+    }
+
+    const bytes = new Uint8Array(this.binaryData.byteLength);
+    bytes.set(this.binaryData);
+
+    const blob = new Blob([bytes.buffer], { type: 'application/octet-stream' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
   async downloadFile(): Promise<void> {
     if (!this.binaryData) return;
     const serialized = this.getSerializedData();
@@ -452,6 +468,7 @@ export class PlayerService {
 
   private applyLoadedBytes(bytes: Uint8Array): void {
     this.binaryData = new Uint8Array(pako.inflate(bytes));
+    this.syncTotalPlayersHeaderWithDerivedCount();
   }
 
   private getSerializedData(): Uint8Array {
@@ -459,7 +476,23 @@ export class PlayerService {
       throw new Error('No file loaded');
     }
 
+    this.syncTotalPlayersHeaderWithDerivedCount();
+
     return new Uint8Array(pako.deflate(this.binaryData));
+  }
+
+  private syncTotalPlayersHeaderWithDerivedCount(): void {
+    if (!this.binaryData) {
+      return;
+    }
+
+    const derivedTotal = this.getDerivedPlayerCount(this.binaryData.byteLength);
+
+    if (derivedTotal <= 0) {
+      return;
+    }
+
+    new DataView(this.binaryData.buffer).setUint16(this.totalPlayersOffset, derivedTotal, true);
   }
 
   readPlayer(idx: number): Player {

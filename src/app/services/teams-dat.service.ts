@@ -29,8 +29,8 @@ const KIT_LABELS = ['Home', 'Away', 'GK Home', 'GK Away'] as const;
 const KIT_COLOR_LABELS = [
   'Primary',
   'Secondary',
-  'Sponsor',
   'Shirt Nr',
+  'Sponsor',
   'Short Primary',
   'Short Secondary',
   'Short Nr',

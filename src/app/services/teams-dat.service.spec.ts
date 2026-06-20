@@ -42,6 +42,8 @@ describe('TeamsDatService', () => {
     expect(record.kits[0].colors[0].hex).toBe('#FFFF0A');
     expect(record.kits[0].colors[0].rawHex).toBe('0AFFFF7F');
     expect(record.kits[0].colors[0].fileOffset).toBe(0x24);
+    expect(record.kits[0].colors[2].label).toBe('Shirt Nr');
+    expect(record.kits[0].colors[3].label).toBe('Sponsor');
   });
 
   it('updates a kit color without overwriting the fourth byte', () => {
