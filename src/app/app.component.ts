@@ -104,6 +104,7 @@ interface TeamImportResolvedPlayer {
   shortName: string;
   playerIndex: number;
   position: number;
+  shirtNumber: number;
   futureHexId: string;
   positionLabel: string;
   ovr: number;
@@ -159,6 +160,7 @@ export class AppComponent implements OnInit, OnDestroy {
   importSearchQuery = '';
   importStatusMessage = '';
   isBulkImporting = false;
+  selectedImportedPlayer: ImportedPlayerRecord | null = null;
 
   // ─── Team Import ─────────────────────────────────────────────
   teamImportCsvTeam: string | null = null;
@@ -651,12 +653,17 @@ export class AppComponent implements OnInit, OnDestroy {
     return team.slots.find((s) => s.index === this.popupTeamContext!.slotIndex) ?? null;
   }
 
+  get popupImportedHeadshotUrl(): string | null {
+    return this.resolveImportedHeadshotUrl(this.getImportedPlayerForPopup()?.headshot);
+  }
+
   openPlayerEditPopup(index: number, teamContext: PopupTeamContext | null = null): void {
     this.popupPlayerIndex = index;
     this.popupPlayer = this.playerService.readPlayer(index);
     this.popupPlayerHexQuery = this.currentPopupHexId;
     this.popupSearchQuery = '';
     this.popupTeamContext = teamContext;
+    this.selectedImportedPlayer = null;
     this.showImportPicker = false;
     this.importSearchQuery = '';
     this.importStatusMessage = '';
@@ -667,6 +674,7 @@ export class AppComponent implements OnInit, OnDestroy {
   closePlayerEditPopup(): void {
     this.showPlayerEditPopup = false;
     this.popupTeamContext = null;
+    this.selectedImportedPlayer = null;
     this.importStatusMessage = '';
   }
 
@@ -830,6 +838,7 @@ export class AppComponent implements OnInit, OnDestroy {
       ...importedPlayer,
       pos: currentPosition
     };
+    this.selectedImportedPlayer = record;
     this.updatePopupOVR();
     this.importSearchQuery = '';
     this.showImportPicker = false;
@@ -925,6 +934,7 @@ export class AppComponent implements OnInit, OnDestroy {
     shortName: string;
     playerIndex: number;
     position: number;
+    shirtNumber: number;
     futureHexId: string;
     positionLabel: string;
     ovr: number;
@@ -951,6 +961,7 @@ export class AppComponent implements OnInit, OnDestroy {
           shortName: sourcePlayer.shortName,
           playerIndex,
           position: mapped.pos,
+          shirtNumber: sourcePlayer.jerseyNumber ?? 0,
           futureHexId: this.playerService.formatPlayerId(playerIndex),
           positionLabel: this.getPositionLabel(mapped.pos),
           ovr: this.playerService.calculateOVR(mapped),
@@ -1012,6 +1023,20 @@ export class AppComponent implements OnInit, OnDestroy {
 
       return left.shortName.localeCompare(right.shortName);
     });
+  }
+
+  private getImportedPlayerForPopup(): ImportedPlayerRecord | null {
+    if (this.importSourceLoaded) {
+      const sourcePlayers = this.getImportedPlayersInCsvOrder();
+      const sourcePlayerIndex = this.popupPlayerIndex - this.bulkImportDummyPlayerCount;
+      const playerFromRowOrder = sourcePlayerIndex >= 0 ? (sourcePlayers[sourcePlayerIndex] ?? null) : null;
+
+      if (playerFromRowOrder) {
+        return playerFromRowOrder;
+      }
+    }
+
+    return this.selectedImportedPlayer;
   }
 
   private getImportedPlayerNameCandidates(sourcePlayer: ImportedPlayerRecord): string[] {
@@ -1279,7 +1304,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.teamEditorService.clearTeam(offset);
 
       for (const player of resolvedPlayers) {
-        this.teamEditorService.addPlayer(offset, player.playerIndex, player.position);
+        this.teamEditorService.addPlayer(offset, player.playerIndex, player.position, player.shirtNumber);
       }
 
       if (this.selectedTeamOffset === offset) {
@@ -1852,11 +1877,11 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const syncedRoles = this.syncAllTeamsDatRolesWithCurrentRosters(true, true);
+    const syncedRoles = this.syncAllTeamsDatRolesWithCurrentRosters(true);
     const syncedRatings = this.syncAllTeamsDatRatingsWithCurrentRosters();
 
     if (syncedRoles > 0) {
-      alert(`Synced captain/corner/penalty/free-kick roles for ${syncedRoles} teams across TEAMPLAYERLINKS and TEAMS.DAT (first active player receives all roles).`);
+      alert(`Synced captain/corner/penalty/free-kick roles for ${syncedRoles} teams across TEAMPLAYERLINKS and TEAMS.DAT using the current starting XI.`);
     }
 
     if (syncedRatings > 0) {
@@ -1904,7 +1929,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  private syncAllTeamsDatRolesWithCurrentRosters(syncTeamPlayerLinks = false, forceFirstPlayerAllRoles = false): number {
+  private syncAllTeamsDatRolesWithCurrentRosters(syncTeamPlayerLinks = false): number {
     if (!this.teamEditorService.hasData || !this.teamsDatService.hasData) {
       return 0;
     }
@@ -1914,7 +1939,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.teamEditorService.teamOptions.forEach(({ offset }) => {
       const team = this.teamEditorService.getTeam(offset);
 
-      if (this.syncTeamsDatRolesForTeam(team, syncTeamPlayerLinks, forceFirstPlayerAllRoles)) {
+      if (this.syncTeamsDatRolesForTeam(team, syncTeamPlayerLinks)) {
         syncedTeams += 1;
       }
     });
@@ -1944,7 +1969,7 @@ export class AppComponent implements OnInit, OnDestroy {
     return syncedTeams;
   }
 
-  private syncTeamsDatRolesForTeam(team: TeamRecord, syncTeamPlayerLinks = false, forceFirstPlayerAllRoles = false): boolean {
+  private syncTeamsDatRolesForTeam(team: TeamRecord, syncTeamPlayerLinks = false): boolean {
     if (!this.teamsDatService.hasData) {
       return false;
     }
@@ -1959,21 +1984,11 @@ export class AppComponent implements OnInit, OnDestroy {
       return false;
     }
 
-    const nextCaptainRole = forceFirstPlayerAllRoles
-      ? fallbackRolePlayerId
-      : this.resolveEffectiveRolePlayerId(team, record, 'captainRole');
-    const nextLeftCornerRole = forceFirstPlayerAllRoles
-      ? fallbackRolePlayerId
-      : this.resolveEffectiveRolePlayerId(team, record, 'leftCornerRole');
-    const nextRightCornerRole = forceFirstPlayerAllRoles
-      ? fallbackRolePlayerId
-      : this.resolveEffectiveRolePlayerId(team, record, 'rightCornerRole');
-    const nextPenaltyRole = forceFirstPlayerAllRoles
-      ? fallbackRolePlayerId
-      : this.resolveEffectiveRolePlayerId(team, record, 'penaltyRole');
-    const nextFreeKickRole = forceFirstPlayerAllRoles
-      ? fallbackRolePlayerId
-      : this.resolveEffectiveRolePlayerId(team, record, 'freeKickRole');
+    const nextCaptainRole = this.resolveEffectiveRolePlayerId(team, record, 'captainRole');
+    const nextLeftCornerRole = this.resolveEffectiveRolePlayerId(team, record, 'leftCornerRole');
+    const nextRightCornerRole = this.resolveEffectiveRolePlayerId(team, record, 'rightCornerRole');
+    const nextPenaltyRole = this.resolveEffectiveRolePlayerId(team, record, 'penaltyRole');
+    const nextFreeKickRole = this.resolveEffectiveRolePlayerId(team, record, 'freeKickRole');
 
     let updated = false;
 
@@ -2020,6 +2035,12 @@ export class AppComponent implements OnInit, OnDestroy {
     const CLEAR_ROLE_PLAYER_ID = 0xffffffff;
     const activeSlots = this.getActiveTeamSlots(team);
     const activePlayerIds = new Set(activeSlots.map((slot) => slot.playerId));
+    const roleFromStartingEleven = this.getRolePlayerIdFromStartingEleven(team, field);
+
+    if (roleFromStartingEleven !== null) {
+      return roleFromStartingEleven;
+    }
+
     const roleFromTeamPlayerLinks = this.getRolePlayerIdFromTeamPlayerLinks(team, field);
 
     if (roleFromTeamPlayerLinks !== null) {
@@ -2033,6 +2054,99 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     return activeSlots[0]?.playerId ?? CLEAR_ROLE_PLAYER_ID;
+  }
+
+  private getRolePlayerIdFromStartingEleven(team: TeamRecord, field: TeamsRoleField): number | null {
+    if (!this.fileLoaded) {
+      return null;
+    }
+
+    const starters = this.getActiveTeamSlots(team)
+      .slice(0, 11)
+      .map((slot) => ({
+        slot,
+        player: this.playerService.readPlayer(slot.playerId)
+      }));
+
+    if (starters.length === 0) {
+      return null;
+    }
+
+    const bestStarter = this.pickBestStarter(starters, field);
+    return bestStarter?.slot.playerId ?? null;
+  }
+
+  private pickBestStarter(
+    starters: Array<{ slot: TeamSlot; player: Player }>,
+    field: TeamsRoleField
+  ): { slot: TeamSlot; player: Player } | null {
+    switch (field) {
+      case 'captainRole':
+        return this.pickBestStarterByMetric(starters, (starter) => this.playerService.calculateOVR(starter.player));
+      case 'leftCornerRole':
+        return this.pickCornerStarter(starters, 0);
+      case 'rightCornerRole':
+        return this.pickCornerStarter(starters, 1);
+      case 'penaltyRole':
+        return this.pickBestStarterByMetric(starters, (starter) => starter.player.SHO);
+      case 'freeKickRole':
+        return this.pickBestStarterByMetric(starters, (starter) => starter.player.FK);
+    }
+  }
+
+  private pickCornerStarter(
+    starters: Array<{ slot: TeamSlot; player: Player }>,
+    preferredFoot: number
+  ): { slot: TeamSlot; player: Player } | null {
+    const preferredFootStarters = starters.filter((starter) => starter.player.foot === preferredFoot);
+
+    return this.pickBestStarterByMetric(
+      preferredFootStarters.length > 0 ? preferredFootStarters : starters,
+      (starter) => starter.player.CRO
+    );
+  }
+
+  private pickBestStarterByMetric(
+    starters: Array<{ slot: TeamSlot; player: Player }>,
+    metric: (starter: { slot: TeamSlot; player: Player }) => number
+  ): { slot: TeamSlot; player: Player } | null {
+    if (starters.length === 0) {
+      return null;
+    }
+
+    let bestStarter = starters[0];
+    let bestMetric = metric(bestStarter);
+    let bestOvr = this.playerService.calculateOVR(bestStarter.player);
+
+    for (let index = 1; index < starters.length; index += 1) {
+      const candidate = starters[index];
+      const candidateMetric = metric(candidate);
+      const candidateOvr = this.playerService.calculateOVR(candidate.player);
+
+      if (candidateMetric > bestMetric) {
+        bestStarter = candidate;
+        bestMetric = candidateMetric;
+        bestOvr = candidateOvr;
+        continue;
+      }
+
+      if (candidateMetric === bestMetric) {
+        if (candidateOvr > bestOvr) {
+          bestStarter = candidate;
+          bestMetric = candidateMetric;
+          bestOvr = candidateOvr;
+          continue;
+        }
+
+        if (candidateOvr === bestOvr && candidate.slot.index < bestStarter.slot.index) {
+          bestStarter = candidate;
+          bestMetric = candidateMetric;
+          bestOvr = candidateOvr;
+        }
+      }
+    }
+
+    return bestStarter;
   }
 
   private getRolePlayerIdFromTeamPlayerLinks(team: TeamRecord, field: TeamsRoleField): number | null {
@@ -3271,6 +3385,34 @@ export class AppComponent implements OnInit, OnDestroy {
     const normalizedValue = value.trim();
 
     return /^#[0-9A-Fa-f]{6}$/.test(normalizedValue) ? normalizedValue.toUpperCase() : null;
+  }
+
+  private resolveImportedHeadshotUrl(value: string | null | undefined): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const normalizedValue = value.trim();
+
+    if (!normalizedValue) {
+      return null;
+    }
+
+    if (/^(https?:|data:|blob:)/i.test(normalizedValue) || normalizedValue.startsWith('/')) {
+      return normalizedValue;
+    }
+
+    if (normalizedValue.startsWith('assets/')) {
+      return normalizedValue;
+    }
+
+    if (this.importSourceFileName.startsWith('assets/')) {
+      const lastSlashIndex = this.importSourceFileName.lastIndexOf('/');
+      const basePath = lastSlashIndex >= 0 ? this.importSourceFileName.slice(0, lastSlashIndex + 1) : '';
+      return `${basePath}${normalizedValue}`;
+    }
+
+    return normalizedValue;
   }
 
   private getTeamSelectLabel(teamId: number): string {

@@ -1873,6 +1873,66 @@
   }
 }
 
+.popup-imported-headshot-shell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px;
+  border-radius: 14px;
+  background: radial-gradient(circle at top, rgba(79, 195, 247, 0.2), rgba(9, 14, 24, 0.96) 68%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popup-imported-headshot-shell--inline {
+  width: min(100%, 176px);
+  margin-inline: auto;
+
+  @media (min-width: 720px) {
+    width: 176px;
+    margin-inline: 0;
+  }
+}
+
+.popup-imported-headshot-image {
+  display: block;
+  width: min(100%, 220px);
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.popup-imported-headshot-image--inline {
+  width: 100%;
+  max-width: 160px;
+}
+
+.popup-player-identity-block {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+
+  @media (min-width: 720px) {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.popup-player-identity-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.popup-player-birth-grid {
+  display: grid;
+  gap: 10px;
+
+  @media (min-width: 600px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .popup-team-slot-grid {
   display: grid;
   gap: 10px;

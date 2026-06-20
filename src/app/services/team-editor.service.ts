@@ -410,7 +410,7 @@ export class TeamEditorService {
     return this.getTeam(offset);
   }
 
-  addPlayer(offset: number, playerId: number, position: number): TeamRecord | null {
+  addPlayer(offset: number, playerId: number, position: number, shirtNumber = 0): TeamRecord | null {
     const team = this.getTeam(offset);
     const insertSlot = this.findAppendSlot(team);
 
@@ -422,7 +422,7 @@ export class TeamEditorService {
 
     return this.updateSlot(offset, insertSlot.index, {
       playerIdHex: this.formatPlayerId(playerId),
-      shirtNumber: 0,
+      shirtNumber,
       position,
       starter: insertSlot.index < STARTER_SLOT_COUNT
     }, nextPlayerCount);

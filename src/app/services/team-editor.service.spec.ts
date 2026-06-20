@@ -68,7 +68,21 @@ describe('TeamEditorService', () => {
     expect(updatedTeam?.slots[1].playerId).toBe(0x0000);
     expect(updatedTeam?.slots[2].playerId).toBe(0x0033);
     expect(updatedTeam?.slots[2].position).toBe(13);
+    expect(updatedTeam?.slots[2].shirtNumber).toBe(0);
     expect(updatedTeam?.slots[2].isEmpty).toBeFalse();
+  });
+
+  it('adds a chosen player with the provided shirt number', () => {
+    const offset = seedTeamBinary(service, {
+      playerCount: 1,
+      playerIds: [0x0010, 0x0000]
+    });
+
+    const updatedTeam = service.addPlayer(offset, 0x0033, 13, 27);
+
+    expect(updatedTeam).not.toBeNull();
+    expect(updatedTeam?.slots[1].playerId).toBe(0x0033);
+    expect(updatedTeam?.slots[1].shirtNumber).toBe(27);
   });
 
   it('does not overwrite counted placeholder slots when adding a player', () => {

@@ -923,10 +923,33 @@
           <mat-card-title>General Information</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <mat-form-field appearance="outline" class="full-width-field">
-            <mat-label>Full Name</mat-label>
-            <input #popupNameInput matInput [(ngModel)]="popupPlayer.name" (ngModelChange)="updatePopupOVR()">
-          </mat-form-field>
+          <div class="popup-player-identity-block">
+            <div class="popup-imported-headshot-shell popup-imported-headshot-shell--inline" *ngIf="popupImportedHeadshotUrl as headshotUrl">
+              <img class="popup-imported-headshot-image popup-imported-headshot-image--inline" [src]="headshotUrl" [alt]="popupPlayer.name || 'Imported player headshot'">
+            </div>
+            <div class="popup-player-identity-fields">
+              <mat-form-field appearance="outline" class="full-width-field">
+                <mat-label>Full Name</mat-label>
+                <input #popupNameInput matInput [(ngModel)]="popupPlayer.name" (ngModelChange)="updatePopupOVR()">
+              </mat-form-field>
+              <div class="popup-player-birth-grid">
+                <mat-form-field appearance="outline">
+                  <mat-label>Birth Day</mat-label>
+                  <input matInput type="number" [(ngModel)]="popupPlayer.birthDay">
+                  <mat-hint>0x70..0x73</mat-hint>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Birth Month</mat-label>
+                  <input matInput type="number" [(ngModel)]="popupPlayer.birthMonth">
+                  <mat-hint>0x74..0x77</mat-hint>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Year</mat-label>
+                  <input matInput type="number" [(ngModel)]="popupPlayer.year">
+                </mat-form-field>
+              </div>
+            </div>
+          </div>
           <div class="stats-grid">
             <mat-form-field appearance="outline">
               <mat-label>Position</mat-label>
@@ -955,20 +978,6 @@
             <mat-form-field appearance="outline">
               <mat-label>Weight (kg)</mat-label>
               <input matInput type="number" [(ngModel)]="popupPlayer.peso">
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Birth Day</mat-label>
-              <input matInput type="number" [(ngModel)]="popupPlayer.birthDay">
-              <mat-hint>0x70..0x73</mat-hint>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Birth Month</mat-label>
-              <input matInput type="number" [(ngModel)]="popupPlayer.birthMonth">
-              <mat-hint>0x74..0x77</mat-hint>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Year</mat-label>
-              <input matInput type="number" [(ngModel)]="popupPlayer.year">
             </mat-form-field>
           </div>
         </mat-card-content>

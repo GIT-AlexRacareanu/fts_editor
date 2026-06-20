@@ -7,6 +7,8 @@ export interface ImportedPlayerRecord {
   sourceRowIndex?: number;
   shortName: string;
   lastName?: string;
+  headshot?: string;
+  jerseyNumber?: number;
   overall: number;
   age: number;
   heightCm: number;
@@ -410,6 +412,8 @@ export class PlayerImportService {
       sourceRowIndex: rowIndex,
       shortName,
       lastName,
+      headshot: this.getFieldByAliases(row, headerIndexes, ['headshot', 'head_shot', 'head shot', 'portrait', 'photo', 'image']),
+      jerseyNumber: this.getOptionalNumberFieldByAliases(row, headerIndexes, ['jersey_number', 'jersey number', 'shirt_number', 'shirt number', 'squad_number', 'squad number', 'kit_number', 'kit number', 'number', 'no']),
       overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall', 'overallrating', 'ovr', 'rating']),
       age: this.getNumberFieldByAliases(row, headerIndexes, ['age']),
       heightCm: this.getHeightFieldByAliases(row, headerIndexes, ['height_cm', 'height']),
