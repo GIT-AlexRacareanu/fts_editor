@@ -151,6 +151,19 @@ describe('team import jersey numbers', () => {
     expect(parsed[0].jerseyNumber).toBe(9);
   });
 
+  it('parses jersey numbers from the import_2 csv header style', () => {
+    const service = new PlayerImportService();
+    const csv = [
+      'knownas,club,overallrating,age,height,weight,position_1,preferredfoot,jerseynumber',
+      'Erling Haaland,Manchester City,91,24,195,94,25,Left,9'
+    ].join('\n');
+
+    const parsed = service.parseCsv(csv);
+
+    expect(parsed.length).toBe(1);
+    expect(parsed[0].jerseyNumber).toBe(9);
+  });
+
   it('uses the imported csv jersey number when linking a team roster', async () => {
     const addPlayer = jasmine.createSpy('addPlayer');
     const clearTeam = jasmine.createSpy('clearTeam');

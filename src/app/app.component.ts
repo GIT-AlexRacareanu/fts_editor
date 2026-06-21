@@ -4,7 +4,7 @@ import { FORMATION_PRESETS, FormationPreset } from './data/formations';
 import { NATIONALITY_NAMES_BY_ID, NATIONALITY_OPTIONS } from './data/nationalities';
 import { Player } from './models/player.model';
 import { TeamRecord, TeamSlot } from './models/team-editor.model';
-import { TeamsDatRecord } from './models/teams-dat.model';
+import { TeamsDatKit, TeamsDatKitColor, TeamsDatRecord } from './models/teams-dat.model';
 import { XlcLocaleValue } from './models/xlc-editor.model';
 import { FileHandleStorageService } from './services/file-handle-storage.service';
 import { ImportedPlayerRecord, PlayerImportService } from './services/player-import.service';
@@ -262,7 +262,7 @@ export class AppComponent implements OnInit, OnDestroy {
   ];
 
   readonly feet = [
-    { value: 0, label: 'Right' }, { value: 1, label: 'Left' }, { value: 255, label: 'Default/Both' }
+    { value: 0, label: 'Left' }, { value: 1, label: 'Right' }, { value: 255, label: 'Default/Both' }
   ];
 
   readonly skinColors = [
@@ -1534,6 +1534,31 @@ export class AppComponent implements OnInit, OnDestroy {
     this.openPlayerEditPopup(newPlayerIndex);
   }
 
+  repairAllPlayerFeet(): void {
+    if (!this.fileLoaded) {
+      return;
+    }
+
+    for (let index = 0; index < this.playerService.totalPlayers; index += 1) {
+      const player = this.playerService.readPlayer(index);
+      const repairedFoot = this.invertPlayerFootValue(player.foot);
+
+      if (repairedFoot === player.foot) {
+        continue;
+      }
+
+      this.playerService.writePlayer(index, { ...player, foot: repairedFoot });
+    }
+
+    if (this.showPlayerEditPopup && this.popupPlayerIndex < this.playerService.totalPlayers) {
+      this.popupPlayer = this.playerService.readPlayer(this.popupPlayerIndex);
+      this.updatePopupOVR();
+    }
+
+    this.invalidateDbBrowsePlayers();
+    this.invalidateTeamBrowseItems();
+  }
+
   resetDbBrowsePagination(): void {
     this.dbBrowsePage = 1;
   }
@@ -2583,7 +2608,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   updateActiveTeamKitDialogNumberField(
-    field: 'sponsorType' | 'kitManufacturer',
+    field: 'sponsorType' | 'kitManufacturer' | 'linesUL' | 'linesUV' | 'linesPL' | 'linesPV',
     value: string | number
   ): void {
     if (this.teamKitDialogRecordIndex === null) {
@@ -2626,17 +2651,6 @@ export class AppComponent implements OnInit, OnDestroy {
     this.teamsDatService.updatePitchType(this.teamStadiumDialogRecordIndex, Number(value));
   }
 
-  updateActiveTeamStadiumDialogNumberField(
-    field: 'linesUL' | 'linesUV' | 'linesPL' | 'linesPV',
-    value: string | number
-  ): void {
-    if (this.teamStadiumDialogRecordIndex === null) {
-      return;
-    }
-
-    this.teamsDatService.updateRecord(this.teamStadiumDialogRecordIndex, { [field]: Number(value) });
-  }
-
   updateTeamsDatRoleField(
     record: TeamsDatRecord,
     field: TeamsRoleField,
@@ -2668,6 +2682,23 @@ export class AppComponent implements OnInit, OnDestroy {
     const startIndex = 1 + (channelIndex * 2);
 
     return Number.parseInt(normalizedValue.slice(startIndex, startIndex + 2), 16);
+  }
+
+  getKitColorControl(
+    kit: TeamsDatKit,
+    colorLabel:
+      | 'Shirt Primary'
+      | 'Shirt Secondary'
+      | 'Shirt Nr'
+      | 'Socks'
+      | 'Shorts'
+      | 'Sponsor'
+      | 'Short Nr'
+      | 'Shirt Lines'
+      | 'Short Lines'
+      | 'Socks Lines'
+  ): TeamsDatKitColor | null {
+    return kit.colors.find((color) => color.label === colorLabel) ?? null;
   }
 
   formatHexRoleValue(value: number): string {
@@ -3460,6 +3491,18 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private invalidateDbBrowsePlayers(): void {
     this.dbBrowsePlayersDirty = true;
+  }
+
+  private invertPlayerFootValue(foot: number): number {
+    if (foot === 0) {
+      return 1;
+    }
+
+    if (foot === 1) {
+      return 0;
+    }
+
+    return foot;
   }
 
   private ensureDbBrowsePlayers(): void {

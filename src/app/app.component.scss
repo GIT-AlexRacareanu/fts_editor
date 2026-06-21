@@ -34,53 +34,6 @@
   gap: 12px;
 }
 
-.init-heading {
-  margin: 0 0 4px;
-  color: var(--text);
-  font-size: 1.4rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  text-align: center;
-}
-
-.init-folder-btn {
-  width: 100%;
-  height: 52px;
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  gap: 8px;
-}
-
-.init-file-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
-  padding: 12px 16px;
-  border-radius: 14px;
-  border: 1px solid var(--card-border);
-  background: rgba(15, 22, 35, 0.92);
-  transition: border-color 0.2s, background 0.2s;
-
-  &.init-file-row--loaded {
-    border-color: rgba(100, 255, 120, 0.35);
-    background: rgba(8, 36, 16, 0.92);
-  }
-}
-
-.init-file-icon {
-  font-size: 1.5rem;
-  width: 1.5rem;
-  height: 1.5rem;
-  color: #546e7a;
-
-  .init-file-row--loaded & {
-    color: #69f0ae;
-  }
-}
-
 .init-file-name {
   color: var(--text);
   font-size: 0.88rem;
@@ -1120,7 +1073,7 @@
 }
 
 .kit-dialog-panel {
-  max-width: 1180px;
+  max-width: 1220px;
 }
 
 .stadium-dialog-panel {
@@ -1202,7 +1155,8 @@
   width: 100%;
 }
 
-.stadium-dialog-lines-grid {
+.stadium-dialog-lines-grid,
+.kit-dialog-lines-grid {
   display: grid;
   gap: 12px;
 
@@ -1212,7 +1166,8 @@
   }
 }
 
-.stadium-dialog-line-field {
+.stadium-dialog-line-field,
+.kit-dialog-line-field {
   width: 100%;
   max-width: none;
 }
@@ -1223,8 +1178,8 @@
 
 .kit-dialog-shared-fields {
   display: grid;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 10px;
 
   @media (min-width: 700px) {
     grid-template-columns: repeat(3, minmax(0, 160px));
@@ -1247,7 +1202,7 @@
 .kit-dialog-tabs {
   ::ng-deep .mat-tab-header {
     border-bottom: 1px solid var(--card-border);
-    margin: 0 -12px 14px;
+    margin: 0 -12px 10px;
 
     @media (min-width: 600px) {
       margin: 0 -16px 14px;
@@ -1267,22 +1222,22 @@
 
 .teams-dat-kits {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .teams-dat-kit-card {
   border: 1px solid rgba(46, 74, 41, 0.9);
   border-radius: 12px;
   background: rgba(10, 23, 15, 0.82);
-  padding: 14px;
+  padding: 10px;
 }
 
 .teams-dat-kit-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
 }
 
@@ -1301,6 +1256,19 @@
   text-transform: uppercase;
 }
 
+.teams-dat-kit-controls {
+  display: grid;
+  gap: 8px;
+
+  @media (min-width: 700px) {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
+  @media (min-width: 1080px) {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+}
+
 .teams-dat-kit-grid {
   display: grid;
   gap: 10px;
@@ -1316,8 +1284,8 @@
 
 .teams-dat-kit-style-row {
   display: grid;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
 
   @media (min-width: 600px) {
     grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
@@ -1332,7 +1300,7 @@
 .teams-dat-kit-style-meta {
   display: grid;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(232, 247, 225, 0.14);
   background: rgba(255, 255, 255, 0.03);
@@ -1340,21 +1308,22 @@
 
 .teams-dat-kit-style-label {
   color: #eff7eb;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 700;
 }
 
 .teams-dat-kit-style-offset {
   color: #90a4ae;
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .teams-dat-kit-color {
   display: grid;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(232, 247, 225, 0.14);
   background: rgba(255, 255, 255, 0.03);
@@ -1362,23 +1331,25 @@
 
 .teams-dat-kit-color-name {
   color: #eff7eb;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 .teams-dat-kit-color-control {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
-  gap: 10px;
+  gap: 8px;
 }
 
 .teams-dat-kit-swatch {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   border: 1px solid rgba(232, 247, 225, 0.26);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
   flex-shrink: 0;
@@ -1386,20 +1357,20 @@
 
 .teams-dat-rgb-sliders {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
 }
 
 .teams-dat-rgb-slider {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 36px;
+  grid-template-columns: 16px minmax(0, 1fr) 24px;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .teams-dat-rgb-slider-name {
   color: #cfe4cf;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1413,14 +1384,14 @@
 
 .teams-dat-rgb-slider-value {
   color: #eff7eb;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .teams-dat-kit-color-hex {
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1428,9 +1399,10 @@
 
 .teams-dat-kit-color-raw {
   color: #90a4ae;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  word-break: break-word;
 }
 
 /* ── DB Search ─────────────────────────────────────────────── */
@@ -1570,6 +1542,13 @@
   @media (max-width: 599px) {
     flex-direction: column;
   }
+}
+
+.db-search-summary-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .db-search-pagination {

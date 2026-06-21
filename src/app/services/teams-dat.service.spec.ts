@@ -42,8 +42,15 @@ describe('TeamsDatService', () => {
     expect(record.kits[0].colors[0].hex).toBe('#FFFF0A');
     expect(record.kits[0].colors[0].rawHex).toBe('0AFFFF7F');
     expect(record.kits[0].colors[0].fileOffset).toBe(0x24);
+    expect(record.kits[0].colors[0].label).toBe('Shirt Primary');
+    expect(record.kits[0].colors[1].label).toBe('Shirt Secondary');
     expect(record.kits[0].colors[2].label).toBe('Shirt Nr');
-    expect(record.kits[0].colors[3].label).toBe('Sponsor');
+    expect(record.kits[0].colors[3].label).toBe('Socks');
+    expect(record.kits[0].colors[4].label).toBe('Shorts');
+    expect(record.kits[0].colors[5].label).toBe('Sponsor');
+    expect(record.kits[0].colors[6].label).toBe('Short Nr');
+    expect(record.kits[0].colors[7].label).toBe('Shirt Lines');
+    expect(record.kits[0].colors[8].label).toBe('Short Lines');
   });
 
   it('updates a kit color without overwriting the fourth byte', () => {

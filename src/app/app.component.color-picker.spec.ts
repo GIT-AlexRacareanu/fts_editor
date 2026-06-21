@@ -23,6 +23,7 @@ describe('AppComponent color sliders', () => {
     records: any[];
     updateKitColor: jasmine.Spy;
     updateStadiumColor: jasmine.Spy;
+    updateRecord: jasmine.Spy;
   };
 
   beforeEach(async () => {
@@ -52,14 +53,24 @@ describe('AppComponent color sliders', () => {
               styleLabel: 'Style 0',
               styleFileOffset: 0xBC,
               colors: [
-                { colorIndex: 0, label: 'Primary', hex: '#445566', rawHex: '6655447F', fileOffset: 0x24 }
+                { colorIndex: 0, label: 'Shirt Primary', hex: '#445566', rawHex: '6655447F', fileOffset: 0x24 },
+                { colorIndex: 1, label: 'Shirt Secondary', hex: '#556677', rawHex: '7766557F', fileOffset: 0x28 },
+                { colorIndex: 2, label: 'Shirt Nr', hex: '#667788', rawHex: '8877667F', fileOffset: 0x2C },
+                { colorIndex: 3, label: 'Socks', hex: '#223344', rawHex: '4433227F', fileOffset: 0x30 },
+                { colorIndex: 4, label: 'Shorts', hex: '#778899', rawHex: '9988777F', fileOffset: 0x34 },
+                { colorIndex: 5, label: 'Sponsor', hex: '#99AA11', rawHex: '11AA997F', fileOffset: 0x38 },
+                { colorIndex: 6, label: 'Short Nr', hex: '#AA8833', rawHex: '3388AA7F', fileOffset: 0x3C },
+                { colorIndex: 7, label: 'Shirt Lines', hex: '#113355', rawHex: '5533117F', fileOffset: 0x40 },
+                { colorIndex: 8, label: 'Short Lines', hex: '#224466', rawHex: '6644227F', fileOffset: 0x44 },
+                { colorIndex: 9, label: 'Socks Lines', hex: '#335577', rawHex: '7755337F', fileOffset: 0x48 }
               ]
             }
           ]
         }
       ],
       updateKitColor: jasmine.createSpy('updateKitColor'),
-      updateStadiumColor: jasmine.createSpy('updateStadiumColor')
+      updateStadiumColor: jasmine.createSpy('updateStadiumColor'),
+      updateRecord: jasmine.createSpy('updateRecord')
     };
 
     await TestBed.configureTestingModule({
@@ -150,7 +161,7 @@ describe('AppComponent color sliders', () => {
 
     fixture.detectChanges();
 
-    const input: HTMLInputElement | null = fixture.nativeElement.querySelector('.teams-dat-kit-color-control .teams-dat-rgb-slider-input[data-channel="R"]');
+    const input: HTMLInputElement | null = fixture.nativeElement.querySelector('.teams-dat-kit-controls .teams-dat-kit-color:first-child .teams-dat-rgb-slider-input[data-channel="R"]');
     expect(input).not.toBeNull();
 
     input!.value = '17';
@@ -158,4 +169,64 @@ describe('AppComponent color sliders', () => {
 
     expect(teamsDatService.updateKitColor).toHaveBeenCalledOnceWith(0, 0, 0, '#115566');
   });
+
+  it('renders all 10 kit controls in source order', () => {
+    component.showTeamKitDialog = true;
+    component.teamKitDialogRecordIndex = 0;
+
+    fixture.detectChanges();
+
+    const controls = fixture.nativeElement.querySelector('.teams-dat-kit-controls');
+    const labels = Array.from(fixture.nativeElement.querySelectorAll('.teams-dat-kit-controls .teams-dat-kit-color-name') as NodeListOf<Element>).map((node) => node.textContent?.trim());
+
+    expect(controls).not.toBeNull();
+    expect(labels).toEqual([
+      '1. Shirt Primary',
+      '2. Shirt Secondary',
+      '3. Shirt Nr',
+      '4. Socks',
+      '5. Shorts',
+      '6. Sponsor',
+      '7. Short Nr',
+      '8. Shirt Lines',
+      '9. Short Lines',
+      '10. Socks Lines'
+    ]);
+  });
+
+  it('shows line metadata in the kit dialog and not the stadium dialog', () => {
+    component.showTeamStadiumDialog = true;
+    component.teamStadiumDialogRecordIndex = 0;
+
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Lines U L');
+
+    component.showTeamStadiumDialog = false;
+    component.showTeamKitDialog = true;
+    component.teamKitDialogRecordIndex = 0;
+
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Lines U L');
+    expect(fixture.nativeElement.textContent).toContain('Lines U V');
+    expect(fixture.nativeElement.textContent).toContain('Lines P L');
+    expect(fixture.nativeElement.textContent).toContain('Lines P V');
+  });
+
+  it('updates line metadata from the kit dialog', () => {
+    component.showTeamKitDialog = true;
+    component.teamKitDialogRecordIndex = 0;
+
+    fixture.detectChanges();
+
+    const fields = Array.from(fixture.nativeElement.querySelectorAll('.kit-dialog-line-field input')) as HTMLInputElement[];
+    expect(fields.length).toBe(4);
+
+    fields[0].value = '101';
+    fields[0].dispatchEvent(new Event('input'));
+
+    expect(teamsDatService.updateRecord).toHaveBeenCalledWith(0, { linesUL: 101 });
+  });
+
 });

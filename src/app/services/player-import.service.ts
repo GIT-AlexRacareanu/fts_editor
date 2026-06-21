@@ -413,7 +413,7 @@ export class PlayerImportService {
       shortName,
       lastName,
       headshot: this.getFieldByAliases(row, headerIndexes, ['headshot', 'head_shot', 'head shot', 'portrait', 'photo', 'image']),
-      jerseyNumber: this.getOptionalNumberFieldByAliases(row, headerIndexes, ['jersey_number', 'jersey number', 'shirt_number', 'shirt number', 'squad_number', 'squad number', 'kit_number', 'kit number', 'number', 'no']),
+      jerseyNumber: this.getOptionalNumberFieldByAliases(row, headerIndexes, ['jersey_number', 'jersey number', 'jerseynumber', 'shirt_number', 'shirt number', 'shirtnumber', 'squad_number', 'squad number', 'squadnumber', 'kit_number', 'kit number', 'kitnumber', 'number', 'no']),
       overall: this.getNumberFieldByAliases(row, headerIndexes, ['overall', 'overallrating', 'ovr', 'rating']),
       age: this.getNumberFieldByAliases(row, headerIndexes, ['age']),
       heightCm: this.getHeightFieldByAliases(row, headerIndexes, ['height_cm', 'height']),
@@ -980,11 +980,11 @@ export class PlayerImportService {
     const normalizedFoot = preferredFoot.trim().toLowerCase();
 
     if (normalizedFoot === 'right') {
-      return 0;
+      return 1;
     }
 
     if (normalizedFoot === 'left') {
-      return 1;
+      return 0;
     }
 
     return fallback;

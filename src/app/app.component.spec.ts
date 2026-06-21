@@ -845,10 +845,13 @@ describe('AppComponent team CSV import preview', () => {
           stadiumName: 'Arena',
           stadiumColor: { hex: '#102030', rawHex: '3020107F', fileOffset: 0x10F8, byteOffset: 0x10EC },
           pitchType: 3,
+          sponsorType: 1,
+          kitManufacturer: 2,
           linesUL: 11,
           linesUV: 22,
           linesPL: 33,
-          linesPV: 44
+          linesPV: 44,
+          kits: []
         }
       ],
       updateRecord,
@@ -861,13 +864,16 @@ describe('AppComponent team CSV import preview', () => {
     component.updateActiveTeamStadiumDialogName('National Arena');
     component.updateActiveTeamStadiumDialogColor('#112233');
     component.updateActiveTeamStadiumDialogPitchType(6);
-    component.updateActiveTeamStadiumDialogNumberField('linesUL', 101);
-    component.updateActiveTeamStadiumDialogNumberField('linesUV', 202);
-    component.updateActiveTeamStadiumDialogNumberField('linesPL', 303);
-    component.updateActiveTeamStadiumDialogNumberField('linesPV', 404);
+    component.openTeamKitDialog({ teamId: 99 } as any);
+    component.updateActiveTeamKitDialogNumberField('linesUL', 101);
+    component.updateActiveTeamKitDialogNumberField('linesUV', 202);
+    component.updateActiveTeamKitDialogNumberField('linesPL', 303);
+    component.updateActiveTeamKitDialogNumberField('linesPV', 404);
 
     expect(component.showTeamStadiumDialog).toBeTrue();
     expect(component.teamStadiumDialogRecordIndex).toBe(7);
+    expect(component.showTeamKitDialog).toBeTrue();
+    expect(component.teamKitDialogRecordIndex).toBe(7);
     expect(updateRecord).toHaveBeenCalledWith(7, { stadiumName: 'National Arena' });
     expect(updateRecord).toHaveBeenCalledWith(7, { linesUL: 101 });
     expect(updateRecord).toHaveBeenCalledWith(7, { linesUV: 202 });

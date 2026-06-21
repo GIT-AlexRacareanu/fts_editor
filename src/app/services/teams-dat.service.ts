@@ -27,15 +27,15 @@ const KIT_STYLE_START_OFFSET = KIT_COLOR_START_OFFSET + (KIT_COUNT * COLORS_PER_
 const KIT_STYLE_STRIDE = 4;
 const KIT_LABELS = ['Home', 'Away', 'GK Home', 'GK Away'] as const;
 const KIT_COLOR_LABELS = [
-  'Primary',
-  'Secondary',
+  'Shirt Primary',
+  'Shirt Secondary',
   'Shirt Nr',
-  'Sponsor',
-  'Short Primary',
-  'Short Secondary',
-  'Short Nr',
   'Socks',
-  'Manufacturer',
+  'Shorts',
+  'Sponsor',
+  'Short Nr',
+  'Shirt Lines',
+  'Short Lines',
   'Socks Lines'
 ] as const;
 const KIT_STYLE_LABELS = [

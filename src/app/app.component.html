@@ -476,10 +476,16 @@
                       | {{ dbBrowseRangeStart }}–{{ dbBrowseRangeEnd }}
                     </ng-container>
                   </span>
-                  <button mat-stroked-button color="accent" (click)="createDbBrowsePlayer()" [disabled]="!fileLoaded">
-                    <mat-icon>person_add</mat-icon>
-                    NEW PLAYER
-                  </button>
+                  <div class="db-search-summary-actions">
+                    <button mat-stroked-button color="warn" (click)="repairAllPlayerFeet()" [disabled]="!fileLoaded">
+                      <mat-icon>sync_alt</mat-icon>
+                      REPAIR FOOT
+                    </button>
+                    <button mat-stroked-button color="accent" (click)="createDbBrowsePlayer()" [disabled]="!fileLoaded">
+                      <mat-icon>person_add</mat-icon>
+                      NEW PLAYER
+                    </button>
+                  </div>
                 </div>
 
                 <div class="db-search-pagination" *ngIf="filteredDbBrowsePlayers.length > 0">
@@ -661,48 +667,6 @@
             (ngModelChange)="updateActiveTeamStadiumDialogPitchType($event)">
           <mat-hint>Stored at {{ formatTeamsDatOffset(4360) }}</mat-hint>
         </mat-form-field>
-
-        <div class="stadium-dialog-lines-grid">
-          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-line-field">
-            <mat-label>Lines U L</mat-label>
-            <input
-              matInput
-              type="number"
-              [ngModel]="record.linesUL"
-              (ngModelChange)="updateActiveTeamStadiumDialogNumberField('linesUL', $event)">
-            <mat-hint>{{ formatTeamsDatOffset(276) }}</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-line-field">
-            <mat-label>Lines U V</mat-label>
-            <input
-              matInput
-              type="number"
-              [ngModel]="record.linesUV"
-              (ngModelChange)="updateActiveTeamStadiumDialogNumberField('linesUV', $event)">
-            <mat-hint>{{ formatTeamsDatOffset(280) }}</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-line-field">
-            <mat-label>Lines P L</mat-label>
-            <input
-              matInput
-              type="number"
-              [ngModel]="record.linesPL"
-              (ngModelChange)="updateActiveTeamStadiumDialogNumberField('linesPL', $event)">
-            <mat-hint>{{ formatTeamsDatOffset(284) }}</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric stadium-dialog-line-field">
-            <mat-label>Lines P V</mat-label>
-            <input
-              matInput
-              type="number"
-              [ngModel]="record.linesPV"
-              (ngModelChange)="updateActiveTeamStadiumDialogNumberField('linesPV', $event)">
-            <mat-hint>{{ formatTeamsDatOffset(288) }}</mat-hint>
-          </mat-form-field>
-        </div>
       </div>
     </div>
   </div>
@@ -737,6 +701,47 @@
             [ngModel]="record.kitManufacturer"
             (ngModelChange)="updateActiveTeamKitDialogNumberField('kitManufacturer', $event)">
         </mat-form-field>
+        <div class="kit-dialog-lines-grid">
+          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric kit-dialog-line-field">
+            <mat-label>Lines U L</mat-label>
+            <input
+              matInput
+              type="number"
+              [ngModel]="record.linesUL"
+              (ngModelChange)="updateActiveTeamKitDialogNumberField('linesUL', $event)">
+            <mat-hint>{{ formatTeamsDatOffset(276) }}</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric kit-dialog-line-field">
+            <mat-label>Lines U V</mat-label>
+            <input
+              matInput
+              type="number"
+              [ngModel]="record.linesUV"
+              (ngModelChange)="updateActiveTeamKitDialogNumberField('linesUV', $event)">
+            <mat-hint>{{ formatTeamsDatOffset(280) }}</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric kit-dialog-line-field">
+            <mat-label>Lines P L</mat-label>
+            <input
+              matInput
+              type="number"
+              [ngModel]="record.linesPL"
+              (ngModelChange)="updateActiveTeamKitDialogNumberField('linesPL', $event)">
+            <mat-hint>{{ formatTeamsDatOffset(284) }}</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric kit-dialog-line-field">
+            <mat-label>Lines P V</mat-label>
+            <input
+              matInput
+              type="number"
+              [ngModel]="record.linesPV"
+              (ngModelChange)="updateActiveTeamKitDialogNumberField('linesPV', $event)">
+            <mat-hint>{{ formatTeamsDatOffset(288) }}</mat-hint>
+          </mat-form-field>
+        </div>
         <div class="kit-dialog-shared-hint">
           Shared team metadata applied across home, away, GK home, and GK away kits.
         </div>
@@ -764,7 +769,7 @@
                 </div>
               </div>
 
-              <div class="teams-dat-kit-grid">
+              <div class="teams-dat-kit-controls">
                 <label class="teams-dat-kit-color" *ngFor="let color of kit.colors">
                   <span class="teams-dat-kit-color-name">{{ color.colorIndex + 1 }}. {{ color.label }}</span>
                   <div class="teams-dat-kit-color-control">
@@ -772,14 +777,7 @@
                     <div class="teams-dat-rgb-sliders">
                       <label class="teams-dat-rgb-slider" *ngFor="let channel of colorChannels">
                         <span class="teams-dat-rgb-slider-name">{{ channel.shortLabel }}</span>
-                        <input
-                          class="teams-dat-rgb-slider-input"
-                          type="range"
-                          min="0"
-                          max="255"
-                          [attr.data-channel]="channel.shortLabel"
-                          [value]="getHexColorChannel(color.hex, channel.index)"
-                          (change)="updateActiveTeamKitDialogColorChannel(kit.kitIndex, color.colorIndex, color.hex, channel.index, $any($event.target).value)">
+                        <input class="teams-dat-rgb-slider-input" type="range" min="0" max="255" [attr.data-channel]="channel.shortLabel" [value]="getHexColorChannel(color.hex, channel.index)" (change)="updateActiveTeamKitDialogColorChannel(kit.kitIndex, color.colorIndex, color.hex, channel.index, $any($event.target).value)">
                         <span class="teams-dat-rgb-slider-value">{{ getHexColorChannel(color.hex, channel.index) }}</span>
                       </label>
                     </div>
