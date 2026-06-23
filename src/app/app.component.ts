@@ -141,6 +141,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // ─── App flow ────────────────────────────────────────────────
   showInitPage = true;
+  showEconomyEditor = false;
   activeMainTab = 0;
 
   // ─── Player Edit Popup ───────────────────────────────────────
@@ -345,6 +346,14 @@ export class AppComponent implements OnInit, OnDestroy {
     { value: 26, label: 'jap 2' }
   ];
 
+  readonly teamBrowseUclFilterValue = -2;
+  readonly teamBrowseUelFilterValue = -3;
+  readonly teamBrowseLeagueOptions = [
+    { value: this.teamBrowseUclFilterValue, label: 'UCL' },
+    { value: this.teamBrowseUelFilterValue, label: 'UEL' },
+    ...this.leagueOptions
+  ];
+
   readonly nationalities = NATIONALITY_OPTIONS;
   readonly kitStyleOptions = this.teamsDatService.kitStyleOptions;
   readonly sponsorTypeOptions = this.teamsDatService.sponsorTypeOptions;
@@ -394,6 +403,18 @@ export class AppComponent implements OnInit, OnDestroy {
   goToInitPage(): void {
     this.runInAngular(() => {
       this.showInitPage = true;
+    });
+  }
+
+  openEconomyEditor(): void {
+    this.runInAngular(() => {
+      this.showEconomyEditor = true;
+    });
+  }
+
+  closeEconomyEditor(): void {
+    this.runInAngular(() => {
+      this.showEconomyEditor = false;
     });
   }
 
@@ -622,7 +643,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
     this.filteredTeamBrowseItemsCache = leagueQuery === null
       ? this.teamBrowseItems
-      : this.teamBrowseItems.filter((record) => record.leagueId === leagueQuery);
+      : leagueQuery === this.teamBrowseUclFilterValue
+        ? this.teamBrowseItems.filter((record) => record.europeanCompetition === 1)
+        : leagueQuery === this.teamBrowseUelFilterValue
+          ? this.teamBrowseItems.filter((record) => record.europeanCompetition === 2)
+          : this.teamBrowseItems.filter((record) => record.leagueId === leagueQuery);
 
     this.teamBrowsePage = Math.min(this.teamBrowsePage, this.teamBrowseTotalPages);
   }

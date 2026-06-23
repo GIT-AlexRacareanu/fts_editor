@@ -1,0 +1,51 @@
+<div class="economy-editor">
+  <mat-toolbar color="primary" class="economy-toolbar">
+    <button mat-icon-button (click)="closeEditor()" title="Back">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <span>Economy Editor</span>
+    <span class="economy-toolbar-spacer"></span>
+    <span class="economy-file-name" *ngIf="fileName">{{ fileName }}</span>
+  </mat-toolbar>
+
+  <div class="economy-content">
+    <mat-card class="economy-card">
+      <mat-card-content>
+        <p class="economy-subtitle">
+          Edit <strong>managermode_economy.dat</strong> &mdash; load the file, change the XML
+          values, then save it back encrypted for the game.
+        </p>
+
+        <label class="economy-upload">
+          <input type="file" accept=".dat" hidden (change)="onFileSelected($event)" />
+          <mat-icon>upload_file</mat-icon>
+          <span>Click to load the original <strong>managermode_economy.dat</strong></span>
+        </label>
+
+        <pre class="economy-log">{{ logText }}</pre>
+
+        <div class="economy-actions">
+          <button mat-stroked-button color="primary" [disabled]="!hasContent" (click)="downloadXmlBackup()">
+            <mat-icon>download</mat-icon>
+            Download XML (Backup)
+          </button>
+          <button mat-raised-button color="primary" [disabled]="!hasContent" (click)="saveAsDat()">
+            <mat-icon>lock</mat-icon>
+            Encrypt &amp; Save .DAT
+          </button>
+        </div>
+
+        <h3 class="economy-xml-heading">XML content (edit the values freely):</h3>
+        <mat-form-field appearance="outline" class="economy-xml-field">
+          <textarea
+            matInput
+            class="economy-xml-area"
+            [(ngModel)]="xmlContent"
+            spellcheck="false"
+            placeholder="XML content will appear here after loading a file..."
+            rows="22"></textarea>
+        </mat-form-field>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>

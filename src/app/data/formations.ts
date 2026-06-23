@@ -114,7 +114,8 @@ export const FORMATION_PRESETS: FormationPreset[] = [
     label: '4 2 3 1 (a)',
     lines: [
       { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
-      { slots: [slot(0, P.LAM), slot(1, P.LCM), slot(2, P.CAM), slot(3, P.RCM), slot(4, P.RAM)] },
+      { slots: [slot(1, P.LDM), slot(3, P.RDM)] },
+      { slots: [slot(0, P.LAM), slot(2, P.CAM), slot(4, P.RAM)] },
       { slots: [slot(2, P.ST)] }
     ]
   },
@@ -123,8 +124,8 @@ export const FORMATION_PRESETS: FormationPreset[] = [
     label: '4 2 3 1 (b)',
     lines: [
       { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
-      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
-      { slots: [slot(2, P.CF)] },
+      { slots: [slot(1, P.LCM), slot(3, P.RCM)] },
+      { slots: [slot(0, P.LM), slot(2, P.CAM), slot(4, P.RM)] },
       { slots: [slot(2, P.ST)] }
     ]
   },
@@ -134,7 +135,8 @@ export const FORMATION_PRESETS: FormationPreset[] = [
     lines: [
       { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
       { slots: [slot(1, P.LCM), slot(2, P.CM), slot(3, P.RCM)] },
-      { slots: [slot(0, P.LW), slot(2, P.CF), slot(4, P.RW)] }
+      { slots: [slot(2, P.CAM)] },
+      { slots: [slot(1, P.ST), slot(3, P.ST)] }
     ]
   },
   {
@@ -162,26 +164,30 @@ export const FORMATION_PRESETS: FormationPreset[] = [
     label: '3 4 1 2',
     lines: [
       { slots: [slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB)] },
-      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(2, P.CAM), slot(3, P.RCM), slot(4, P.RM)] },
-      { slots: [slot(0, P.LW), slot(4, P.RW)] }
+      { slots: [slot(0, P.LM), slot(1, P.LCM), slot(3, P.RCM), slot(4, P.RM)] },
+      { slots: [slot(2, P.CAM)] },
+      { slots: [slot(1, P.ST), slot(3, P.ST)] }
     ]
   },
   {
     value: '4-1-2-1-2',
     label: '4 1 2 1 2',
     lines: [
-      { slots: [slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB)] },
-      { slots: [slot(1, P.LCM), slot(2, P.CAM), slot(3, P.CDM), slot(4, P.RCM)] },
-      { slots: [slot(1, P.LW), slot(3, P.RW)] }
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(2, P.CDM)] },
+      { slots: [slot(1, P.LCM), slot(3, P.RCM)] },
+      { slots: [slot(2, P.CAM)] },
+      { slots: [slot(1, P.ST), slot(3, P.ST)] }
     ]
   },
   {
     value: '1-4-3-2',
     label: '1 4 3 2',
     lines: [
-      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB), slot(4, P.RB)] },
+      { slots: [slot(2, P.CB)] },
+      { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
       { slots: [slot(1, P.LCM), slot(2, P.CM), slot(3, P.RCM)] },
-      { slots: [slot(1, P.LW), slot(3, P.RW)] }
+      { slots: [slot(1, P.ST), slot(3, P.ST)] }
     ]
   },
   {
@@ -199,7 +205,8 @@ export const FORMATION_PRESETS: FormationPreset[] = [
     label: '4 3 2 1',
     lines: [
       { slots: [slot(0, P.LB), slot(1, P.LCB), slot(3, P.RCB), slot(4, P.RB)] },
-      { slots: [slot(0, P.LM), slot(1, P.LAM), slot(2, P.CDM), slot(3, P.RAM), slot(4, P.RM)] },
+      { slots: [slot(1, P.LCM), slot(2, P.CDM), slot(3, P.RCM)] },
+      { slots: [slot(1, P.LAM), slot(3, P.RAM)] },
       { slots: [slot(2, P.ST)] }
     ]
   },
@@ -208,8 +215,9 @@ export const FORMATION_PRESETS: FormationPreset[] = [
     label: '5 2 1 2',
     lines: [
       { slots: [slot(0, P.LB), slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB), slot(4, P.RB)] },
-      { slots: [slot(1, P.LDM), slot(2, P.CAM), slot(3, P.RDM)] },
-      { slots: [slot(1, P.LW), slot(3, P.RW)] }
+      { slots: [slot(1, P.LDM), slot(3, P.RDM)] },
+      { slots: [slot(2, P.CAM)] },
+      { slots: [slot(1, P.ST), slot(3, P.ST)] }
     ]
   },
   {
@@ -217,7 +225,8 @@ export const FORMATION_PRESETS: FormationPreset[] = [
     label: '5 2 2 1',
     lines: [
       { slots: [slot(0, P.LB), slot(1, P.LCB), slot(2, P.CB), slot(3, P.RCB), slot(4, P.RB)] },
-      { slots: [slot(1, P.LAM), slot(2, P.CDM), slot(3, P.CDM), slot(4, P.RAM)] },
+      { slots: [slot(1, P.LDM), slot(3, P.RDM)] },
+      { slots: [slot(1, P.LAM), slot(3, P.RAM)] },
       { slots: [slot(2, P.ST)] }
     ]
   },

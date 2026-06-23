@@ -1,0 +1,106 @@
+.economy-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #1e1e2e;
+}
+
+.economy-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.economy-toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.economy-file-name {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.economy-content {
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px 48px;
+}
+
+.economy-card {
+  width: 100%;
+  max-width: 950px;
+}
+
+.economy-subtitle {
+  margin: 0 0 18px;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 14px;
+}
+
+.economy-upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 2px dashed #3f51b5;
+  border-radius: 8px;
+  padding: 22px;
+  text-align: center;
+  cursor: pointer;
+  color: #3f51b5;
+  transition: background-color 0.2s;
+  margin-bottom: 18px;
+}
+
+.economy-upload:hover {
+  background-color: rgba(63, 81, 181, 0.08);
+}
+
+.economy-upload mat-icon {
+  font-size: 28px;
+  height: 28px;
+  width: 28px;
+}
+
+.economy-log {
+  background-color: #11111b;
+  color: #fab387;
+  border: 1px solid #f38ba8;
+  border-radius: 5px;
+  padding: 10px 12px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  margin: 0 0 18px;
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.economy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.economy-actions button {
+  flex: 1 1 220px;
+}
+
+.economy-xml-heading {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: #3f51b5;
+}
+
+.economy-xml-field {
+  width: 100%;
+}
+
+.economy-xml-area {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  min-height: 360px;
+  resize: vertical;
+}

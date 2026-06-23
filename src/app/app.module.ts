@@ -15,10 +15,12 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTabsModule } from '@angular/material/tabs';
 
 import { AppComponent } from './app.component';
+import { EconomyEditorComponent } from './economy-editor/economy-editor.component';
 
 @NgModule({
   declarations: [
-    AppComponent
+    AppComponent,
+    EconomyEditorComponent
   ],
   imports: [
     BrowserModule,

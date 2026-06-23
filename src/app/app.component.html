@@ -1,4 +1,6 @@
-<mat-toolbar color="primary" class="app-toolbar">
+<app-economy-editor *ngIf="showEconomyEditor" (close)="closeEconomyEditor()"></app-economy-editor>
+
+<mat-toolbar color="primary" class="app-toolbar" *ngIf="!showEconomyEditor">
   <span>FTS 15 EDITOR PRO</span>
   <span class="toolbar-spacer"></span>
   <button mat-icon-button *ngIf="!showInitPage && canEnterEditor" (click)="goToInitPage()" title="Manage Files">
@@ -6,8 +8,9 @@
   </button>
 </mat-toolbar>
 
+
 <!-- ─── INIT PAGE ─────────────────────────────────────────────── -->
-<div class="init-page" *ngIf="showInitPage">
+<div class="init-page" *ngIf="showInitPage && !showEconomyEditor">
   <div class="init-container">
     <h2 class="init-heading">FTS 15 EDITOR PRO</h2>
 
@@ -48,11 +51,16 @@
       <mat-icon>play_arrow</mat-icon>
       CONTINUE
     </button>
+
+    <button mat-stroked-button color="primary" class="init-economy-btn" (click)="openEconomyEditor()">
+      <mat-icon>payments</mat-icon>
+      ECONOMY EDITOR
+    </button>
   </div>
 </div>
 
 <!-- ─── MAIN APP ──────────────────────────────────────────────── -->
-<div class="app-container" *ngIf="!showInitPage && canEnterEditor">
+<div class="app-container" *ngIf="!showInitPage && canEnterEditor && !showEconomyEditor">
   <mat-tab-group class="editor-tabs" [(selectedIndex)]="activeMainTab" animationDuration="0ms">
 
     <!-- ═══ TAB 0 — TEAM EDITOR ════════════════════════════════ -->
@@ -544,7 +552,7 @@
                       <mat-label>League</mat-label>
                       <mat-select [ngModel]="teamBrowseLeagueQuery" (ngModelChange)="onTeamBrowseLeagueQueryChange($event)">
                         <mat-option [value]="null">All leagues</mat-option>
-                        <mat-option *ngFor="let league of leagueOptions" [value]="league.value">{{ league.label }}</mat-option>
+                        <mat-option *ngFor="let league of teamBrowseLeagueOptions" [value]="league.value">{{ league.label }}</mat-option>
                       </mat-select>
                     </mat-form-field>
                     <div class="team-browser-summary">
