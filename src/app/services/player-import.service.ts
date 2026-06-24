@@ -319,6 +319,7 @@ export class PlayerImportService {
       nat: this.mapNationality(source.nationalityName, currentPlayer.nat),
       estatura: this.clampByte(source.heightCm, currentPlayer.estatura),
       peso: this.clampByte(source.weightKg, currentPlayer.peso),
+      excludedFromExhibition: 0,
       hiddenFromTransferMarket: 0,
       isIconLegend: 0,
       birthDay: 1,

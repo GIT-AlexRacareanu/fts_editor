@@ -2530,11 +2530,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   updateTeamsDatNumberField(
     record: TeamsDatRecord,
-    field: 'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' | 'sponsorType' | 'kitManufacturer' | 'europeanCompetition',
+    field: 'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' | 'sponsorType' | 'kitManufacturer' | 'specialTeamFlag' | 'europeanCompetition',
     value: string | number
   ): void {
     const changes: Partial<Pick<TeamsDatRecord,
-      'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' | 'sponsorType' | 'kitManufacturer' | 'europeanCompetition'
+      'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' | 'sponsorType' | 'kitManufacturer' | 'specialTeamFlag' | 'europeanCompetition'
     >> = {};
 
     changes[field] = Number(value);
@@ -3948,6 +3948,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private emptyPlayer(): Player {
     return {
       name: '', pos: 0, foot: 0, nat: 0, estatura: 0, peso: 0,
+      excludedFromExhibition: 0,
       hiddenFromTransferMarket: 0, isIconLegend: 0,
       birthDay: 0, birthMonth: 0, year: 0,
       skin: 0, skin_tone: 255, head_type: 0, hair_type: 0, hair: 0, beard_type: 0,

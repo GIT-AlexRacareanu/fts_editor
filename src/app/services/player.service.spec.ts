@@ -24,7 +24,7 @@ describe('PlayerService', () => {
     expect(binaryData[122]).toBe(0x11);
     expect(binaryData[159]).toBe(0x11);
     expect(binaryData[192]).toBe(0x11);
-    expect(binaryData[221]).toBe(0x11);
+    expect(binaryData[221]).toBe(0x00);
   });
 
   it('derives player count from the file length when more records exist than the header says', () => {
@@ -53,6 +53,25 @@ describe('PlayerService', () => {
 
     expect(new DataView(service.binaryData!.buffer).getUint16(8, true)).toBe(3);
     expect(service.totalPlayers).toBe(3);
+  });
+
+  it('reads and writes the exhibition exclusion flag next to the existing player flags', () => {
+    const service = new PlayerService({} as any);
+    service.binaryData = new Uint8Array(234);
+
+    service.writePlayer(0, createPlayer('Flagged Player', { excludedFromExhibition: 1, hiddenFromTransferMarket: 1, isIconLegend: 0 }));
+
+    const view = new DataView(service.binaryData.buffer);
+
+    expect(view.getUint8(0x6D)).toBe(1);
+    expect(view.getUint8(0x6E)).toBe(1);
+    expect(view.getUint8(0x6F)).toBe(0);
+
+    const player = service.readPlayer(0);
+
+    expect(player.excludedFromExhibition).toBe(1);
+    expect(player.hiddenFromTransferMarket).toBe(1);
+    expect(player.isIconLegend).toBe(0);
   });
 
   it('treats LM and RM as midfielders for OVR calculation', () => {

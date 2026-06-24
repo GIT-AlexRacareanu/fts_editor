@@ -12,6 +12,7 @@ const LINES_UL_OFFSET = 0x108;
 const LINES_UV_OFFSET = 0x10C;
 const LINES_PL_OFFSET = 0x110;
 const LINES_PV_OFFSET = 0x114;
+const SPECIAL_TEAM_FLAG_OFFSET = 0x120;
 const EUROPEAN_COMPETITION_OFFSET = 0x124;
 const STADIUM_NAME_OFFSET = 0x128;
 const STADIUM_NAME_MAX_CHARS = 23;
@@ -305,6 +306,27 @@ describe('TeamsDatService', () => {
     service.records = [(service as any).parseRecord(0)];
 
     expect(service.records[0].europeanCompetition).toBe(2);
+  });
+
+  it('parses and updates the special/all-star team flag before european competition', () => {
+    const service = new TeamsDatService({} as any);
+    const teamDataBytes = new Uint8Array(TEAM_BLOCK_SIZE);
+    const view = new DataView(teamDataBytes.buffer);
+
+    view.setUint32(0, 99, true);
+    view.setUint32(SPECIAL_TEAM_FLAG_OFFSET, 2, true);
+
+    service.fileHeaderBytes = new Uint8Array(FILE_HEADER_SIZE);
+    service.teamDataBytes = teamDataBytes;
+    service.records = [(service as any).parseRecord(0)];
+
+    expect(service.records[0].specialTeamFlag).toBe(2);
+
+    const updated = service.updateRecord(0, { specialTeamFlag: 1 });
+
+    expect(view.getUint32(SPECIAL_TEAM_FLAG_OFFSET, true)).toBe(1);
+    expect(updated.specialTeamFlag).toBe(1);
+    expect(service.hasPendingChanges).toBeTrue();
   });
 
   it('updates european competition through updateRecord', () => {

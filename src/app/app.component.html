@@ -239,6 +239,11 @@
                           </mat-select>
                       </mat-form-field>
                       <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric">
+                        <mat-label>Special / All-Star</mat-label>
+                        <input matInput type="number" [ngModel]="record.specialTeamFlag" (ngModelChange)="updateTeamsDatNumberField(record, 'specialTeamFlag', $event)">
+                        <mat-hint>0x120</mat-hint>
+                      </mat-form-field>
+                      <mat-form-field appearance="outline" class="teams-dat-inline-field teams-dat-inline-field--numeric">
                         <mat-label>European Competition</mat-label>
                         <mat-select [ngModel]="record.europeanCompetition" (ngModelChange)="updateTeamsDatNumberField(record, 'europeanCompetition', $event)">
                           <mat-option *ngFor="let competition of europeanCompetitionOptions" [value]="competition.value">{{ competition.label }}</mat-option>
@@ -984,6 +989,21 @@
             <mat-form-field appearance="outline">
               <mat-label>Weight (kg)</mat-label>
               <input matInput type="number" [(ngModel)]="popupPlayer.peso">
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Excluded from Exhibition</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.excludedFromExhibition">
+              <mat-hint>0x6D</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Hidden from Transfer Market</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.hiddenFromTransferMarket">
+              <mat-hint>0x6E</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Icon / Legend</mat-label>
+              <input matInput type="number" [(ngModel)]="popupPlayer.isIconLegend">
+              <mat-hint>0x6F</mat-hint>
             </mat-form-field>
           </div>
         </mat-card-content>

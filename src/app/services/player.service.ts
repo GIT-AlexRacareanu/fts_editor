@@ -110,6 +110,7 @@ function getDefaultProfileByPositionCategory(posCategory: number): OvrProfile {
 export class PlayerService {
   private readonly storageKey = 'players-dat';
   private readonly playerIdOffset = 0x0c;
+  private readonly excludedFromExhibitionOffset = 0x6d;
   private readonly hiddenFromTransferMarketOffset = 0x6e;
   private readonly isIconLegendOffset = 0x6f;
   private readonly birthDayOffset = 0x70;
@@ -499,13 +500,14 @@ export class PlayerService {
     const view = new DataView(this.binaryData!.buffer);
     const base = idx * 112;
     const name = this.readPlayerName(base);
+    const excludedFromExhibition = view.getUint8(base + this.excludedFromExhibitionOffset);
     const hiddenFromTransferMarket = view.getUint8(base + this.hiddenFromTransferMarketOffset);
     const isIconLegend = view.getUint8(base + this.isIconLegendOffset);
     const canReadBirthFields = this.birthMonthOffset + 4 <= this.playerStride;
     const birthDay = canReadBirthFields ? view.getUint32(base + this.birthDayOffset, true) : 1;
     const birthMonth = canReadBirthFields ? view.getUint32(base + this.birthMonthOffset, true) : 1;
     const year = view.getUint16(base + 120, true);
-    const player: any = { name, hiddenFromTransferMarket, isIconLegend, birthDay, birthMonth, year };
+    const player: any = { name, excludedFromExhibition, hiddenFromTransferMarket, isIconLegend, birthDay, birthMonth, year };
     for (const key of Object.keys(OFFSET_MAP)) {
       player[key] = view.getUint8(base + OFFSET_MAP[key]);
     }
@@ -523,6 +525,7 @@ export class PlayerService {
       view.setUint16(base + 48 + i * 2, i < truncatedName.length ? truncatedName.charCodeAt(i) : 0, true);
     }
     view.setUint16(base + this.playerIdOffset, idx, true);
+    view.setUint8(base + this.excludedFromExhibitionOffset, player.excludedFromExhibition ?? 0);
     view.setUint8(base + this.hiddenFromTransferMarketOffset, player.hiddenFromTransferMarket ?? 0);
     view.setUint8(base + this.isIconLegendOffset, player.isIconLegend ?? 0);
     const canWriteBirthFields = this.birthMonthOffset + 4 <= this.playerStride;

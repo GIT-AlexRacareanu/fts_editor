@@ -50,6 +50,7 @@ export interface TeamsDatRecord {
   linesUV: number;
   linesPL: number;
   linesPV: number;
+  specialTeamFlag: number;
   europeanCompetition: number;
   kits: TeamsDatKit[];
 }

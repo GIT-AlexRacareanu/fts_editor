@@ -12,6 +12,7 @@ const LINES_UL_OFFSET = 0x108;
 const LINES_UV_OFFSET = 0x10C;
 const LINES_PL_OFFSET = 0x110;
 const LINES_PV_OFFSET = 0x114;
+const SPECIAL_TEAM_FLAG_OFFSET = 0x120;
 const EUROPEAN_COMPETITION_OFFSET = 0x124;
 const STADIUM_NAME_OFFSET = 0x128;
 const STADIUM_NAME_MAX_CHARS = 23;
@@ -357,7 +358,7 @@ export class TeamsDatService {
     'teamId' | 'leagueId' | 'rivalId' | 'attackOvr' | 'midfieldOvr' | 'defenseOvr' |
     'formationId' | 'captainRole' | 'leftCornerRole' | 'rightCornerRole' | 'penaltyRole' |
     'freeKickRole' | 'region' | 'stadiumName' | 'sponsorType' | 'kitManufacturer' |
-    'linesUL' | 'linesUV' | 'linesPL' | 'linesPV' | 'europeanCompetition'
+    'linesUL' | 'linesUV' | 'linesPL' | 'linesPV' | 'specialTeamFlag' | 'europeanCompetition'
   >>): TeamsDatRecord {
     const view = this.getView();
     const blockStart = this.getBlockStart(index);
@@ -415,6 +416,9 @@ export class TeamsDatService {
     }
     if (changes.linesPV !== undefined) {
       view.setUint32(blockStart + LINES_PV_OFFSET, this.clamp(changes.linesPV, 0, 0xffffffff), true);
+    }
+    if (changes.specialTeamFlag !== undefined) {
+      view.setUint32(blockStart + SPECIAL_TEAM_FLAG_OFFSET, this.clamp(changes.specialTeamFlag, 0, 0xffffffff), true);
     }
     if (changes.europeanCompetition !== undefined) {
       view.setUint32(blockStart + EUROPEAN_COMPETITION_OFFSET, this.clamp(changes.europeanCompetition, 0, 0xffffffff), true);
@@ -488,6 +492,7 @@ export class TeamsDatService {
       linesUV: safeView.getUint32(blockStart + LINES_UV_OFFSET, true),
       linesPL: safeView.getUint32(blockStart + LINES_PL_OFFSET, true),
       linesPV: safeView.getUint32(blockStart + LINES_PV_OFFSET, true),
+      specialTeamFlag: safeView.getUint32(blockStart + SPECIAL_TEAM_FLAG_OFFSET, true),
       europeanCompetition: safeView.getUint32(blockStart + EUROPEAN_COMPETITION_OFFSET, true),
       kits: this.readKits(safeBytes, blockStart)
     };

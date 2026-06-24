@@ -5,6 +5,7 @@ export interface Player {
   nat: number;
   estatura: number;
   peso: number;
+  excludedFromExhibition?: number;
   hiddenFromTransferMarket?: number;
   isIconLegend?: number;
   birthDay: number;
