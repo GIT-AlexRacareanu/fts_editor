@@ -585,6 +585,76 @@ export class TeamEditorService {
     return updatedSlots;
   }
 
+  appendTeam(newTeamId: number): void {
+    if (!this.hasData) {
+      throw new Error('No team database loaded');
+    }
+
+    const block = new Uint8Array(TEAM_STRIDE);
+    const view = new DataView(block.buffer);
+
+    view.setUint32(0, newTeamId, true);
+    view.setUint32(4, 18, true);
+
+    const positions = [0, 1, 1, 3, 4, 14, 11, 11, 15, 19, 19, 0, 0, 0, 0, 0, 0, 0];
+    const shirts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+
+    for (let index = 0; index < 18; index += 1) {
+      const attrPtr = ATTRIBUTES_OFFSET + index * PLAYER_ENTRY_SIZE;
+      const idPtr = PLAYER_ID_OFFSET + index * PLAYER_ENTRY_SIZE;
+
+      block[attrPtr + 0] = shirts[index];
+      block[attrPtr + 1] = positions[index];
+      block[attrPtr + 2] = index < 11 ? TACTIC_STARTER : 0;
+      block[attrPtr + 3] = 0;
+
+      view.setUint16(idPtr, index, true);
+      view.setUint16(idPtr + 2, 0, true);
+    }
+
+    // Insert the new block in ascending teamId order instead of appending at the end.
+    const existingView = new DataView(this.binaryData!.buffer, this.binaryData!.byteOffset, this.binaryData!.byteLength);
+    const lastTeamOffset = this.binaryData!.byteLength - TEAM_STRIDE;
+    let insertOffset = this.binaryData!.byteLength;
+    for (let offset = TEAM_START_OFFSET; offset <= lastTeamOffset; offset += TEAM_STRIDE) {
+      if (existingView.getUint32(offset, true) > newTeamId) {
+        insertOffset = offset;
+        break;
+      }
+    }
+
+    const newBinaryData = new Uint8Array(this.binaryData!.byteLength + TEAM_STRIDE);
+    newBinaryData.set(this.binaryData!.subarray(0, insertOffset), 0);
+    newBinaryData.set(block, insertOffset);
+    newBinaryData.set(this.binaryData!.subarray(insertOffset), insertOffset + TEAM_STRIDE);
+    this.binaryData = newBinaryData;
+
+    this.scanTeams();
+  }
+
+  removeTeam(teamId: number): void {
+    if (!this.hasData) {
+      throw new Error('No team database loaded');
+    }
+
+    const teamIndex = this.teamOptions.findIndex((opt) => {
+      const team = this.getTeam(opt.offset);
+      return team.teamId === teamId;
+    });
+
+    if (teamIndex < 0) {
+      throw new Error(`Team with ID ${teamId} not found`);
+    }
+
+    const offset = this.teamOptions[teamIndex].offset;
+    const newBinaryData = new Uint8Array(this.binaryData!.byteLength - TEAM_STRIDE);
+    newBinaryData.set(this.binaryData!.subarray(0, offset));
+    newBinaryData.set(this.binaryData!.subarray(offset + TEAM_STRIDE), offset);
+    this.binaryData = newBinaryData;
+
+    this.scanTeams();
+  }
+
   private scanTeams(): void {
     if (!this.binaryData) {
       this.teamOptions = [];

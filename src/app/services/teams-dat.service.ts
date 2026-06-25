@@ -4,6 +4,8 @@ import { TeamsDatColorValue, TeamsDatKit, TeamsDatKitColor, TeamsDatRecord } fro
 import { FileHandleStorageService } from './file-handle-storage.service';
 
 const FILE_HEADER_SIZE = 12;
+const HEADER_FIELD_SIZE = 4;
+const MAX_REASONABLE_TEAM_COUNT = 2000;
 const TEAM_BLOCK_SIZE = 4356;
 const FORMATION_OFFSET = 0xB8;
 const SPONSOR_TYPE_OFFSET = 0x100;
@@ -96,6 +98,7 @@ export class TeamsDatService {
   teamOptions: { value: number; label: string }[] = [];
   hasPendingChanges = false;
   private formationIdByTeamId = new Map<number, number>();
+  private teamCountHeaderOffset: number | null = null;
   private wasZlib = false;
 
   constructor(private readonly fileHandleStorage: FileHandleStorageService) {}
@@ -448,6 +451,91 @@ export class TeamsDatService {
     return updatedRecord;
   }
 
+  appendTeam(newTeamId: number): TeamsDatRecord {
+    if (!this.hasData) {
+      throw new Error('No teams.dat loaded');
+    }
+
+    if (this.records.length === 0) {
+      throw new Error('Cannot append team: no existing teams to copy from');
+    }
+
+    const lastIndex = this.records.length - 1;
+    const srcStart = lastIndex * TEAM_BLOCK_SIZE;
+    const newBlock = new Uint8Array(TEAM_BLOCK_SIZE);
+    const srcBlock = this.getTeamDataOrThrow().subarray(srcStart, srcStart + TEAM_BLOCK_SIZE);
+    newBlock.set(srcBlock);
+
+    const view = this.getView(newBlock);
+    view.setUint32(0, newTeamId, true);
+    view.setUint32(4, 17, true);
+
+    // Set all kit colors to white (0xFF, 0xFF, 0xFF, 0x7F in BGR format)
+    for (let kitIndex = 0; kitIndex < KIT_COUNT; kitIndex += 1) {
+      for (let colorIndex = 0; colorIndex < COLORS_PER_KIT; colorIndex += 1) {
+        const offset = KIT_COLOR_START_OFFSET + (kitIndex * COLORS_PER_KIT + colorIndex) * KIT_COLOR_STRIDE;
+        newBlock[offset] = 0xFF;
+        newBlock[offset + 1] = 0xFF;
+        newBlock[offset + 2] = 0xFF;
+        newBlock[offset + 3] = 0x7F;
+      }
+    }
+
+    this.writeUtf16String(newBlock, STADIUM_NAME_OFFSET, STADIUM_NAME_MAX_BYTES, 'NewStadium');
+
+    // Insert the new block in ascending teamId order instead of appending at the end.
+    let insertIndex = this.records.findIndex((record) => record.teamId > newTeamId);
+    if (insertIndex < 0) {
+      insertIndex = this.records.length;
+    }
+    const insertOffset = insertIndex * TEAM_BLOCK_SIZE;
+
+    const newTeamDataBytes = new Uint8Array(this.teamDataBytes!.byteLength + TEAM_BLOCK_SIZE);
+    newTeamDataBytes.set(this.teamDataBytes!.subarray(0, insertOffset), 0);
+    newTeamDataBytes.set(newBlock, insertOffset);
+    newTeamDataBytes.set(this.teamDataBytes!.subarray(insertOffset), insertOffset + TEAM_BLOCK_SIZE);
+    this.teamDataBytes = newTeamDataBytes;
+
+    this.records = this.scanRecords(this.teamDataBytes);
+    this.teamOptions = this.records.map((recordItem) => ({
+      value: recordItem.index,
+      label: recordItem.teamLabel + (recordItem.stadiumName ? ` | ${recordItem.stadiumName}` : '')
+    }));
+    this.formationIdByTeamId = this.buildFormationIdMap(this.records);
+    this.hasPendingChanges = true;
+
+    const newRecord = this.records[insertIndex];
+    return newRecord;
+  }
+
+  removeTeam(teamId: number): void {
+    if (!this.hasData) {
+      throw new Error('No teams.dat loaded');
+    }
+
+    const teamIndex = this.records.findIndex((r) => r.teamId === teamId);
+    if (teamIndex < 0) {
+      throw new Error(`Team with ID ${teamId} not found`);
+    }
+
+    // Remove the team block from teamDataBytes
+    const blockStart = teamIndex * TEAM_BLOCK_SIZE;
+    const blockEnd = blockStart + TEAM_BLOCK_SIZE;
+    const newTeamDataBytes = new Uint8Array(this.teamDataBytes!.byteLength - TEAM_BLOCK_SIZE);
+    newTeamDataBytes.set(this.teamDataBytes!.subarray(0, blockStart));
+    newTeamDataBytes.set(this.teamDataBytes!.subarray(blockEnd), blockStart);
+    this.teamDataBytes = newTeamDataBytes;
+
+    // Rebuild records
+    this.records = this.scanRecords(this.teamDataBytes);
+    this.teamOptions = this.records.map((recordItem) => ({
+      value: recordItem.index,
+      label: recordItem.teamLabel + (recordItem.stadiumName ? ` | ${recordItem.stadiumName}` : '')
+    }));
+    this.formationIdByTeamId = this.buildFormationIdMap(this.records);
+    this.hasPendingChanges = true;
+  }
+
   private scanRecords(bytes: Uint8Array): TeamsDatRecord[] {
     const view = this.getView(bytes);
     const totalTeams = Math.floor(bytes.byteLength / TEAM_BLOCK_SIZE);
@@ -708,6 +796,8 @@ export class TeamsDatService {
       label: r.teamLabel + (r.stadiumName ? ` | ${r.stadiumName}` : '')
     }));
     this.formationIdByTeamId = this.buildFormationIdMap(nextRecords);
+    this.teamCountHeaderOffset = this.detectTeamCountHeaderOffset(nextRecords.length);
+    this.syncTeamCountHeaderWithDerivedCount();
     this.hasPendingChanges = false;
     console.log('[TeamsDat] load complete —', nextRecords.length, 'teams.');
   }
@@ -716,6 +806,8 @@ export class TeamsDatService {
     if (!this.fileHeaderBytes || !this.teamDataBytes) {
       throw new Error('No teams.dat loaded');
     }
+
+    this.syncTeamCountHeaderWithDerivedCount();
 
     const merged = new Uint8Array(this.fileHeaderBytes.byteLength + this.teamDataBytes.byteLength);
     merged.set(this.fileHeaderBytes, 0);
@@ -726,5 +818,79 @@ export class TeamsDatService {
     }
 
     return merged.buffer;
+  }
+
+  private syncTeamCountHeaderWithDerivedCount(): void {
+    if (!this.fileHeaderBytes || !this.teamDataBytes) {
+      return;
+    }
+
+    const derivedTeamCount = Math.floor(this.teamDataBytes.byteLength / TEAM_BLOCK_SIZE);
+
+    if (derivedTeamCount <= 0) {
+      return;
+    }
+
+    if (this.teamCountHeaderOffset === null) {
+      this.teamCountHeaderOffset = this.detectTeamCountHeaderOffset(derivedTeamCount);
+    }
+
+    if (this.teamCountHeaderOffset === null) {
+      return;
+    }
+
+    const view = new DataView(
+      this.fileHeaderBytes.buffer,
+      this.fileHeaderBytes.byteOffset,
+      this.fileHeaderBytes.byteLength
+    );
+    view.setUint32(this.teamCountHeaderOffset, derivedTeamCount, true);
+  }
+
+  private detectTeamCountHeaderOffset(derivedTeamCount: number): number | null {
+    if (!this.fileHeaderBytes) {
+      return null;
+    }
+
+    const view = new DataView(
+      this.fileHeaderBytes.buffer,
+      this.fileHeaderBytes.byteOffset,
+      this.fileHeaderBytes.byteLength
+    );
+    const candidates: Array<{ offset: number; value: number }> = [];
+
+    for (let offset = 0; offset <= FILE_HEADER_SIZE - HEADER_FIELD_SIZE; offset += HEADER_FIELD_SIZE) {
+      const value = view.getUint32(offset, true);
+
+      if (value <= MAX_REASONABLE_TEAM_COUNT) {
+        candidates.push({ offset, value });
+      }
+    }
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const exactMatch = candidates.find((candidate) => candidate.value === derivedTeamCount);
+
+    if (exactMatch) {
+      return exactMatch.offset;
+    }
+
+    if (candidates.length === 1) {
+      return candidates[0].offset;
+    }
+
+    candidates.sort((left, right) => {
+      const distanceDiff = Math.abs(left.value - derivedTeamCount) - Math.abs(right.value - derivedTeamCount);
+
+      if (distanceDiff !== 0) {
+        return distanceDiff;
+      }
+
+      return left.offset - right.offset;
+    });
+
+    return candidates[0].offset;
   }
 }

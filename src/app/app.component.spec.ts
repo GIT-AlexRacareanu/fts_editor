@@ -1044,3 +1044,4 @@ describe('AppComponent team name resolution', () => {
     expect(component.displayedTeams[0].teamLongName).toBe('Arsenal');
   });
 });
+

@@ -87,6 +87,10 @@
                 <mat-icon>download</mat-icon>
                 TEAMS RAW
               </button>
+              <button mat-stroked-button color="accent" class="team-action-btn" (click)="downloadTeamLogosZip()" title="Download all team logos as ZIP archive">
+                <mat-icon>image</mat-icon>
+                LOGO ARCHIVE
+              </button>
               <button mat-stroked-button color="warn" class="team-action-btn" (click)="clearTeamPlayerLinks()" title="Reset all team rosters to clean state">
                 <mat-icon>delete_sweep</mat-icon>
                 CLEAN START
@@ -566,6 +570,9 @@
                         | {{ teamBrowseRangeStart }}-{{ teamBrowseRangeEnd }}
                       </ng-container>
                     </div>
+                    <button mat-stroked-button color="accent" (click)="addNewTeam()" [disabled]="!teamsDatService.hasData || !teamEditorService.hasData">
+                      ADD TEAM
+                    </button>
                   </div>
 
                   <div class="db-search-pagination" *ngIf="filteredTeamBrowseItems.length > 0">
@@ -603,7 +610,12 @@
                             <span class="team-browser-ovr-pill">OVR {{ team.overallOvr }}</span>
                           </div>
                         </div>
-                        <button mat-stroked-button color="primary" (click)="openTeamFromBrowser(team)">Edit</button>
+                        <div class="team-browser-actions">
+                          <button mat-stroked-button color="primary" (click)="openTeamFromBrowser(team)">Edit</button>
+                          <button mat-icon-button color="warn" (click)="removeTeamFromBrowser(team)" title="Delete team">
+                            <mat-icon>delete</mat-icon>
+                          </button>
+                        </div>
                       </div>
                     </article>
                   </div>
@@ -1009,6 +1021,71 @@
         </mat-card-content>
       </mat-card>
 
+      <!-- Appearance & Face -->
+      <mat-card class="section-card">
+        <mat-card-header>
+          <mat-card-title>Appearance &amp; Face</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="stats-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Skin Color</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.skin">
+                <mat-option *ngFor="let s of skinColors" [value]="s.value">{{ s.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Skin Tone</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.skin_tone">
+                <mat-option *ngFor="let s of skinTones" [value]="s.value">{{ s.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Head Type</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.head_type">
+                <mat-option *ngFor="let h of headTypes" [value]="h.value">{{ h.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Hair Type</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.hair_type">
+                <mat-option *ngFor="let h of hairTypes" [value]="h.value">{{ h.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Hair Color</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.hair">
+                <mat-option *ngFor="let h of hairColors" [value]="h.value">{{ h.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Beard Type</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.beard_type">
+                <mat-option *ngFor="let b of beardTypes" [value]="b.value">{{ b.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Boots Color</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.boots">
+                <mat-option *ngFor="let b of bootsColors" [value]="b.value">{{ b.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Sleeves</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.mangas">
+                <mat-option *ngFor="let s of sleeves" [value]="s.value">{{ s.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Gloves</mat-label>
+              <mat-select [(ngModel)]="popupPlayer.guantes">
+                <mat-option *ngFor="let g of gloves" [value]="g.value">{{ g.label }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
       <!-- Performance Attributes -->
       <mat-card class="section-card">
         <mat-card-header>
@@ -1082,71 +1159,6 @@
             <mat-form-field appearance="outline" class="stat-field">
               <mat-label>GKP</mat-label>
               <input matInput type="number" [(ngModel)]="popupPlayer.GKP" (ngModelChange)="updatePopupOVR()">
-            </mat-form-field>
-          </div>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- Appearance & Face -->
-      <mat-card class="section-card">
-        <mat-card-header>
-          <mat-card-title>Appearance &amp; Face</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <div class="stats-grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Skin Color</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.skin">
-                <mat-option *ngFor="let s of skinColors" [value]="s.value">{{ s.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Skin Tone</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.skin_tone">
-                <mat-option *ngFor="let s of skinTones" [value]="s.value">{{ s.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Head Type</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.head_type">
-                <mat-option *ngFor="let h of headTypes" [value]="h.value">{{ h.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Hair Type</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.hair_type">
-                <mat-option *ngFor="let h of hairTypes" [value]="h.value">{{ h.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Hair Color</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.hair">
-                <mat-option *ngFor="let h of hairColors" [value]="h.value">{{ h.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Beard Type</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.beard_type">
-                <mat-option *ngFor="let b of beardTypes" [value]="b.value">{{ b.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Boots Color</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.boots">
-                <mat-option *ngFor="let b of bootsColors" [value]="b.value">{{ b.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Sleeves</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.mangas">
-                <mat-option *ngFor="let s of sleeves" [value]="s.value">{{ s.label }}</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Gloves</mat-label>
-              <mat-select [(ngModel)]="popupPlayer.guantes">
-                <mat-option *ngFor="let g of gloves" [value]="g.value">{{ g.label }}</mat-option>
-              </mat-select>
             </mat-form-field>
           </div>
         </mat-card-content>

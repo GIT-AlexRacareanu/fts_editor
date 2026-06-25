@@ -190,6 +190,74 @@ export class XlcEditorService {
     });
   }
 
+  addKey(key: string, value: string): void {
+    if (!this.hasData) {
+      throw new Error('No XLC file loaded');
+    }
+
+    if (this.entries.find((e) => e.key === key)) {
+      return;
+    }
+
+    const encodedKey = this.encodeUtf16LeNullTerminated(key);
+    const newBinary = new Uint8Array(this.binaryData!.byteLength + encodedKey.byteLength);
+    newBinary.set(this.binaryData!.subarray(0, this.valuesStartOffset));
+    newBinary.set(encodedKey, this.valuesStartOffset);
+    newBinary.set(this.binaryData!.subarray(this.valuesStartOffset), this.valuesStartOffset + encodedKey.byteLength);
+    this.binaryData = newBinary;
+    this.valuesStartOffset += encodedKey.byteLength;
+
+    const localeCount = this.entries[0]?.locales.length ?? 1;
+    const newLocales: XlcLocaleValue[] = Array.from({ length: localeCount }, (_, localeIndex) => {
+      const baseLocale = this.entries[0]?.locales[localeIndex];
+      return {
+        localeId: baseLocale?.localeId ?? localeIndex,
+        localeLabel: baseLocale?.localeLabel ?? `Locale ${localeIndex}`,
+        offset: -(this.entries.length + 1),
+        maxByteLength: 0,
+        originalByteLength: 0,
+        sharedReferenceCount: 1,
+        value
+      };
+    });
+
+    const newEntry: XlcEntry = {
+      index: this.entries.length,
+      key,
+      locales: newLocales
+    };
+    this.entries.push(newEntry);
+    this.localeByKey.set(key, newLocales[0]);
+    this.stringValues.set(newLocales[0].offset, {
+      value,
+      originalByteLength: 0,
+      maxByteLength: 0,
+      sharedReferenceCount: 1
+    });
+    this.hasPendingChanges = true;
+  }
+
+  removeKey(key: string): void {
+    if (!this.hasData) {
+      throw new Error('No XLC file loaded');
+    }
+
+    const entryIndex = this.entries.findIndex((e) => e.key === key);
+    if (entryIndex < 0) {
+      return;
+    }
+
+    const entry = this.entries[entryIndex];
+    if (entry.locales.length > 0) {
+      const firstLocale = entry.locales[0];
+      this.stringValues.delete(firstLocale.offset);
+      this.localeByKey.delete(key);
+    }
+
+    this.entries.splice(entryIndex, 1);
+    this.hasPendingChanges = true;
+  }
+
   private parseFile(bytes: Uint8Array): ParsedXlcFile {
     if (bytes.byteLength < FIRST_ENTRY_OFFSET + 2) {
       throw new Error('Invalid XLC: file is too small.');

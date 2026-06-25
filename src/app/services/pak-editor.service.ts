@@ -173,6 +173,150 @@ export class PakEditorService {
     this.hasPendingChanges = true;
   }
 
+  addEntry(name: string, data: Uint8Array): void {
+    if (!this.hasData) {
+      throw new Error('No PAK file loaded.');
+    }
+
+    if (data.byteLength === 0) {
+      throw new Error('Cannot add empty entry.');
+    }
+
+    // Find the folder that contains logo entries (typically t0.png, t1.png, etc.)
+    let targetFolder = this.folderRecords[0];
+    const existingLogoEntry = this.entries.find((e) => /^t\d+\.png$/i.test(e.name));
+    if (existingLogoEntry && existingLogoEntry.directory) {
+      const folderRecord = this.folderRecords.find((f) => {
+        const folderName = this.readNullTerminatedString(this.metadataTailBytes, f.nameOffset);
+        return folderName === existingLogoEntry.directory;
+      });
+      if (folderRecord) {
+        targetFolder = folderRecord;
+      }
+    }
+
+    const insertionIndex = targetFolder.firstFileIndex + targetFolder.fileCount;
+
+    // Append name to metadataTailBytes
+    const nameBytes = new TextEncoder().encode(name);
+    const newMetadata = new Uint8Array(this.metadataTailBytes.byteLength + nameBytes.byteLength + 1);
+    newMetadata.set(this.metadataTailBytes);
+    newMetadata.set(nameBytes, this.metadataTailBytes.byteLength);
+    newMetadata[this.metadataTailBytes.byteLength + nameBytes.byteLength] = 0;
+    const nameOffset = this.metadataTailBytes.byteLength;
+    this.metadataTailBytes = newMetadata;
+
+    // Renumber existing entries with index >= insertionIndex
+    this.entries.forEach((entry) => {
+      if (entry.index >= insertionIndex) {
+        entry.index += 1;
+      }
+    });
+
+    // Renumber modifiedEntryBytes map
+    const newModifiedMap = new Map<number, Uint8Array>();
+    this.modifiedEntryBytes.forEach((value, key) => {
+      const newKey = key >= insertionIndex ? key + 1 : key;
+      newModifiedMap.set(newKey, value);
+    });
+    this.modifiedEntryBytes.clear();
+    newModifiedMap.forEach((value, key) => this.modifiedEntryBytes.set(key, value));
+
+    // Insert new file record
+    const newFileRecord: PakFileRecord = {
+      nameOffset,
+      size: data.byteLength,
+      offset: 0,
+      compressionFlag: 0,
+      crc: this.computeCrc32(data),
+      compressedSize: data.byteLength
+    };
+    this.fileRecords.splice(insertionIndex, 0, newFileRecord);
+
+    // Update folder records
+    targetFolder.fileCount += 1;
+    this.folderRecords.forEach((folder) => {
+      if (folder !== targetFolder && folder.firstFileIndex >= insertionIndex) {
+        folder.firstFileIndex += 1;
+      }
+    });
+
+    // Add new entry
+    const entryPath = targetFolder === this.folderRecords[0]
+      ? name
+      : this.readNullTerminatedString(this.metadataTailBytes, targetFolder.nameOffset) + '/' + name;
+    const normalizedPath = entryPath.replace(/^\/*/, '');
+    const lastSlash = normalizedPath.lastIndexOf('/');
+    const newEntry: PakEntry = {
+      index: insertionIndex,
+      path: normalizedPath,
+      name,
+      directory: lastSlash >= 0 ? normalizedPath.slice(0, lastSlash) : '',
+      size: data.byteLength,
+      offset: 0,
+      compressed: false,
+      compressedSize: data.byteLength,
+      compressionFlag: 0,
+      crc: this.computeCrc32(data)
+    };
+    this.entries.push(newEntry);
+
+    this.modifiedEntryBytes.set(insertionIndex, new Uint8Array(data));
+    this.hasPendingChanges = true;
+  }
+
+  removeEntry(name: string): void {
+    if (!this.hasData) {
+      throw new Error('No PAK file loaded.');
+    }
+
+    const entryIndex = this.entries.findIndex((e) => e.name === name);
+    if (entryIndex < 0) {
+      throw new Error(`Entry '${name}' not found in PAK file.`);
+    }
+
+    const entry = this.entries[entryIndex];
+    const fileIndex = this.fileRecords.findIndex(
+      (record) => this.readNullTerminatedString(this.metadataTailBytes, record.nameOffset) === name
+    );
+
+    if (fileIndex >= 0) {
+      // Remove from fileRecords
+      this.fileRecords.splice(fileIndex, 1);
+
+      // Renumber entries and file records with index > fileIndex
+      this.entries.forEach((e) => {
+        if (e.index > fileIndex) {
+          e.index -= 1;
+        }
+      });
+
+      const newModifiedMap = new Map<number, Uint8Array>();
+      this.modifiedEntryBytes.forEach((value, key) => {
+        if (key > fileIndex) {
+          newModifiedMap.set(key - 1, value);
+        } else if (key !== fileIndex) {
+          newModifiedMap.set(key, value);
+        }
+      });
+      this.modifiedEntryBytes.clear();
+      newModifiedMap.forEach((value, key) => this.modifiedEntryBytes.set(key, value));
+
+      // Update folder records
+      this.folderRecords.forEach((folder) => {
+        if (folder.firstFileIndex > fileIndex) {
+          folder.firstFileIndex -= 1;
+        } else if (folder.firstFileIndex <= fileIndex && fileIndex < folder.firstFileIndex + folder.fileCount) {
+          folder.fileCount -= 1;
+        }
+      });
+
+      // Remove from entries array
+      this.entries.splice(entryIndex, 1);
+      this.hasPendingChanges = true;
+    }
+  }
+
   async saveToSameFile(): Promise<void> {
     if (!this.fileHandle || !this.binaryData) {
       throw new Error('No PAK file loaded');
@@ -431,7 +575,13 @@ export class PakEditorService {
 
     view.setUint32(4, this.folderRecords.length, true);
     view.setUint32(8, this.fileRecords.length, true);
-    view.setUint32(12, this.headerDummy, true);
+    // header[12] is the size (in bytes) of the name/string table, NOT a dummy.
+    // The game (CXGSFileSystem_PAK::Initialise) reads exactly this many bytes after
+    // the file records into the name buffer; every nameOffset is relative to it.
+    // When entries are added, metadataTailBytes (the name table) grows, so this MUST
+    // track its length, otherwise new entries' names fall outside the buffer and the
+    // game can't find them (e.g. new-team logos never load).
+    view.setUint32(12, this.metadataTailBytes.byteLength, true);
 
     let cursor = HEADER_SIZE;
 

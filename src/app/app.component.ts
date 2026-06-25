@@ -1,5 +1,6 @@
 import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
+import JSZip from 'jszip';
 import { FORMATION_PRESETS, FormationPreset } from './data/formations';
 import { NATIONALITY_NAMES_BY_ID, NATIONALITY_OPTIONS } from './data/nationalities';
 import { Player } from './models/player.model';
@@ -2372,6 +2373,53 @@ export class AppComponent implements OnInit, OnDestroy {
     this.teamsDatService.exportUncompressedFile();
   }
 
+  downloadTeamLogosZip(): void {
+    if (!this.pakEditorService.hasData) {
+      alert('Load teams.pak first to access team logos.');
+      return;
+    }
+
+    const zip = new JSZip();
+    const logosFolder = zip.folder('team_logos');
+
+    if (!logosFolder) {
+      alert('Failed to create ZIP folder');
+      return;
+    }
+
+    // Find all team logo entries (main logos and thumbnails)
+    const logoEntries = this.pakEditorService.entries.filter(
+      (entry) => /^t\d+(_thumb)?\.png$/i.test(entry.name)
+    );
+
+    if (logoEntries.length === 0) {
+      alert('No team logos found in teams.pak');
+      return;
+    }
+
+    // Add each logo to the ZIP
+    for (const entry of logoEntries) {
+      try {
+        const bytes = this.pakEditorService.extractEntry(entry);
+        logosFolder.file(entry.name, bytes);
+      } catch (error) {
+        console.warn(`Failed to extract logo ${entry.name}:`, error);
+      }
+    }
+
+    // Generate and download the ZIP file
+    zip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'team_logos.zip';
+      link.click();
+      URL.revokeObjectURL(link.href);
+      alert(`Downloaded ${logoEntries.length} team logo files.`);
+    }).catch((error: any) => {
+      alert(`Error creating ZIP file: ${error}`);
+    });
+  }
+
   // ─── Team Editor ──────────────────────────────────────────────
 
   get filteredTeamAddPlayers(): DbBrowsePlayer[] {
@@ -2413,6 +2461,185 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.logDisplayedTeamNameSummary();
+  }
+
+  addNewTeam(): void {
+    if (!this.teamsDatService.hasData || !this.teamEditorService.hasData) {
+      alert('Load both teams.dat and team database files first.');
+      return;
+    }
+
+    const existingIds = new Set(this.teamsDatService.records.map((r) => r.teamId));
+
+    // Find the first team id (in ascending order) that has no teams.dat entry.
+    let newTeamId = 0;
+    while (existingIds.has(newTeamId)) {
+      newTeamId += 1;
+    }
+
+    console.log('[AddTeam] Creating new team with id', newTeamId);
+
+    this.teamsDatService.appendTeam(newTeamId);
+    this.teamEditorService.appendTeam(newTeamId);
+
+    if (this.pakEditorService.hasData) {
+      // Only create placeholder logos when the team has no existing logo entry.
+      // If a logo already exists in teams.pak (e.g. for a reused id), keep it untouched.
+      if (!this.pakEditorService.getTeamLogoEntry(newTeamId, 'main')) {
+        const mainPlaceholder = this.makeWhitePng(256, 256);
+        this.pakEditorService.addEntry(`t${newTeamId}.png`, mainPlaceholder);
+      }
+      if (!this.pakEditorService.getTeamLogoEntry(newTeamId, 'thumb')) {
+        const thumbPlaceholder = this.makeWhitePng(64, 64);
+        this.pakEditorService.addEntry(`t${newTeamId}_thumb.png`, thumbPlaceholder);
+      }
+    }
+
+    if (this.xlcEditorService.hasData) {
+      this.xlcEditorService.addKey(`TXT_TEAMNAMELONG_${newTeamId}`, 'NewTeam');
+      this.xlcEditorService.addKey(`TXT_TEAMNAMESHORT_${newTeamId}`, 'New');
+    }
+
+    this.rebuildTeamOptions();
+
+    // Find and load the new team
+    const newTeamOffset = this.teamEditorService.teamOptions.find((opt) => {
+      const team = this.teamEditorService.getTeam(opt.offset);
+      return team.teamId === newTeamId;
+    })?.offset;
+
+    if (newTeamOffset !== undefined) {
+      this.activeMainTab = 0;
+      this.loadSingleTeam(newTeamOffset);
+    }
+
+    console.log('[AddTeam] Team creation complete');
+  }
+
+  private makeWhitePng(width: number, height: number): Uint8Array {
+    // Create a white PNG placeholder of the specified dimensions
+    // Use canvas to render and convert to PNG via base64 data URL
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) {
+      throw new Error('Failed to create canvas context for placeholder logo');
+    }
+
+    // Fill with white
+    context.fillStyle = '#FFFFFF';
+    context.fillRect(0, 0, width, height);
+
+    // Convert to base64 PNG (synchronous)
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64String = dataUrl.replace(/^data:image\/png;base64,/, '');
+
+    // Decode base64 to bytes
+    const binaryString = atob(base64String);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    return bytes;
+  }
+
+  async removeCurrentTeam(): Promise<void> {
+    if (this.selectedTeamOffset === null) {
+      alert('No team is currently loaded');
+      return;
+    }
+
+    const team = this.teamEditorService.getTeam(this.selectedTeamOffset);
+    const confirmDelete = confirm(`Are you sure you want to delete this team (ID: ${team.teamId})? This cannot be undone.`);
+    if (!confirmDelete) {
+      return;
+    }
+
+    await this.deleteTeamEverywhere(team.teamId, true);
+  }
+
+  async removeTeamFromBrowser(team: TeamBrowseItem): Promise<void> {
+    const confirmDelete = confirm(`Are you sure you want to delete ${team.teamLabel} (ID: ${team.teamId})? This cannot be undone.`);
+    if (!confirmDelete) {
+      return;
+    }
+
+    await this.deleteTeamEverywhere(team.teamId, false);
+  }
+
+  private async deleteTeamEverywhere(teamId: number, reselectNextTeam: boolean): Promise<void> {
+    try {
+      console.log('[RemoveTeam] Deleting team with id', teamId);
+
+      const currentlySelectedTeamId = this.selectedTeamOffset !== null
+        ? this.teamEditorService.getTeam(this.selectedTeamOffset).teamId
+        : null;
+
+      // Remove from all services
+      this.teamsDatService.removeTeam(teamId);
+      this.teamEditorService.removeTeam(teamId);
+
+      if (this.pakEditorService.hasData) {
+        try {
+          this.pakEditorService.removeEntry(`t${teamId}.png`);
+        } catch (e) {
+          console.warn('[RemoveTeam] Could not remove t' + teamId + '.png:', e);
+        }
+        try {
+          this.pakEditorService.removeEntry(`t${teamId}_thumb.png`);
+        } catch (e) {
+          console.warn('[RemoveTeam] Could not remove t' + teamId + '_thumb.png:', e);
+        }
+      }
+
+      if (this.xlcEditorService.hasData) {
+        try {
+          this.xlcEditorService.removeKey(`TXT_TEAMNAMELONG_${teamId}`);
+        } catch (e) {
+          console.warn('[RemoveTeam] Could not remove team name key:', e);
+        }
+        try {
+          this.xlcEditorService.removeKey(`TXT_TEAMNAMESHORT_${teamId}`);
+        } catch (e) {
+          console.warn('[RemoveTeam] Could not remove team short name key:', e);
+        }
+      }
+
+      this.rebuildTeamOptions();
+      this.invalidateTeamBrowseItems();
+      this.refreshFilteredTeamBrowseItems();
+
+      if (reselectNextTeam && currentlySelectedTeamId === teamId) {
+        this.selectedTeamOffset = null;
+        if (this.teamEditorService.teamOptions.length > 0) {
+          this.loadSingleTeam(this.teamEditorService.teamOptions[0].offset);
+        } else {
+          this.loadSingleTeam(null);
+        }
+      }
+
+      await this.persistLoadedTeamFiles();
+
+      console.log('[RemoveTeam] Team deletion complete');
+    } catch (error) {
+      alert(`Error deleting team: ${error}`);
+    }
+  }
+
+  private async persistLoadedTeamFiles(): Promise<void> {
+    await this.teamEditorService.saveToSameFile();
+    await this.teamsDatService.saveToSameFile();
+
+    if (this.pakLoaded) {
+      await this.pakEditorService.saveToSameFile();
+    }
+
+    if (this.xlcLoaded) {
+      await this.xlcEditorService.saveToSameFile();
+    }
   }
 
   searchTeams(): void {
@@ -3128,17 +3355,26 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const mainEntry = this.getTeamLogoEntry(teamId, 'main');
-    const thumbEntry = this.getTeamLogoEntry(teamId, 'thumb');
-
-    if (!mainEntry || !thumbEntry) {
-      alert(`Could not find both t${teamId}.png and t${teamId}_thumb.png inside teams.pak.`);
-      return;
-    }
-
     try {
       const mainBytes = await this.renderImageAsPng(file, 256, 256);
       const thumbBytes = await this.renderImageAsPng(file, 64, 64);
+
+      let mainEntry = this.getTeamLogoEntry(teamId, 'main');
+      let thumbEntry = this.getTeamLogoEntry(teamId, 'thumb');
+
+      if (!mainEntry) {
+        this.pakEditorService.addEntry(`t${teamId}.png`, mainBytes);
+        mainEntry = this.getTeamLogoEntry(teamId, 'main');
+      }
+
+      if (!thumbEntry) {
+        this.pakEditorService.addEntry(`t${teamId}_thumb.png`, thumbBytes);
+        thumbEntry = this.getTeamLogoEntry(teamId, 'thumb');
+      }
+
+      if (!mainEntry || !thumbEntry) {
+        throw new Error(`Could not create both t${teamId}.png and t${teamId}_thumb.png inside teams.pak.`);
+      }
 
       this.pakEditorService.replaceEntry(mainEntry, mainBytes);
       this.pakEditorService.replaceEntry(thumbEntry, thumbBytes);
